@@ -1,0 +1,61 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><center><heading>Lisp Machine Manual</heading></center><center>Sixth Edition, System Version 99</center><center>June 1984</center><center>Richard Stallman</center><center>Daniel Weinreb</center><center>David Moon</center><nopara></nopara>
+<p>This report describes research done at the Artificial Intelligence
+Laboratory of the Massachusetts Institute of Technology.  Support for the
+laboratory's artificial intelligence research is provided in part by the
+Advanced Research Projects Agency of the Department of Defense under Office
+of Naval Research Contract number N00014-80-C-0505.
+<page></page><center><sub-heading>Preface</sub-heading></center></p>
+
+<p>The Lisp Machine manual describes both the language and the operating system
+of the Lisp Machine.  The language, a dialect of Lisp called Zetalisp,
+is completely documented
+by this manual.  The software environment and operating-system-like parts of
+the system contain many things which are still in a state of flux.
+This manual confines itself primarily to the stabler parts of the
+system.  It describes how to program, but not for the most part how to
+operate the machine.  The window system is documented separately in
+the Lisp Machine Window System manual.
+</p>
+
+<p>Any comments, suggestions, or criticisms will be welcomed.  Please send
+Arpa network mail to BUG-LMMAN@MIT-MC.
+</p>
+
+<p>Those not on the Arpanet may send U.S. mail to
+
+<lisp><standard>Richard M. Stallman
+Artificial Intelligence Lab
+545 Technology Square
+Cambridge, Mass. 02139</standard>
+</lisp></p>
+
+<p>Portions of this manual were written by Mike McMahon and Alan Bawden.
+The chapter on the LOOP iteration macro is mostly a reprint of
+Laboratory for Computer Science memo TM-169, by Glenn Burke.  Sarah
+Smith, Meryl Cohen and Richard Ingria of LMI, and Richard Mlynarik of
+MIT, helped to correct the manual.
+</p>
+<nopara></nopara><center><sub-heading>Personal Note from Richard Stallman</sub-heading></center>
+<p>The Lisp Machine is a product of the efforts of many people too
+numerous to list here and of the former unique unbureaucratic,
+free-wheeling and cooperative environment of the M.I.T. Artificial
+Intelligence Laboratory.  I believe that the commercialization of
+computer software has harmed the spirit which enabled such systems to
+be developed.  Now I am attempting to build a software-sharing movement to
+revive that spirit from near oblivion.
+</p>
+
+<p>Since January 1984 I have been working primarily on the development of
+GNU, a complete Unix-compatible software system for standard hardware
+architectures, to be shared freely with everyone just like EMACS.
+This will enable people to use computers and be good neighbors legally
+(a good neighbor allows his neighbors to copy any generally useful
+software he has a copy of).  This project has inspired a growing
+movement of enthusiastic supporters.  Just recently the first free
+portable C compiler compiled itself.  If you would like to contribute
+to GNU, write to me at the address above.  Restrain social decay--help
+get programmers sharing again.
+</p>
+<page></page>
+</document-part>

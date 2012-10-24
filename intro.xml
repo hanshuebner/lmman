@@ -1,0 +1,517 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><chapter name="NIL" number="1" title="Introduction"><a name="General Information"></a>
+
+
+<section chapter-number="1" name="General Information" number="1" title="General Information"><p indent="1">        The Lisp Machine is a new computer system designed to provide a
+high-performance and economical implementation of the Lisp language.  It
+is a personal computation system, which means that processors and main
+memories are not time-multiplexed: when using a Lisp Machine, you get
+your own processor and memory system for the duration of the session.
+It is designed this way to relieve the problems of running large
+Lisp programs on time-sharing systems.  Everything on the Lisp Machine
+is written in Lisp, including all system programs; there is never any
+need to program in machine language.  The system is highly interactive.
+</p>
+
+<p indent="1">        The Lisp Machine executes a new dialect of Lisp called Zetalisp,
+developed at the M.I.T. Artificial Intelligence Laboratory for use in
+artificial intelligence research and related fields.  It was originally
+based on the Maclisp dialect, and attempts to maintain a good degree of
+compatibility with Maclisp, while also providing many improvements and
+new features.  Maclisp, in turn, was based on Lisp 1.5. 
+</p>
+
+<p indent="1">        Common Lisp is a Lisp dialect designed to standardize all
+the various Lisp systems derived from Maclisp.  Zetalisp today is nearly
+a superset of Common Lisp, but there are a few important incompatibilities
+between them, in places where Common Lisp involves an incompatible change
+which is deemed to severe to impose on traditional Zetalisp users.
+There is a special mode which provides strict Common Lisp compatibility.
+See <ref chapter="1" definition-in-file="intro" key="common-lisp" section="4" title="Common Lisp Support" type="section"></ref> for more information.
+</p>
+
+<p indent="1">        This document is the reference manual for the Zetalisp
+language.  This document is not a tutorial, and it sometimes refers to
+functions and concepts that are not explained until later in the manual.
+It is assumed that you have a basic working knowledge of some Lisp
+dialect; you will be able to figure out the rest of the language from
+this manual.
+</p>
+
+<p indent="1">        There are also facilities explained in this manual that are not
+really part of the Lisp language.  Some of these are subroutine packages
+of general use, and others are tools used in writing programs.  
+The Lisp Machine window system and the major utility programs are,
+or ought to be, documented in other manuals.
+</p>
+</section><a name="Structure of the Manual"></a>
+
+
+<section chapter-number="1" name="Structure of the Manual" number="2" title="Structure of the Manual"><p>The manual starts out with an explanation of the language.  Chapter
+<ref chapter="2" definition-in-file="fd-dtp" key="object-chapter" title="Primitive Object Types" type="chapter"></ref> explains the different primitive types of Lisp object
+and presents some basic <arg>predicate</arg> functions for testing types.
+Chapter <ref chapter="3" definition-in-file="fd-eva" key="evaluator-chapter" title="Evaluation" type="chapter"></ref> explains the process of evaluation, which
+is the heart of the Lisp language.  Chapter <ref chapter="4" definition-in-file="fd-flo" key="flow-chapter" title="Flow of Control" type="chapter"></ref> introduces
+the basic Lisp control structures.
+</p>
+
+<p indent="1">        The next several chapters explain the details of the various
+primitive data-types of the language and the functions that deal with
+them.  Chapter <ref chapter="5" definition-in-file="fd-con" key="cons-chapter" title="Manipulating List Structure" type="chapter"></ref> deals with conses and the higher-level
+structures that can be built out of them, such as trees, lists,
+association lists, and property lists.  Chapter <ref chapter="7" definition-in-file="fd-sym" key="symbol-chapter" title="Symbols" type="chapter"></ref> deals
+with symbols, chapter <ref chapter="8" definition-in-file="fd-num" key="number-chapter" title="Numbers" type="chapter"></ref> with the various kinds of
+numbers, and chapter <ref chapter="9" definition-in-file="fd-arr" key="array-chapter" title="Arrays" type="chapter"></ref> with arrays.  Chapter
+<ref chapter="11" definition-in-file="fd-str" key="string-chapter" title="Characters and Strings" type="chapter"></ref> explains character strings, which are a special kind
+of array.
+</p>
+
+<p indent="1">        After this there are some chapters that explain more about functions,
+function-calling, and related matters.  Chapter <ref chapter="12" definition-in-file="fd-fun" key="function-chapter" title="Functions" type="chapter"></ref> presents
+all the kinds of functions in the language, explains function-specs, and
+tells how to manipulate definitions of functions.  Chapters <ref chapter="13" definition-in-file="fd-clo" key="closure-chapter" title="Closures" type="chapter"></ref>
+and <ref chapter="14" definition-in-file="fd-sg" key="stack-group-chapter" title="Stack Groups" type="chapter"></ref> discuss closures and stack-groups, two facilities
+useful for creating coroutines and other advanced control and access structures.
+</p>
+
+<p indent="1">        Next, a few lower-level issues are dealt with.  Chapter
+<ref chapter="15" definition-in-file="fd-loc" key="locative-chapter" title="Locatives" type="chapter"></ref> explains locatives, which are a kind of pointer to
+memory cells.  Chapter <ref chapter="16" definition-in-file="fd-sub" key="subprimitive-chapter" title="Subprimitives" type="chapter"></ref> explains the ``subprimitive''
+functions, which are primarily useful for implementation of the Lisp
+language itself and the Lisp Machine's operating system.  Chapter
+<ref chapter="17" definition-in-file="areas" key="area-chapter" title="Areas" type="chapter"></ref> discusses areas, which give you control over storage
+allocation and locality of reference.
+</p>
+
+<p indent="1">        Chapter <ref chapter="18" definition-in-file="compil" key="compiler-chapter" title="The Compiler" type="chapter"></ref> discusses the Lisp compiler, which
+converts Lisp programs into ``machine language'' or ``macrocode''.  Chapter
+<ref chapter="19" definition-in-file="macros" key="macros-chapter" title="Macros" type="chapter"></ref> explains the Lisp macro facility, which allows users
+to write their own extensions to Lisp, extending both the interpreter
+and the compiler.  The next two chapters go into detail about two such
+extensions, one that provides a powerful iteration control structure
+(chapter <ref chapter="20" definition-in-file="looptm" key="loop-chapter" title="The LOOP Iteration Macro" type="chapter"></ref>), and one that provides a powerful data
+structure facility (chapter <ref chapter="21" definition-in-file="defstr" key="defstruct-chapter" title="Defstruct" type="chapter"></ref>).
+</p>
+
+<p indent="1">        Chapter <ref chapter="22" definition-in-file="flavor" key="flavor-chapter" title="Objects, Message Passing, and Flavors" type="chapter"></ref> documents flavors, a language facility
+to provide generic functions using the paradigm used in Smalltalk and related
+languages, called ``object-oriented programming'' or
+``message passing''.  Flavors are widely used by the system programs of
+the Lisp Machine, as well as being available to the user as a language
+feature.
+</p>
+
+<p>The next few chapters discuss I/O: chapter <ref chapter="23" definition-in-file="ios" key="io-chapter" title="The I/O System" type="chapter"></ref> explains I/O
+streams and character and line level operations; chapter
+<ref chapter="24" definition-in-file="rdprt" key="expression-io-chapter" title="Expression Input and Output" type="chapter"></ref> explains reading and printing symbolic
+expressions; chapter <ref chapter="25" definition-in-file="pathnm" key="pathname-chapter" title="Naming of Files" type="chapter"></ref> explains naming of files;
+chapter <ref chapter="26" definition-in-file="files" key="file-io-chapter" title="Accessing Files" type="chapter"></ref> explains input and output to files.  Chapter
+<ref chapter="27" definition-in-file="chaos" key="chaos-chapter" title="The Chaosnet" type="chapter"></ref> describes the use of the Chaosnet.
+</p>
+
+<p>Chapter <ref chapter="28" definition-in-file="packd" key="package-chapter" title="Packages" type="chapter"></ref> describes the <arg>package</arg> system, which
+allows many name spaces within a single Lisp environment.  Chapter
+<ref chapter="29" definition-in-file="maksys" key="system-chapter" title="Maintaining Large Systems" type="chapter"></ref> documents the ``system'' facility that helps you
+create and maintain systems, which are programs that reside in many
+files.
+</p>
+
+<p indent="1">        Chapter <ref chapter="30" definition-in-file="proces" key="process-chapter" title="Processes" type="chapter"></ref> discusses the facilities for
+multiple processes and how to write programs that use concurrent
+computation.  Chapter <ref chapter="31" definition-in-file="errors" key="error-chapter" title="Errors and Debugging" type="chapter"></ref> explains how exceptional
+conditions (errors) can be handled by programs, handled by users, and
+debugged.  Chapter <ref chapter="32" definition-in-file="code" key="code-chapter" title="How to Read Assembly Language" type="chapter"></ref> explains the instruction set of the
+Lisp Machine and tells you how to examine the output of the compiler.
+Chapter <ref chapter="33" definition-in-file="query" key="query-chapter" title="Querying the User" type="chapter"></ref> documents some functions for querying the
+user, chapter <ref chapter="35" definition-in-file="time" key="time-chapter" title="Dates and Times" type="chapter"></ref> explains some functions for manipulating
+dates and times, and chapter <ref chapter="36" definition-in-file="fd-hac" key="misc-chapter" title="Miscellaneous Useful Functions" type="chapter"></ref> contains other
+miscellaneous functions and facilities.
+</p>
+</section><a name="Notational Conventions and Helpful Notes"></a>
+
+
+<section chapter-number="1" name="Notational Conventions and Helpful Notes" number="3" title="Notational Conventions and Helpful Notes"><p indent="1">        There are several conventions of notation and various points
+that should be understood before reading the manual.  This section
+explains those conventions.
+</p>
+
+<p indent="1">        The symbol `=&gt;' is used to indicate evaluation in
+examples.  Thus, when you see `<obj>foo</obj> =&gt; <obj>nil</obj>', this means that
+``the result of evaluating <obj>foo</obj> is (or would have
+been) <obj>nil</obj>''. 
+</p>
+
+<p indent="1">        The symbol `==&gt;' is used to indicate macro expansion
+in examples.  This, when you see `<obj>(foo bar)</obj> ==&gt; <obj>(aref bar 0)</obj>',
+this means that ``the result of macro-expanding <obj>(foo bar)</obj>
+is (or would have been) <obj>(aref bar 0)</obj>''.
+</p>
+
+<p indent="1">        A typical description of a Lisp function looks like this:
+</p>
+<definition><define key="function-name-fun" name="function-name" no-index="1" type="fun"><args>arg1 arg2 <standard>&amp;optional</standard> arg3 (arg4 <arg>arg2</arg>)</args>
+</define>
+
+<description>The <obj>function-name</obj> function adds together <arg>arg1</arg> and <arg>arg2</arg>,
+and then multiplies the result by <arg>arg3</arg>.  If <arg>arg3</arg> is not provided,
+the multiplication isn't done.  <obj>function-name</obj> then returns a list
+whose first element is this result and whose second element is <arg>arg4</arg>.
+Examples:
+
+<lisp>(function-name 3 4) =&gt; (7 4)
+(function-name 1 2 2 'bar) =&gt; (6 bar)
+</lisp></description></definition>
+<p indent="1">        Note the use of fonts (typefaces).  The name of the function is
+in bold-face in the first line of the description, and the arguments are
+in italics.  Within the text, printed representations of Lisp objects
+are in a different bold-face font, as in <obj>(+ foo 56)</obj>, and argument
+references are italicized, as in <arg>arg1</arg> and <arg>arg2</arg>.  A different,
+fixed-width font, as in <example>function-name</example>, is used for Lisp examples
+that are set off from the text.  Other font conventions are that
+filenames are in bold-face, all upper case (as in <obj>SYS: SYS; SYSDCL
+LISP</obj>) while keys on the keyboard are in bold-face and capitalized
+(as in <obj>Help</obj>, <obj>Return</obj> and <obj>Meta</obj>).
+</p>
+
+<p>`Car', `cdr' and `cons' are in bold-face when the actual Lisp objects
+are being mentioned, but in the normal text font when used as words.
+</p>
+
+<p indent="1">        The word `&amp;optional' in the list of arguments tells you that all
+of the arguments past this point are optional.  The default value can be
+specified explicitly, as with <arg>arg4</arg> whose default value is the result
+of evaluating the form <obj>(foo 3)</obj>.  If no default value is specified,
+it is the symbol <obj>nil</obj>.  This syntax is used in lambda-lists in the
+language, which are explained in <ref chapter="3" definition-in-file="fd-eva" key="lambda-list" section="3" title="Functions" type="section"></ref>.  Argument lists may
+also contain `&amp;rest' and `&amp;key' to indicate rest and keyword arguments.
+</p>
+
+<p>The descriptions of special forms and macros look like this:
+</p>
+<definition><define key="do-three-times-fun" name="do-three-times" no-index="1" type="spec"><args>form</args>
+</define>
+
+<description>This evaluates <arg>form</arg> three times and returns the result of the third
+evaluation.
+</description></definition><definition><define key="with-foo-bound-to-nil-fun" name="with-foo-bound-to-nil" no-index="1" type="mac"><args>form...</args>
+</define>
+
+<description>This evaluates the <arg>forms</arg> with the symbol <obj>foo</obj> bound to <obj>nil</obj>.
+It expands as follows:
+
+<lisp>(with-foo-bound-to-nil
+    <arg>form1</arg>
+    <arg>form2</arg> ...) ==&gt;
+(let ((foo nil))
+    <arg>form1</arg>
+    <arg>form2</arg> ...)
+</lisp></description></definition>
+<p>Since special forms and macros are the mechanism by which the syntax of Lisp
+is extended, their descriptions must describe both their syntax and their
+semantics; functions follow a simple consistent set of rules, but each
+special form is idiosyncratic.  The syntax is displayed on the first line
+of the description using the following conventions.  Italicized words are
+names of parts of the form which are referred to in the descriptive text.
+They are not arguments, even though they resemble the italicized words in
+the first line of a function description.  Parentheses (`<obj>(</obj>' and `<obj>)</obj>') stand for themselves.
+Square brackets (`<obj>[</obj>' and <obj>`]</obj>') indicate that what they enclose is optional.  
+Ellipses (`<obj>...</obj>') indicate that the subform (italicized word or parenthesized
+list) that precedes them may be repeated any number of times (possibly no times at all).
+Curly brackets followed by ellipses (`<obj>{</obj>' and `<obj>}...</obj>') indicate that what they
+enclose may be repeated any number of times.  Thus the first line of the
+description of a special form is a ``template'' for what an instance of that
+special form would look like, with the surrounding parentheses removed.
+The syntax of some special forms is sufficiently complicated
+that it does not fit comfortably into this style; the first line of the
+description of such a special form contains only the name, and the syntax is
+given by example in the body of the description.
+</p>
+
+<p>The semantics of a special form includes not only what it ``does for a living'',
+but also which subforms are evaluated and what the returned value is.  Usually
+this will be clarified with one or more examples.
+</p>
+
+<p>A convention used by many special forms is that all of their subforms after
+the first few are described as `<arg>body</arg><obj>...</obj>'.  This means that the remaining
+subforms constitute the ``body'' of this special form; they are Lisp forms that
+are evaluated one after another in some environment established by the special
+form.
+</p>
+
+<p>This ridiculous special form exhibits all of the syntactic features:
+</p>
+<definition><define key="twiddle-frob-fun" name="twiddle-frob" no-index="1" type="spec"><args>[(frob option...)] {parameter value}...</args>
+</define>
+
+<description>This twiddles the parameters of <arg>frob</arg>, which defaults to <obj>default-frob</obj>
+if not specified.  Each <arg>parameter</arg> is the name of one of the adjustable parameters of
+a frob; each <arg>value</arg> is what value to set that parameter to.  Any number
+of <arg>parameter/value</arg> pairs may be specified.  If any <arg>options</arg> are specified,
+they are keywords that select which safety checks to override while twiddling
+the parameters.  If neither <arg>frob</arg> nor any <arg>options</arg> are specified, the
+list of them may be omitted and the form may begin directly with the first
+<arg>parameter</arg> name.
+
+<arg>frob</arg> and the <arg>values</arg> are evaluated; the <arg>parameters</arg> and <arg>options</arg>
+are syntactic keywords and not evaluated.  The returned value is the frob
+whose parameters were adjusted.  An error is signaled if any safety checks
+are violated.
+</description></definition>
+<p>Operations, the message-passing equivalent of ordinary Lisp's functions,
+are described in this style:
+</p>
+<definition><define key="flavor-name-operation-name-method" name="flavor-name" no-index="1" type="method"><args>arg1 arg2 <standard>&amp;optional</standard> arg3</args>
+</define>
+
+<description>This is the documentation of the effect of performing operation
+<obj>:operation-name</obj> (or, sending a message named <obj>:operation-name</obj>),
+with arguments <arg>arg1</arg>, <arg>arg2</arg>, and <arg>arg3</arg>, on an instance of
+flavor <obj>flavor-name</obj>.
+</description></definition>
+<p indent="1">        Descriptions of variables (``globally special'' variables) look like this:
+</p>
+<definition>
+<define key="typical-variable-var" name="typical-variable" no-index="1" type="var"></define>
+
+<description>The variable <obj>typical-variable</obj> has a typical value....
+</description></definition>
+<p indent="1">        If the description says `Constant' rather than `Variable',
+it means that the value is never set by the system and should not be set by you.
+In some cases the value is an array or other structure whose <arg>contents</arg> may
+be changed by the system or by you.
+</p>
+
+<p indent="1">        Most numbers in this manual are decimal; octal numbers are
+labelled as such, using <obj>#o</obj> if they appear in examples.  Currently
+the default radix for the Lisp Machine system is eight, but this will be
+changed in the near future.  If you wish to change to base ten now, see
+the documentation on the variables <obj>*read-base*</obj> and <obj>*print-base*</obj>
+(<ref definition-in-file="rdprt" key="*read-base*-var" title="Variable *read-base*" type="var"></ref>).
+</p>
+
+<p indent="1">        All uses of the phrase `Lisp reader', unless further qualified,
+refer to the part of Lisp that reads characters from I/O streams
+(the <obj>read</obj> function), and not the person reading this manual.
+</p>
+
+<p indent="1">        There are several terms that are used widely in other
+references on Lisp, but are not used much in this document since they have become
+largely obsolete and misleading.  For the benefit of those who may
+have seen them before, they are: `s-expression', which means a Lisp
+object;  `dotted pair', which means a cons; and `atom', which means,
+roughly, symbols and numbers and sometimes other things, but not
+conses.   The terms `list' and `tree' are defined in <ref chapter="5" definition-in-file="fd-con" key="list-and-tree" section="0" title="Manipulating List Structure" type="section"></ref>.
+
+<index-entry index="concepts" title="s-expression"></index-entry>
+
+<index-entry index="concepts" title="dotted pair"></index-entry>
+
+<index-entry index="concepts" title="atom"></index-entry>
+</p>
+
+<p indent="1">        The characters acute accent ( <obj>'</obj> ) (also called &quot;single quote&quot;) and
+semicolon ( `<obj>;</obj>' ) have special meanings when typed to Lisp; they are
+examples of what are called <arg>macro characters</arg>.  Though the
+mechanism of macro characters is not of immediate interest to the new
+user, it is important to understand the effect of these two, which are
+used in the examples.
+</p>
+
+<p indent="1">        When the Lisp reader encounters a &quot; <obj>'</obj> &quot;, it reads in the next
+Lisp object and encloses it in a <obj>quote</obj> special form.  That
+is, <obj>'foo-symbol</obj> turns into <obj>(quote foo-symbol)</obj>, and <obj>'(cons 'a 'b)</obj>
+turns into <obj>(quote (cons (quote a) (quote b)))</obj>.  The reason
+for this is that <obj>quote</obj> would otherwise have to be typed in very
+frequently, and would look ugly.
+</p>
+
+<p indent="1">        The semicolon is used as a commenting character.  When the
+Lisp reader sees one, the remainder of the line is
+discarded.
+</p>
+
+<p indent="1">        The character `<obj>/</obj>' is used for quoting strange characters so
+that they are not interpreted in their usual way by the Lisp reader,
+but rather are treated the way normal alphabetic characters are treated.
+So, for example, in order to give a `<obj>/</obj>' to the reader, you must type `<obj>//</obj>',
+the first `<obj>/</obj>' quoting the second one.  When a character
+is preceded by a `<obj>/</obj>' it is said to be <arg>escaped</arg>.  Escaping
+also turns off the effects of macro characters such as &quot; <obj>'</obj> &quot; and `<obj>;</obj>'.
+</p>
+
+<p indent="1">        If you select Common Lisp syntax, escaping is done with `<obj>\</obj>' instead,
+and `<obj>/</obj>' has no special syntactic significance.
+The manual uses traditional syntax throughout, however.
+</p>
+
+<p indent="1">        The following characters also have special meanings
+and may not be used in symbols without escaping.  These characters
+are explained in detail in the section on printed representation
+(<ref chapter="24" definition-in-file="rdprt" key="reader" section="3" title="What The Reader Accepts" type="section"></ref>).
+
+<table><tbody><tr><td><obj>&quot;</obj></td><td>Double-quote delimits character strings.
+</td></tr><tr><td><obj>#</obj></td><td>Sharp-sign introduces miscellaneous reader macros.
+</td></tr><tr><td><obj>`</obj></td><td>Backquote is used to construct list structure.
+</td></tr><tr><td><obj>,</obj></td><td>Comma is used in conjunction with backquote.
+</td></tr><tr><td><obj>:</obj></td><td>Colon is the package prefix.
+</td></tr><tr><td><obj>|</obj></td><td>Characters between pairs of vertical-bars are escaped.
+</td></tr><tr><td><obj>⊗</obj></td><td>Circle-cross lets you type in characters using their octal codes.
+</td></tr></tbody></table></p>
+
+<p indent="1">        All Lisp code in this manual is written in lower case.
+In fact, the reader turns all symbols into upper case, and consequently
+everything prints out in upper case.  You may write programs in whichever
+case you prefer.
+</p>
+
+<p indent="1">        You will see various symbols that have the colon (<obj>:</obj>)
+character in their names.  The colon and the characters preceding it
+are not actually part of the symbol name, but in early stages of
+learning the system you can pretend that they are.  Actually they
+are a package prefix.  See chapter <ref chapter="28" definition-in-file="packd" key="package-chapter" title="Packages" type="chapter"></ref> for an explanation
+of packages and what package prefixes really do.
+</p>
+
+<p indent="1">        Symbols whose names start with <obj>si:</obj> are internal to the
+system.  These functions and variables are documented here because they
+are things you sometimes need to know about.  However, they are subject
+to change with little concern for compatibility for users.
+</p>
+
+<p indent="1">        Zetalisp is descended from Maclisp, and a good deal
+of effort was expended to try to allow Maclisp programs to run
+in Zetalisp.  Throughout the manual, there are notes about
+differences between the dialects.  For the new user, it is important
+to note that many functions herein exist solely for Maclisp compatibility;
+they should <arg>not</arg> be used in new programs.  Such functions are
+clearly marked in the text.
+</p>
+
+<p indent="1">        The Lisp Machine character set is not quite the same as that
+used on I.T.S. nor on Multics; it is described in full detail in
+<ref chapter="11" definition-in-file="fd-str" key="character-set" section="1" title="Characters" type="section"></ref>.  The important thing to note for now is that the
+character ``newline'' is the same as <obj>Return</obj>, and is represented by the
+number 215 octal.  (This number should <arg>not</arg> be built into any
+programs.)
+</p>
+
+<p indent="1">        When the text speaks of ``typing <obj>Control-Q</obj>'' (for example),
+this means to hold down the <obj>Control</obj> key on the keyboard (either of
+the two keys labeled `CTRL'), and, while holding it down, to strike the
+<obj>Q</obj> key.  Similarly, to type <obj>Meta-P</obj>, hold down either of the
+<obj>Meta</obj> keys and strike <obj>P</obj>.  To type <obj>Control-Meta-T</obj> hold down
+both <obj>Control</obj> and <obj>Meta</obj>.  Unlike ASCII, the Lisp machine character
+set does not simply label a few of the characters as ``control
+characters''; <obj>Control</obj> and <obj>Meta</obj> (and <obj>Super</obj> and <obj>Hyper</obj>) are
+modifiers that can be attached to any character and are represented as
+separate bits.  These
+modifier bits are not present in characters in strings or files.
+</p>
+
+<p indent="1">        Many of the functions refer to ``areas''.  The <arg>area</arg> feature
+is of interest only to writers of large systems and can be safely
+disregarded by the casual user.  It is described in chapter <ref chapter="17" definition-in-file="areas" key="area-chapter" title="Areas" type="chapter"></ref>.
+</p>
+</section><a name="common-lisp"></a>
+
+
+<section chapter-number="1" name="common-lisp" number="4" title="Common Lisp Support"><index-entry index="concepts" title="common lisp"></index-entry>
+
+<p>Common Lisp is the name of a standardization project whose goal was to
+establish a compatible subset for Lisp systems descended from Maclisp.
+</p>
+
+<p>Originally it was hoped that Zetalisp and the Lisp Machine system could
+be changed to become a superset of Common Lisp; but this proved
+impossible because the final Common Lisp design includes several
+incompatible changes to widely used functions, which, while of no
+fundamental importance, would make most user programs fail to work.
+Therefore it was necessary to make Common Lisp a separate mode of operation.
+The incompatibilities fall into two classes:
+</p>
+
+<table><tbody><tr><td><example>*</example></td><td>Read syntax: Common Lisp specifies `<obj>\</obj>' as the single-character escape
+character rather than the traditional `<obj>/</obj>'.  A few other constructs,
+such as character objects and complex numbers, are also written incompatibly.
+
+</td></tr><tr><td><example>*</example></td><td>Specific functions: many Lisp functions of ancient pedigree, including
+<obj>member</obj>, <obj>assoc</obj>, <obj>subst</obj>, <obj>union</obj>, <obj>terpri</obj>, <obj>close</obj>
+and <obj>//</obj> are specified to be incompatible with their traditional behavior.
+</td></tr></tbody></table>
+<p>The read syntax incompatibilities have been dealt with by having separate
+readtables for traditional and Common Lisp syntax.  The
+incompatibilities in functions have been dealt with by means of <arg>reader
+symbol substitutions</arg>.  For each function changed incompatibly, such as
+<obj>member</obj>, a new, distinct symbol exists in a package called <obj>cli</obj>
+(``Common Lisp Incompatible''); for example, <obj>cli:member</obj>.  The function
+definition of the symbol <obj>member</obj> is the traditional definition, while
+that of <obj>cli:member</obj> is the Common Lisp definition.  In Common Lisp
+programs, the reader is directed to replace <obj>member</obj> with
+<obj>cli:member</obj> wherever it is seen.  So traditional and Common Lisp
+programs both get the <obj>member</obj> functions they expect.  Programs
+written in traditional syntax can refer to the new <obj>cli</obj> functions
+with explicit <obj>cli:</obj> package prefixes.  Programs written in Common Lisp
+syntax can refer to the traditional symbols with explicit <obj>global:</obj>
+package prefixes, but this is not expected to be necessary in code.
+</p>
+
+<p>The symbol replacements are under control of the current readtable,
+so that the Common Lisp readtable is responsible for causing
+<obj>cli:close</obj> to replace <obj>close</obj> and so on.
+</p>
+
+<p>In this manual, the incompatible Common Lisp functions are documented
+under names starting with <obj>cli:</obj>, the names by which a traditional
+program could refer to them.  Keep in mind that, in Common Lisp programs,
+the <obj>cli:</obj> would be omitted.  A list of symbols which
+have incompatible Common Lisp substitutes can be found by looking up
+<obj>cli:</obj> in the function and variable indices. 
+</p>
+
+<p>Traditional read syntax is used nearly everywhere in the manual.
+This includes the use of `<obj>/</obj>' as an escape character, the escaping of
+`<obj>/</obj>' itself, and not escaping the character `<obj>\</obj>', which in traditional
+syntax is not special.  It is up to the user to make appropriate
+modifications to express the same Lisp object in Common Lisp syntax when
+necessary.
+</p>
+
+<p>The majority of Common Lisp changes, those that are upward compatible,
+have been incorporated directly into Zetalisp and are documented
+in this manual with no special notice.
+</p>
+
+<p>Common Lisp read syntax and function definitions may be used either in
+files or interactively.
+</p>
+
+<p>For listen loops, including Lisp Listener windows, break loops and the
+debugger, the choice of syntax and function semantics is made by setting the
+variable <obj>readtable</obj> to the appropriate readtable (see <ref definition-in-file="rdprt" key="si:common-lisp-readtable-var" title="Constant si:common-lisp-readtable" type="const"></ref>)
+or most simply by calling the function <obj>common-lisp</obj>.
+</p>
+<definition><define key="common-lisp-fun" name="common-lisp" type="fun"><args>flag</args>
+</define>
+
+<description>If <arg>flag</arg> is <obj>t</obj>, selects Common Lisp syntax and function definitions.
+If <arg>flag</arg> is <obj>nil</obj>, selects traditional syntax and function definitions.
+
+In either case, this controls the reading of the following expressions that
+you type in the same process.  It works by setting <obj>readtable</obj>.
+</description></definition>
+<p>In a file, Common Lisp is requested by writing the attribute
+<obj>Readtable: Common-Lisp;</obj> in the <example>-*-</example> file's line.  This controls
+both loading or compiling the file and evaluation or compilation in the
+editor while visiting the file.  <obj>Readtable: Traditional;</obj> specifies
+the use of traditional syntax and function definitions.  If neither
+attribute is present, the file is processed using whatever syntax is
+selected in the process that loads it.  See <ref chapter="26" definition-in-file="files" key="file-attribute-list" section="5" title="File Attribute Lists" type="section"></ref>.
+</p>
+
+<p>Reading and printing done by programs are controlled by the same things
+that control reading of programs.  They can also be controlled explicitly
+by binding the variable <obj>readtable</obj>.
+</p>
+</section></chapter>
+</document-part>

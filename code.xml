@@ -1,0 +1,986 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="code-chapter"></a>
+<chapter name="code-chapter" number="32" title="How to Read Assembly Language"><index-entry index="concepts" title="compiled code"></index-entry>
+
+<p>Sometimes it is useful to study the machine language code produced by
+the Lisp Machine's compiler, usually in order to analyze an error, or
+sometimes to check for a suspected compiler problem.  This chapter
+explains how the Lisp Machine's instruction set works and how to
+understand what code written in that instruction set is doing.
+Fortunately, the translation between Lisp and this instruction set is
+very simple; after you get the hang of it, you can move back and forth
+between the two representations without much trouble.  The following
+text does not assume any special knowledge about the Lisp Machine,
+although it sometimes assumes some general computer science background
+knowledge.
+</p>
+<a name="Introduction"></a>
+
+
+<section chapter-number="32" name="Introduction" number="1" title="Introduction"><p>Nobody looks at machine language code by trying to interpret octal
+numbers by hand.  Instead, there is a program called the Disassembler
+which converts the numeric representation of the instruction set into a
+more readable textual representation.  It is called the Disassembler
+because it does the opposite of what an Assembler would do; however,
+there isn't actually any assembler that accepts this input format, since
+there is never any need to manually write assembly language for the Lisp
+Machine.
+</p>
+
+<p>The simplest way to invoke the Disassembler is with the Lisp function
+<obj>disassemble</obj>.  Here is a simple example.  Suppose we type:
+</p>
+
+<lisp>(defun foo (x)
+  (assq 'key (get x 'propname)))
+
+(compile 'foo)
+
+(disassemble 'foo)
+</lisp>
+<p>This defines the function <obj>foo</obj>, compiles it, and invokes the Disassembler
+to print out the textual representation of the result of the compilation.
+Here is what it looks like:
+</p>
+
+<lisp>22 MOVE D-PDL FEF|6           ;'KEY
+23 MOVE D-PDL ARG|0           ;X
+24 MOVE D-PDL FEF|7           ;'PROPNAME
+25 (MISC) GET D-PDL
+26 (MISC) ASSQ D-RETURN
+</lisp>
+<p>The Disassembler is also used by the Error Handler and the Inspector.
+When you see stuff like the above while using one of these programs, it
+is disassembled code, in the same format as the <obj>disassemble</obj> function
+uses.  Inspecting a compiled code object shows the disassembled code.
+</p>
+
+<p>Now, what does this mean?  Before we get started, there is just a little
+bit of jargon to learn.
+</p>
+
+<p>The acronym PDL stands for Push Down List, and means the same thing as
+Stack: a last-in first-out memory.  The terms PDL and stack will be used
+interchangeably.  The Lisp Machine's architecture is rather typical of
+``stack machines''; there is a stack that most instructions deal with, and
+it is used to hold values being computed, arguments, and local
+variables, as well as flow-of-control information.  An important use of
+the stack is to pass arguments to instructions, though not all
+instructions take their arguments from the stack.
+</p>
+
+<p>The acronym `FEF' stands for Function Entry Frame.  A FEF is a compiled
+code object produced by the compiler.  After the <obj>defun</obj> form above
+was evaluated, the function cell of the symbol <obj>foo</obj> contained a
+lambda expression.  Then we compiled the function <obj>foo</obj>, and the
+contents of the function cell were replaced by a FEF.  The
+printed representation of the FEF for <obj>foo</obj> looks like this:
+</p>
+
+<lisp>#&lt;DTP-FEF-POINTER 11464337 FOO&gt;
+</lisp>
+<p>The FEF has three parts (this is a simplified explanation): a header
+with various fixed-format fields; a part holding constants and invisible
+pointers, and the main body, holding the machine language instructions.
+The first part of the FEF, the header, is not very interesting and is
+not documented here (you can look at it with <obj>describe</obj> but it won't
+be easy to understand).  The second part of the FEF holds various
+constants referred to by the function; for example, our function <obj>foo</obj>
+references two constants (the symbols <obj>key</obj> and <obj>propname</obj>), and so
+(pointers to) those symbols are stored in the FEF.  This part of the FEF
+also holds invisible pointers to the value cells of all symbols that the
+function uses as variables, and invisible pointers to the function cells
+of all symbols that the function calls as functions.  The third part of
+the FEF holds the machine language code itself.
+</p>
+
+<p>Now we can read the disassembled code.  The first instruction looked
+like this:
+</p>
+
+<lisp>22 MOVE D-PDL FEF|6           ;'KEY
+</lisp>
+<p>This instruction has several parts.  The <obj>22</obj> is the address of this
+instruction.  The Disassembler prints out the address of each
+instruction before it prints out the instruction, so that you can
+interpret branching instructions when you see them (we haven't seen one
+of these yet, but we will later).  The <obj>MOVE</obj> is an opcode: this is a
+<obj>MOVE</obj> instruction, which moves a datum from one place to another.  The
+<obj>D-PDL</obj> is a destination specification.  The <obj>D</obj> stands for
+`Destination', and so <obj>D-PDL</obj> means `Destination-PDL': the destination
+of the datum being moved is the PDL.  This means that the
+result will be pushed onto the PDL, rather than just moved to the top;
+this instruction is pushing a datum onto the stack.  The next field of
+the instruction is <obj>FEF|6</obj>.  This is an <arg>address</arg>, and it specifies
+where the datum is coming from.  The vertical bar serves to separate the
+two parts of the address.  The part before the vertical bar can be
+thought of as a <arg>base register</arg>, and the part after the bar can be
+thought of as being an offset from that register.  <obj>FEF</obj> as a base
+register means the address of the FEF that we are disassembling, and so
+this address means the location six words into the FEF.  So what this
+instruction does is to take the datum located six words into the FEF,
+and push it onto the PDL.  The instruction is followed by a comment
+field, which looks like <obj>;'KEY</obj>.  This is not a comment that any person
+wrote; the disassembler produces these to explain what is going on.  The
+semicolon just serves to start the comment, the way semicolons in Lisp
+code do.  In this case, the body of the comment, <obj>'KEY</obj>, is telling us
+that the address field (<obj>FEF|6</obj>) is addressing a constant (that is what
+the single-quote in <obj>'KEY</obj> means), and that the printed representation
+of that constant is <obj>KEY</obj>.  With the help of this comment we finally
+get the real story about what this instruction is doing: it is pushing
+(a pointer to) the symbol <obj>key</obj> onto the stack.
+</p>
+
+<p>The next instruction looks like this:
+</p>
+
+<lisp>23 MOVE D-PDL ARG|0           ;X
+</lisp>
+<p>This is a lot like the previous instruction; the only difference is that
+a different ``base register'' is being used in the address.  The <obj>ARG</obj>
+base register is used for addressing your arguments: <obj>ARG|0</obj> means
+that the datum being addressed is the zeroth argument.  Again, the
+comment field explains what that means: the value of X (which was the
+zeroth argument) is being pushed onto the stack.
+</p>
+
+<p>The third instruction is just like the first and second ones; it pushes
+the symbol <obj>propname</obj> onto the stack.
+</p>
+
+<p>The fourth instruction is something new:
+</p>
+
+<lisp>25 (MISC) GET D-PDL
+</lisp>
+<p>The first thing we see here is <obj>(MISC)</obj>.  This means that this is one of
+the so-called <arg>miscellaneous</arg> instructions.  There are quite a few of
+these instructions.  With some exceptions, each miscellaneous
+instruction corresponds to a Lisp function and has the same name as that
+Lisp function.  If a Lisp function has a corresponding miscellaneous
+instruction, then that function is hand-coded in Lisp Machine microcode.
+</p>
+
+<p>Miscellaneous instructions only have a destination field; they don't
+have any address field.  The inputs to the instruction come from the
+stack: the top <arg>n</arg> elements on the stack are used as inputs to the
+instruction and popped off the stack, where <arg>n</arg> is the number of arguments
+taken by the function.  The result of the function is stored wherever
+the destination field says.  In our case, the function being executed is
+<obj>get</obj>, a Lisp function of two arguments.  The top two values will be
+popped off the stack and used as the arguments to <obj>get</obj> (the value
+pushed first is the first argument, the value pushed second is the
+second argument, and so on).  The result of the call to <obj>get</obj> will be
+sent to the destination <obj>D-PDL</obj>; that is, it will be pushed onto the stack.
+(In case you were wondering about how we handle optional arguments and
+multiple-value returns, the answer is very simple: functions that use
+either of those features cannot be miscellaneous instructions!  If you
+are curious as to what functions are hand-microcoded and thus available
+as miscellaneous instructions, you can look at the <obj>defmic</obj> forms in the
+file <obj>SYS: SYS; DEFMIC LISP</obj>.)
+</p>
+
+<p>The fifth and last instruction is similar to the fourth:
+</p>
+
+<lisp>26 (MISC) ASSQ D-RETURN
+</lisp>
+<p>What is new here is the new value of the destination field.  This one is
+called <obj>D-RETURN</obj>, and it can be used anywhere destination
+fields in general can be used (like in <obj>MOVE</obj> instructions).  Sending
+something to ``Destination-Return'' means that this value should be the
+returned value of the function, and that we should return from this
+function.  This is a bit unusual in instruction sets; rather than having
+a ``return'' instruction, we have a destination that, when stored into,
+returns from the function.  What this instruction does, then, is to
+invoke the Lisp function <obj>assq</obj> on the top two elements of the stack
+and return the result of <obj>assq</obj> as the result of this function.
+</p>
+
+<p>Now, let's look at the program as a whole and see what it did:
+</p>
+
+<lisp>22 MOVE D-PDL FEF|6           ;'KEY
+23 MOVE D-PDL ARG|0           ;X
+24 MOVE D-PDL FEF|7           ;'PROPNAME
+25 (MISC) GET D-PDL
+26 (MISC) ASSQ D-RETURN
+</lisp>
+<p>First it pushes the symbol <obj>key</obj>.  Then it pushes the value of <obj>x</obj>.
+Then it pushes the symbol <obj>propname</obj>.  Then it invokes <obj>get</obj>, which
+pops the value of <obj>x</obj> and the symbol <obj>propname</obj> off the stack and
+uses them as arguments, thus doing the equivalent of evaluating the form
+<obj>(get x 'propname)</obj>.  The result is left on the stack; the stack now
+contains the result of the <obj>get</obj> on top, and the symbol <obj>key</obj>
+underneath that.  Next, it invokes <obj>assq</obj> on these two values, thus
+doing the equivalent of evaluating <obj>(assq 'key (get x 'propname))</obj>.
+Finally, it returns the value produced by <obj>assq</obj>.  Now, the original
+Lisp program we compiled was:
+</p>
+
+<lisp>(defun foo (x)
+  (assq 'key (get x 'propname)))
+</lisp>
+<p>We can see that the code produced by the compiler is correct: it will do
+the same thing as the function we defined will do.
+</p>
+
+<p>In summary, we have seen two kinds of instructions so far: the <obj>MOVE</obj>
+instruction, which takes a destination and an address, and two of the
+large set of miscellaneous instructions, which take only a destination,
+and implicitly get their inputs from the stack.  We have seen two
+destinations (<obj>D-PDL</obj> and <obj>D-RETURN</obj>), and two forms of address (<obj>FEF</obj>
+addressing and <obj>ARG</obj> addressing).
+</p>
+</section><a name="A More Advanced Example"></a>
+
+
+<section chapter-number="32" name="A More Advanced Example" number="2" title="A More Advanced Example"><p>Here is a more complex Lisp function, demonstrating local variables,
+function calling, conditional branching, and some other new
+instructions.
+</p>
+
+<lisp>(defun bar (y)
+  (let ((z (car y)))
+    (cond ((atom z)
+           (setq z (cdr y))
+           (foo y))
+          (t
+           nil))))
+</lisp>
+<p>The disassembled code looks like this:
+</p>
+
+<lisp>20 CAR D-PDL ARG|0            ;Y
+21 POP LOCAL|0                ;Z
+22 BR-NOT-ATOM 27
+23 CDR D-PDL ARG|0            ;Y
+24 POP LOCAL|0                ;Z
+25 CALL D-RETURN FEF|6        ;#'FOO
+26 MOVE D-LAST ARG|0          ;Y
+27 MOVE D-RETURN 'NIL
+</lisp>
+<p>The first instruction here is a <obj>CAR</obj> instruction.  It has the same
+format as <obj>MOVE</obj>: there is a destination and an address.  The <obj>CAR</obj>
+instruction reads the datum addressed by the address, takes the car of
+it, and stores the result into the destination.   In our example, the
+first instruction addresses the zeroth argument, and so it computes
+<obj>(car y)</obj>; then it pushes the result onto the stack.
+</p>
+
+<p>The next instruction is something new: the <obj>POP</obj> instruction.  It has an
+address field, but it uses it as a destination rather than as a source.
+The <obj>POP</obj> instruction pops the top value off the stack, and stores that
+value into the address specified by the address field.  In our example,
+the value on the top of the stack is popped off and stored into address
+<obj>LOCAL|0</obj>.  This is a new form of address; it means the zeroth local
+variable.  The ordering of the local variables is chosen by the
+compiler, and so it is not fully predictable, although it tends to be
+by order of appearance in the code; fortunately you never have to look
+at these numbers, because the comment field explains what is going on.
+In this case, the variable being addressed is <obj>z</obj>.  So this instruction
+pops the top value on the stack into the variable <obj>z</obj>.  The first two
+instructions work together to take the car of <obj>y</obj> and store it into
+<obj>z</obj>, which is indeed the first thing the function <obj>bar</obj> ought to do.
+(If you have two local variables with the same name, then the comment
+field won't tell you which of the two you're talking about; you'll have
+to figure that out yourself.  You can tell two local variables with
+the same name apart by looking at the number in the address.)
+</p>
+
+<p>The next instruction is a familiar <obj>MOVE</obj> instruction, but it uses a
+new destination: <obj>D-IGNORE</obj>.  This means that the datum being
+addressed isn't moved anywhere.  If so, then why bother doing this
+instruction?  The reason is that there is conceptually a set of
+<arg>indicator</arg> bits, as are found in most modern computers such as the
+68000, the Vax, as well as in obsolete computers such as the 370.  Every
+instruction that moves or produces a datum sets the indicator bits from
+that datum so that following instructions can test them.  So the reason
+that the <obj>MOVE</obj> instruction is being done is so that someone can test
+the indicators set up by the value that was moved, namely the value of
+<obj>z</obj>.
+</p>
+
+<p>All instructions except the branch instructions set the indicator bits
+from the result produced and/or stored by that instruction.
+</p>
+
+<p>The next instruction is a conditional branch; it changes the flow of
+control, based on the values in the indicator bits, which in this case
+reflect the value popped by the <obj>POP</obj> instruction 21.  The branch
+instruction is <obj>BR-NOT-ATOM 27</obj>, which means ``Branch, if the quantity
+was not an atom, to location 27; otherwise proceed with execution''.  If
+<obj>z</obj> was an atom, the Lisp Machine branches to location 27, and
+execution proceeds there.  (As you can see by skipping ahead, location
+27 just contains a <obj>MOVE</obj> instruction, which will cause the function
+to return <obj>nil</obj>.)
+</p>
+
+<p>If <obj>z</obj> is not an atom, the program keeps going, and the <obj>CDR</obj>
+instruction is next.  This is just like the <obj>CAR</obj> instruction except
+that it takes the cdr; this instruction pushes the value of <obj>(cdr y)</obj>
+onto the stack.  The next one pops that value off into the variable <obj>z</obj>.
+</p>
+
+<p>There are just two more instructions left.  These two instructions are
+our first example of how function calling is compiled.  It is the
+only really tricky thing in the instruction set.  Here is how it works
+in our example:
+</p>
+
+<lisp>25 CALL D-RETURN FEF|6        ;#'FOO
+26 MOVE D-LAST ARG|0          ;Y
+</lisp>
+<p>The form being compiled here is <obj>(foo y)</obj>.  This means we are applying
+the function which is in the function cell of the symbol <obj>foo</obj>, and
+passing it one argument, the value of <obj>y</obj>.  The way function calling
+works is in the following three steps.  First of all, there is a <obj>CALL</obj>
+instruction that specifies the function object being applied to
+arguments.  This creates a new stack frame on the stack, and stores the
+function object there.  Secondly, all the arguments being passed except
+the last one are pushed onto the stack.  Thirdly and lastly, the last
+argument is sent to a special destination, called <obj>D-LAST</obj>,
+meaning ``this is the last argument''.  Storing to this destination is
+what actually calls the function, <arg>not</arg> the <obj>CALL</obj> instruction itself.
+</p>
+
+<p>There are two things you might wonder about this.  First of all, when
+the function returns, what happens to the returned value?  Well, this is
+what we use the destination field of the <obj>CALL</obj> instruction for.  The
+destination of the <obj>CALL</obj> is not stored into at the time the <obj>CALL</obj>
+instruction is executed; instead, it is saved on the stack along with
+the function operation (in the stack frame created by the <obj>CALL</obj>
+instruction).  Then, when the function actually returns, its result is
+stored into that destination.
+</p>
+
+<p>The other question is what happens when there isn't any last argument;
+that is, when there is a call with no arguments at all?  This is handled
+by a special instruction called <obj>CALL0</obj>.  The address of <obj>CALL0</obj>
+addresses the function object to be called; the call takes place
+immediately and the result is stored into the destination specified by
+the destination field of the <obj>CALL0</obj> instruction.
+</p>
+
+<p>So, let's look at the two-instruction sequence above.  The first
+instruction is a <obj>CALL</obj>; the function object it specifies is at <obj>FEF|6</obj>,
+which the comment tells us is the contents of the function cell of <obj>foo</obj>
+(the FEF contains an invisible pointer to that function cell).  The
+destination field of the <obj>CALL</obj> is <obj>D-RETURN</obj>, but we aren't going to
+store into it yet; we will save it away in the stack frame and use it
+later.  So the function doesn't return at this point, even though it
+says <obj>D-RETURN</obj> in the instruction; this is the tricky part.
+</p>
+
+<p>Next we have to push all the arguments except the last one.  Well,
+there's only one argument, so nothing needs to be done here.  Finally,
+we move the last argument (that is, the only argument: the value of <obj>y</obj>)
+to <obj>D-LAST</obj>, using the <obj>MOVE</obj> instruction.  Moving to <obj>D-LAST</obj> is what
+actually invokes the function, so at this point the function <obj>foo</obj> is
+invoked.  When it returns, its result is sent to the destination stored
+in the stack frame: <obj>D-RETURN</obj>.  Therefore, the value returned by the
+call to <obj>foo</obj> will be returned as the value of the function <obj>bar</obj>.  Sure
+enough, this is what the original Lisp code says to do.
+</p>
+
+<p>When the compiler pushes arguments to a function call, it sometimes does
+it by sending the values to a destination called <obj>D-NEXT</obj> (meaning the
+``next'' argument).  This is exactly the same as <obj>D-PDL</obj> when producing
+a compiled function.  The distinction is important when the compiler
+output is passed to the microcompiler to generate microcode.
+</p>
+
+<p>Here is another example to illustrate function calling.  This Lisp
+function calls one function on the results of another function.
+</p>
+
+<lisp>(defun a (x y)
+  (b (c x y) y))
+</lisp>
+<p>The disassembled code looks like this:
+</p>
+
+<lisp>22 CALL D-RETURN FEF|6        ;#'B
+23 CALL D-PDL FEF|7           ;#'C
+24 MOVE D-PDL ARG|0           ;X
+25 MOVE D-LAST ARG|1          ;Y
+26 MOVE D-LAST ARG|1          ;Y
+</lisp>
+<p>The first instruction starts off the call to the function <obj>b</obj>.  The
+destination field is saved for later: when this function returns, we
+will return its result as <obj>a</obj>'s result.  Next, the call to <obj>c</obj> is
+started.  Its destination field, too, is saved for later; when <obj>c</obj>
+returns, its result should be pushed onto the stack, so that it will be
+the next argument to <obj>b</obj>.  Next, the first and second arguments to
+<obj>c</obj> are passed; the second one is sent to <obj>D-LAST</obj> and so the
+function <obj>c</obj> is called.  Its result, as we said, will be pushed onto
+the stack, and thus become the first argument to <obj>b</obj>.  Finally, the
+second argument to <obj>b</obj> is passed, by storing in <obj>D-LAST</obj>; <obj>b</obj> gets
+called, and its result is sent to <obj>D-RETURN</obj> and is returned from
+<obj>a</obj>.
+</p>
+</section><a name="The Rest of the Instructions"></a>
+
+
+<section chapter-number="32" name="The Rest of the Instructions" number="3" title="The Rest of the Instructions"><p>Now that we've gotten some of the feel for what is going on, I will
+start enumerating the instructions in the instruction set.  The
+instructions fall into four classes.  Class I instructions have both a
+destination and an address.  Class II instructions have an address, but
+no destination.  Class III instructions are the branch instructions,
+which contain a branch address rather than a general base-and-offset
+address.  Class IV instructions have a destination, but no address;
+these are the miscellaneous instructions.
+</p>
+
+<p>We have already seen just about all the Class I instructions.  There are
+nine of them in all: <obj>MOVE</obj>, <obj>CALL</obj>, <obj>CALL0</obj>, <obj>CAR</obj>, <obj>CDR</obj>, <obj>CAAR</obj>,
+<obj>CADR</obj>, <obj>CDAR</obj>, and <obj>CDDR</obj>.  <obj>MOVE</obj> just moves a datum from an address
+to a destination; the <obj>CxR</obj> and <obj>CxxR</obj> instructions are the same but
+perform the function on the value before sending it to the destination;
+<obj>CALL</obj> starts off a call to a function with some arguments; <obj>CALL0</obj>
+performs a call to a function with no arguments.
+</p>
+
+<p>We've seen most of the possible forms of address.  So far we have seen
+the <obj>FEF</obj>, <obj>ARG</obj>, and <obj>LOCAL</obj> base registers.  There are two other
+kinds of addresses.  One uses a ``constant'' base register, which
+addresses a set of standard constants: <obj>NIL</obj>, <obj>T</obj>, <obj>0</obj>, <obj>1</obj>, and
+<obj>2</obj>.  The disassembler doesn't even bother to print out
+<obj>CONSTANT|<arg>n</arg></obj>, since the number <arg>n</arg> would not be even slightly
+interesting; it just prints out <obj>'NIL</obj> or <obj>'1</obj> or whatever.  The
+other kind of address is a special one printed as <obj>PDL-POP</obj>, which
+means that to read the value at this address, an object should be popped
+off the top of the stack.
+</p>
+
+<p>There are more Class II instructions.  The only one we've
+seen so far is <obj>POP</obj>, which pops a value off the stack and stores it
+into the specified address.  Another, called <obj>MOVEM</obj>
+(from the PDP-10 opcode name, meaning MOVE to Memory), stores the
+top element of the stack into the specified address, but doesn't pop it
+off the stack.
+</p>
+
+<p>Seven Class II instructions implement heavily-used
+two-argument functions: <obj>+</obj>, <obj>-</obj>, <obj>*</obj>, <obj>/</obj>, <obj>LOGAND</obj>, <obj>LOGXOR</obj>, and
+<obj>LOGIOR</obj>.  These instructions take the first argument from the top of
+the stack (popping it off) and their second argument from the
+specified address, and they push the result on the stack.  Thus the
+stack level does not change due to these instructions.
+Here is a small function that shows some of these new things:
+</p>
+
+<lisp>(defun foo (x y)
+  (setq x (logxor y (- x 2))))
+</lisp>
+<p>The disassembled code looks like this:
+</p>
+
+<lisp>16 MOVE D-PDL ARG|1           ;Y
+17 MOVE D-PDL ARG|0           ;X
+20 - '2
+21 LOGXOR PDL-POP
+22 MOVEM ARG|0                ;X
+23 MOVE D-RETURN PDL-POP
+</lisp>
+<p>Instructions 20 and 21 use two of the new Class II instructions: the <obj>-</obj>
+and <obj>LOGXOR</obj> instructions.  Instructions 21 and 23 use the <obj>PDL-POP</obj>
+address type, and instruction 20 uses the ``constant'' base register to
+get to a fixnum <obj>2</obj>.  Finally, instruction 22 uses the <obj>MOVEM</obj>
+instruction; the compiler wants to use the top value of the stack to
+store it into the value of <obj>x</obj>, but it doesn't want to pop it off the
+stack because it has another use for it: to return it from the function.
+</p>
+
+<p>Another four Class II instructions implement some commonly used
+predicates: <obj>=</obj>, <obj>&gt;</obj>, <obj>&lt;</obj>, and <obj>EQ</obj>.  The two arguments come from the
+top of the stack and the specified address; the stack is popped, the
+predicate is applied to the two objects, and the result is left in the
+indicators so that a branch instruction can test it, and branch based
+on the result of the comparison.  These instructions remove the top
+item on the stack and don't put anything back, unlike the previous set,
+which put their results back on the stack.
+</p>
+
+<p>Next, there are four Class II instructions to read, modify, and write a
+quantity in ways that are common in Lisp code.  These instructions are
+called <obj>SETE-CDR</obj>, <obj>SETE-CDDR</obj>, <obj>SETE-1+</obj>, and <obj>SETE-1-</obj>.  The <obj>SETE-</obj>
+means to set the addressed value to the result of applying the specified
+one-argument function to the present value.  For example, <obj>SETE-CDR</obj>
+means to read the value addressed, apply <obj>cdr</obj> to it, and store the
+result back in the specified address.  This is used when compiling
+<obj>(setq x (cdr x))</obj>, which commonly occurs in loops; the other functions
+are used frequently in loops, too.
+</p>
+
+<p>There are two instructions used to bind special variables.  The first is
+<obj>BIND-NIL</obj>, which binds the cell addressed by the address field to
+<obj>nil</obj>; the second is <obj>BIND-POP</obj>, which binds the cell to an object
+popped off the stack rather than <obj>nil</obj>.  The latter instruction pops a
+value off the stack; the former does not use the stack at all.
+</p>
+
+<p>There are two instructions to store common values into addressed cells.
+<obj>SET-NIL</obj> stores <obj>nil</obj> into the cell specified by the address field;
+<obj>SET-ZERO</obj> stores <obj>0</obj>.  Neither instruction uses the stack at all.
+</p>
+
+<p>Finally, the <obj>PUSH-E</obj> instruction creates a locative pointer to the cell
+addressed by the specified address, and pushes it onto the stack.  This
+is used in compiling <obj>(value-cell-location 'z)</obj> where <obj>z</obj> is an
+argument or a local variable, rather than a symbol (special variable).
+</p>
+
+<p>Those are all of the Class II instructions.  Here is a contrived
+example that uses some of the ones we haven't seen, just to show
+you what they look like:
+</p>
+
+<lisp>(defun weird (x y)
+  (cond ((= x y)
+         (let ((*foo* nil) (*bar* 5))
+           (declare (special *foo* *bar*))
+           (setq x (cdr x)))
+         nil)
+        (t
+         (setq x nil)
+         (caar (variable-location y)))))
+</lisp>
+<p>The disassembled code looks like this:
+</p>
+
+<lisp>24 MOVE D-PDL ARG|0           ;X
+25 = ARG|1                    ;Y
+26 BR-NIL 35
+27 BIND-NIL FEF|6             ;*FOO*
+30 PUSH-NUMBER 5
+31 BIND-POP FEF|7             ;*BAR*
+32 SETE-CDR ARG|0             ;X
+33 (MISC) UNBIND 2 bindings 
+34 MOVE D-RETURN 'NIL
+35 SET-NIL ARG|0              ;X
+36 PUSH-E ARG|1               ;Y
+37 CAAR D-RETURN PDL-POP
+</lisp>
+<p>Instruction 25 is an <obj>=</obj> instruction; it numerically compares the top of the
+stack, <obj>x</obj>, with the addressed quantity, <obj>y</obj>.  The <obj>x</obj> is
+popped off the stack, and the indicators are set to the result of the
+equality test.  Instruction 26 checks the indicators, branching to 35 if
+the result of the call to <obj>=</obj> was <obj>nil</obj>; that is, the machine will
+branch to 35 if the two values were not equal.  Instruction 27 binds
+<obj>*foo*</obj> to <obj>nil</obj>; instructions 30 and 31 bind <obj>*bar*</obj> to <obj>5</obj>.
+Instruction 30 is a peculiar class IV instruction called <obj>PUSH-NUMBER</obj>
+which pushes a constant integer on the stack.  The integer must be in
+the range of zero to 511 in order for <obj>PUSH-NUMBER</obj> to be used.
+Instruction 32 demonstrates the use of <obj>SETE-CDR</obj> to compile <obj>(setq x
+(cdr x))</obj>, and instruction 35 demonstrates the use of <obj>SET-NIL</obj> to
+compile <obj>(setq x nil)</obj>.  Instruction 36 demonstrates the use of
+<obj>PUSH-E</obj> to compile <obj>(variable-location y)</obj>.
+</p>
+
+<p>The Class III instructions are for branching.  These have neither
+addresses nor destinations of the usual sort.  Instead, they have
+branch-addresses; they say where to branch, if the branch is going to
+happen.  There are several instructions, differing in the conditions
+under which they branch and whether they pop the stack.
+Branch-addresses are stored internally as self-relative addresses, to
+make Lisp Machine code relocatable, but the disassembler does the
+addition for you and prints out FEF-relative addresses so that you can
+easily see where the branch is going to.
+</p>
+
+<p>The branch instructions we have seen so far decide whether to branch on
+the basis of the <obj>nil</obj>-indicator, that is, whether the last value dealt
+with was <obj>nil</obj> or non-<obj>nil</obj>.  <obj>BR-NIL</obj> branches if it was <obj>nil</obj>, and
+<obj>BR-NOT-NIL</obj> branches if it was not <obj>nil</obj>.  There are two more
+instructions that test the result of the <obj>atom</obj> predicate on the last
+value dealt with.  <obj>BR-ATOM</obj> branches if the value was an atom (that is,
+if it was anything besides a cons). and <obj>BR-NOT-ATOM</obj> branches if the
+value was not an atom (that is, if it was a cons).  The <obj>BR</obj> instruction
+is an unconditional branch (it always branches).
+</p>
+
+<p>None of the above branching instructions deal with the stack.  There are
+two more instructions called <obj>BR-NIL-POP</obj> and <obj>BR-NOT-NIL-POP</obj>, which
+are the same as <obj>BR-NIL</obj> and <obj>BR-NOT-NIL</obj> except that if the branch is
+not done, the top value on the stack is popped off the stack.  These are
+used for compiling <obj>and</obj> and <obj>or</obj> special forms.
+</p>
+
+<p>Finally, there are the Class IV instructions, most of which are
+miscellaneous hand-microcoded Lisp functions. The file <obj>SYS: SYS;
+DEFMIC LISP</obj> has a list of all the miscellaneous instructions.  Most
+correspond to Lisp functions, including the subprimitives, although some
+of these functions are very low level internals that may not be
+documented anywhere (don't be disappointed if you don't understand all
+of them).  Please do not look at this file in hopes of finding obscure
+functions that you think you can use to speed up your programs; in fact,
+the compiler automatically uses these things when it can, and directly
+calling weird internal functions will only serve to make your code hard
+to read, without making it any faster.  In fact, we don't guarantee that
+calling undocumented functions will continue to work in the future.
+</p>
+
+<p>The <obj>DEFMIC</obj> file can be useful for determining if a given function is in
+microcode, although the only definitive way to tell is to compile some
+code that uses it and look at the results, since sometimes the compiler
+converts a documented function with one name into an undocumented one
+with another name.
+</p>
+</section><a name="Function Entry"></a>
+
+
+<section chapter-number="32" name="Function Entry" number="4" title="Function Entry"><p>When a function is first entered in the Lisp Machine, interesting things
+can happen because of the features that are invoked by use of the
+various lambda-list keywords.  The microcode performs various services when
+a function is entered, even before the first instruction of the function
+is executed.  These services are called for by various fields of the
+header portion of the FEF, including a list called the <arg>Argument
+Descriptor List</arg>, or <arg>ADL</arg>.  We won't go into the detailed format of
+any of this, as it is complex and the details are not too interesting.
+Disassembling a function that makes use of the ADL prints a summary of
+what the ADL says to do, before the beginning of the code.
+</p>
+
+<p>The function-entry services include the initialization of unsupplied
+optional arguments and of <obj>&amp;AUX</obj> variables.  The ADL
+has a little instruction set of its own, and if the form that computes
+the initial value is something simple, such as a constant or a
+variable, then the ADL can handle things itself.  However, if things get
+too complicated, instructions are needed, and the compiler generates
+some instructions at the front of the function to initialize the
+unsupplied variables.  In this case, the ADL specifies several different
+starting addresses for the function, depending on which optional arguments
+have been supplied and which have been omitted.  If all the optional
+arguments are supplied, then the ADL starts the function off after all
+the instructions that would have initialized the optional arguments;
+since the arguments were supplied, their values should not be set, and
+so all these instructions are skipped over.  Here's an example:
+</p>
+
+<lisp>(defvar *y*)
+
+(defun foo (&amp;optional (x (car *y*)) (z (* x 3)))
+  (cons x z))
+</lisp>
+<p>The disassembled code looks like this:
+</p>
+
+<lisp>Arg 0 (X) is optional, local,
+  initialized by the code up to pc 32.
+Arg 1 (Z) is optional, local,
+  initialized by the code up to pc 35.
+
+30 CAR D-PDL FEF|6            ;*Y*
+31 POP ARG|0                  ;X
+32 MOVE D-PDL ARG|0           ;X
+33 * '3
+34 POP ARG|1                  ;Z
+35 MOVE D-PDL ARG|0           ;X
+36 MOVE D-PDL ARG|1           ;Z
+37 (MISC) CONS D-RETURN
+</lisp>
+<p>If no arguments are supplied, the function will be started at
+instruction 30; if only one argument is supplied, it will be started at
+instruction 32; if both arguments are supplied, it will be started at
+instruction 35.
+</p>
+
+<p>The thing to keep in mind here is that when there is initialization of
+variables, you may see it as code at the beginning of the function, or
+you may not, depending upon whether it is too complex for the ADL to handle.
+This is true of <obj>&amp;aux</obj> variables as well as unsupplied <obj>&amp;optional</obj>
+arguments.
+</p>
+
+<p>When there is a <obj>&amp;rest</obj> argument, it is passed to the function as the
+zeroth local variable, rather than as any of the arguments.  This is not
+really so confusing as it might seem, since a <obj>&amp;rest</obj> argument is not
+an argument passed by the caller; rather it is a list of some of the
+arguments, created by the function-entry microcode services.  In any case
+the comment tells you what is going on.  In fact, one hardly ever
+looks much at the address fields in disassembled code, since the
+comment tells you the right thing anyway.  Here is a silly example of the
+use of a <obj>&amp;rest</obj> argument:
+</p>
+
+<lisp>(defun prod (&amp;rest values)
+  (apply #'* values))
+</lisp>
+<p>The disassembled code looks like this:
+</p>
+
+<lisp>20 MOVE D-PDL FEF|6           ;#'*
+21 MOVE D-PDL LOCAL|0         ;VALUES
+22 (MISC) APPLY D-RETURN
+</lisp>
+<p>As can be seen, <obj>values</obj> is referred to as <obj>LOCAL|0</obj>.
+</p>
+
+<p>Another thing the microcode does at function entry is to bind the
+values of any arguments or <obj>&amp;aux</obj> variables that are special.
+Thus, you won't see any <obj>BIND</obj> instructions for binding them.
+</p>
+</section><a name="initialization"></a>
+
+
+<section chapter-number="32" name="initialization" number="5" title="Special Class IV Instructions"><p>We said earlier that most of the Class IV instructions are miscellaneous
+hand-microcoded Lisp functions.  However, a few of them are not Lisp
+functions at all.  There are two instructions that are printed as
+<obj>UNBIND 3 bindings</obj> or <obj>POP 7 values</obj>; the number can be
+anything up to 16 (these numbers are printed in decimal).  These
+instructions just do what they say, unbinding the last <arg>n</arg> values that
+were bound or popping the top <arg>n</arg> values off the stack.
+</p>
+
+<p>Another Class IV instruction is <obj>PUSH-NUMBER</obj>.  It pushes a constant
+integer, in the range zero to 511.  An example of it appeared on <ref definition-in-file="code" key="push-number-use" type="page"></ref>.
+</p>
+
+<p>The array referencing functions--<obj>aref</obj>, <obj>aset</obj>, and <obj>aloc</obj>--take
+a variable number of arguments, but they are handled differently
+depending on how many there are.  For one-, two-, and three-dimensional
+arrays, these functions are turned into internal functions with names
+<obj>ar-1</obj>, <obj>as-1</obj>, and <obj>ap-1</obj> (with the number of dimensions
+substituted for <obj>1</obj>).  Again, there is no point in using these
+functions yourself; it would only make your code harder to understand
+but not any faster at all.  When there are more than three dimensions,
+the functions <obj>aref</obj>, <obj>aset</obj> and <obj>aloc</obj> are called in the ordinary
+manner.
+</p>
+
+<lisp>(defun foo (y x i j &amp;aux v)
+  (setq v (aref x i j))
+  (setf (aref y i) v))
+</lisp>
+<lisp>16 MOVE D-PDL ARG|1           ;X
+17 MOVE D-PDL ARG|2           ;I
+20 MOVE D-PDL ARG|3           ;J
+21 (MISC) AR-2 D-PDL
+22 POP LOCAL|0                ;V
+23 MOVE D-PDL ARG|0           ;Y
+24 MOVE D-PDL ARG|2           ;I
+25 MOVE D-PDL LOCAL|0         ;V
+26 (MISC) SET-AR-1 D-RETURN
+</lisp>
+<p>Reference to one-dimensional arrays with constant subscripts
+use special instructions which have the array index encoded instead
+of an address.
+</p>
+
+<lisp>(defun foo (x)
+  (+ (aref x 3) (array-leader x 2))
+  (setf (aref x 5) t))
+</lisp>
+<lisp>FOO:
+16 MOVE D-PDL ARG|0           ;X
+17 AR-1 (3) D-IGNORE
+20 MOVE D-PDL ARG|0           ;X
+21 ARRAY-LEADER (2) D-IGNORE
+22 MOVE D-PDL ARG|0           ;X
+23 MOVE D-PDL 'T
+24 SET-AR-1 (5) D-RETURN
+</lisp>
+<p>The <obj>AR-1</obj> instruction is to be distinguished from the <obj>MISC AR-1</obj>
+instruction.  <obj>AR-1</obj> pops an array off the stack and encodes the
+subscript itself.  The 3 in <obj>(3)</obj> is the subscript.  <obj>ARRAY-LEADER</obj>
+is similar but refers to an array leader slot.  <obj>SET-AR-1</obj> pops an
+array and then pops a value to store into it at the specified slot.
+<obj>SET-AR-1</obj> is analogous.  There also exist <obj>%INSTANCE-REF</obj> and
+<obj>SET-%INSTANCE-REF</obj> instructions.
+</p>
+
+<p>When you call a function and expect to get more than one value back,
+a slightly different kind of function calling is used.  Here is an example
+that uses <obj>multiple-value</obj> to get two values back from a function call:
+</p>
+
+<lisp>(defun foo (x)
+  (let (y z)
+    (multiple-value (y z)
+      (bar 3))
+    (+ x y z)))
+</lisp>
+<p>The disassembled code looks like this:
+</p>
+
+<lisp>20 MOVE D-PDL FEF|6           ;#'BAR
+21 MOVE D-PDL '2
+22 (MISC) %CALL-MULT-VALUE D-IGNORE
+23 MOVE D-LAST '3
+24 POP LOCAL|1                ;Z
+25 POP LOCAL|0                ;Y
+26 MOVE D-PDL ARG|0           ;X
+27 + LOCAL|0                  ;Y
+30 + LOCAL|1                  ;Z
+31 MOVE D-RETURN PDL-POP
+</lisp>
+<p>A <obj>%CALL-MULT-VALUE</obj> instruction is used instead of a <obj>CALL</obj>
+instruction.  The destination field of <obj>%CALL-MULT-VALUE</obj> is unused and
+will always be <obj>D-IGNORE</obj>.  <obj>%CALL-MULT-VALUE</obj> takes two ``arguments'',
+which it finds on the stack; it pops both of them.  The first one is the
+function object to be applied; the second is the number of return values
+that are expected.  The rest of the call proceeds as usual, but when the
+call returns, the returned values are left on the stack.  The number of
+objects left on the stack is always the same as the second ``argument'' to
+<obj>%CALL-MULT-VALUE</obj>.  In our example, the two values returned are left
+on the stack, and they are immediately popped off into <obj>z</obj> and <obj>y</obj>.
+There is also a <obj>%CALL0-MULT-VALUE</obj> instruction, for the same
+reason <obj>CALL0</obj> exists.
+</p>
+
+<p>The <obj>multiple-value-bind</obj> form works similarly; here is an
+example:
+</p>
+
+<lisp>(defun foo (x)
+  (multiple-value-bind (y *foo* z)
+      (bar 3)
+    (declare (special *foo*))
+    (+ x y z)))
+</lisp>
+<p>The disassembled code looks like this:
+</p>
+
+<lisp>22 MOVE D-PDL FEF|7           ;#'BAR
+23 MOVE D-PDL '3
+24 (MISC) %CALL-MULT-VALUE D-IGNORE
+25 MOVE D-LAST '3
+26 POP LOCAL|1                ;Z
+27 BIND-POP FEF|6             ;*FOO*
+30 POP LOCAL|0                ;Y
+31 MOVE D-PDL ARG|0           ;X
+32 + LOCAL|0                  ;Y
+33 + LOCAL|1                  ;Z
+34 MOVE D-RETURN PDL-POP
+</lisp>
+<p>The <obj>%CALL-MULT-VALUE</obj> instruction is still used, leaving the results
+on the stack; these results are used to bind the variables.
+</p>
+
+<p>Calls done with <obj>multiple-value-list</obj> work with the <obj>%CALL-MULT-VALUE-LIST</obj>
+instruction.  It takes one ``argument'' on the stack: the function object
+to apply.  When the function returns, the list of values is left on the
+top of the stack.  Here is an example:
+</p>
+
+<lisp>(defun foo (x y)
+  (multiple-value-list (bar -7 y x)))
+</lisp>
+<p>The disassembled code looks like this:
+</p>
+
+<lisp>22 MOVE D-PDL FEF|6           ;#'BAR
+23 (MISC) %CALL-MULT-VALUE-LIST D-IGNORE
+24 MOVE D-PDL FEF|7           ;'-7
+25 MOVE D-PDL ARG|1           ;Y
+26 MOVE D-LAST ARG|0          ;X
+27 MOVE D-RETURN PDL-POP
+</lisp>
+<p>Returning of more than one value from a function is handled
+by special miscellaneous instructions.  <obj>%RETURN-2</obj> and <obj>%RETURN-3</obj> are
+used to return two or three values; these instructions take two
+and three arguments, respectively, on the stack and return from the
+current function just as storing to <obj>D-RETURN</obj> would.  If there are more
+than three return values, they are all pushed, then the number
+that there were is pushed, and then the <obj>%RETURN-N</obj> instruction is
+executed.  None of these instructions use their destination field.
+Note: the <obj>return-list</obj> function is just an ordinary miscellaneous
+instruction; it takes the list of values to return as an argument on the
+stack and returns those values from the current function.
+</p>
+
+<p>The function <obj>apply</obj> is compiled using a special instruction called
+<obj>%SPREAD</obj> to iterate over the elements of its last argument, which
+should be a list.  <obj>%SPREAD</obj> takes one argument (on the stack), which
+is a list of values to be passed as arguments (pushed on the stack).  If
+the destination of <obj>%SPREAD</obj> is <obj>D-PDL</obj> (or <obj>D-NEXT</obj>), then the
+values are just pushed; if it is <obj>D-LAST</obj>, then after the values are
+pushed, the function is invoked.  <obj>apply</obj> with more than two arguments
+will always compile using a <obj>%SPREAD</obj> whose destination is <obj>D-LAST</obj>.
+Here is an example:
+</p>
+
+<lisp>(defun foo (a b &amp;rest c)
+  (apply #'format t a c)
+  b)
+</lisp>
+<p>The disassembled code looks like this:
+</p>
+
+<lisp>FOO:
+20 CALL D-IGNORE FEF|6        ;#'FORMAT
+21 MOVE D-PDL 'T
+22 MOVE D-PDL ARG|0           ;A
+23 MOVE D-PDL LOCAL|0         ;C
+24 (MISC) %SPREAD D-LAST
+25 MOVE D-RETURN ARG|1        ;B
+</lisp>
+<p>Note that in instruction 23, the address <obj>LOCAL|0</obj> is used to
+access the <obj>&amp;rest</obj> argument.
+</p>
+
+<p>The <obj>catch</obj> special form is also handled specially by the compiler.
+Here is a simple example of <obj>catch</obj>:
+</p>
+
+<lisp>(defun a ()
+  (catch 'foo (bar)))
+</lisp>
+<p>The disassembled code looks like this:
+</p>
+
+<lisp>24 MOVE D-PDL FEF|6           ;'30
+25 (MISC) %CATCH-OPEN D-RETURN
+26 MOVE D-PDL FEF|7           ;'FOO
+27 CALL0 D-RETURN FEF|8       ;#'BAR
+</lisp>
+<p>The <obj>%CATCH-OPEN</obj> instruction is like the <obj>CALL</obj> instruction; it
+starts a call to the <obj>catch</obj> function.  It takes one ``argument'' on
+the stack, which is the location in the program that should be branched
+to if this <obj>catch</obj> is <obj>throw</obj>n to.  In addition to saving that
+program location, the instruction saves the state of the stack and
+of special-variable binding so that they can be restored in the event
+of a <obj>throw</obj>.  So instructions 24 and 25
+start a <obj>catch</obj> block, and the rest of the function computes the
+two arguments of the <obj>catch</obj>.  Note, however, that <obj>catch</obj>
+is not actually called.  The last form inside the <obj>catch</obj>, in this case
+<obj>(bar)</obj>, is compiled so as to return its values directly out of the
+function <obj>a</obj>.  The only way that the inactive stack frame for <obj>catch</obj>
+matters is if a <obj>throw</obj> is done during the execution of <obj>bar</obj>.
+This searches for a pending call to <obj>catch</obj> and returns from that frame.
+In this case, since the <obj>%CATCH-OPEN</obj> instruction specifies
+<obj>D-RETURN</obj>, the values thrown are returned from <obj>a</obj>.
+</p>
+
+<p>You may have wondered why instruction 24 is there at all.
+If the destination of a <obj>catch</obj> is not <obj>D-RETURN</obj>, it is necessary
+for <obj>throw</obj> to resume execution of the function containing the <obj>catch</obj>.
+Then it is necessary to specify what instruction to resume at.
+For example:
+</p>
+
+<lisp>(defun a ()
+  (catch 'foo (bar))
+  (print t))
+</lisp>
+<p>The disassembled code looks like this:
+</p>
+
+<lisp>26 MOVE D-PDL FEF|6           ;'32
+27 (MISC) %CATCH-OPEN D-IGNORE
+30 MOVE D-PDL FEF|7           ;'(BAR)
+31 MOVE D-LAST FEF|8          ;'FOO
+32 CALL D-RETURN FEF|9        ;#'PRINT
+33 MOVE D-LAST 'T
+</lisp>
+<p>The instruction 26 pushes 32, which is the number of instruction
+at which execution should resume if there is a <obj>throw</obj>.
+</p>
+
+<p>To allow compilation of <obj>(multiple-value (...) (catch ...))</obj>, there
+is a special instruction called <obj>%CATCH-OPEN-MULT-VALUE</obj>, which is a
+cross between <obj>%CATCH-OPEN</obj> and <obj>%CALL-MULT-VALUE</obj>.
+</p>
+</section></chapter>
+</document-part>

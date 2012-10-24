@@ -1,0 +1,1745 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="function-chapter"></a>
+<chapter name="function-chapter" number="12" title="Functions"><index-entry index="concepts" title="function"></index-entry>
+
+<index-entry index="concepts" title="definition"></index-entry>
+
+<p>Functions are the basic building blocks of Lisp programs.  This chapter
+describes the functions in Zetalisp that are used to manipulate
+functions.  It also explains how to manipulate special forms and macros.
+</p>
+
+<p>This chapter contains internal details intended for those writing programs
+to manipulate programs as well as material suitable for the beginner.
+Feel free to skip sections that look complicated or uninteresting
+when reading this for the first time.
+</p>
+<a name="What Is a Function?"></a>
+
+
+<section chapter-number="12" name="What Is a Function?" number="1" title="What Is a Function?"><p>There are many different kinds of functions in Zetalisp.  Here
+are the printed representations of examples of some of them:
+
+<lisp>foo
+(lambda (x) (car (last x)))
+(named-lambda foo (x) (car (last (x))))
+(subst (x) (car (last x)))
+#&lt;dtp-fef-pointer append 1424771&gt;
+#&lt;dtp-u-entry last 270&gt;
+#&lt;dtp-closure 1477464&gt;
+</lisp>We will examine these and other types of functions in detail later in this chapter.
+There is one thing they all have in common:  a function is a Lisp object
+that can be applied to arguments.  All of the above objects may be
+applied to some arguments and will return a value.  Functions are Lisp
+objects and so can be manipulated in all the usual ways; you can pass
+them as arguments, return them as values, and make other Lisp objects
+refer to them.
+</p>
+</section><a name="method-function-spec"></a>
+
+
+<section chapter-number="12" name="method-function-spec" number="2" title="Function Specs"><index-entry index="concepts" title="function spec"></index-entry>
+
+<p>The name of a function does not have to be a symbol.  Various kinds of
+lists describe other places where a function can be found.  A Lisp
+object that describes a place to find a function is called a <arg>function spec</arg>.
+(`Spec' is short for `specification'.)
+Here are the printed representations of some typical function specs:
+
+<lisp>foo
+(:property foo bar)
+(:method tv:graphics-mixin :draw-line)
+(:internal foo 1)
+(:within foo bar)
+(:location #&lt;dtp-locative 7435216&gt;)
+</lisp></p>
+
+<p>Function specs have two purposes: they specify a place to <arg>remember</arg> a
+function, and they serve to <arg>name</arg> functions.  The most common kind of
+function spec is a symbol, which specifies that the function cell
+of the symbol is the place to remember the function.  We will see all the
+different types of function spec, and what they mean, shortly.  Function specs are
+not the same thing as functions.  You cannot, in general, apply a
+function spec to arguments.  The time to use a function spec is when
+you want to <arg>do</arg> something to the function, such as define it,
+look at its definition, or compile it.
+</p>
+
+<p>Some kinds of functions remember their own names, and some don't.  The
+``name'' remembered by a function can be any kind of function spec,
+although it is usually a symbol.  In the examples of functions in the
+previous section, the one starting with the symbol <obj>named-lambda</obj>, the
+one whose printed representation included <obj>dtp-fef-pointer</obj>, and the
+<obj>dtp-u-entry</obj> remembered names (the function specs <obj>foo</obj>,
+<obj>append</obj>, and <obj>last</obj> respectively).  The others didn't remember
+their names.
+</p>
+
+<p>To <arg>define a function spec</arg> means to make that function spec remember
+a given function.  Programs do this by calling <obj>fdefine</obj>; you give
+<obj>fdefine</obj> a function spec and a function, and <obj>fdefine</obj> remembers
+the function in the place specified by the function spec.  The function
+associated with a function spec is called the <arg>definition</arg> of the
+function spec.  A single function can be
+the definition of more than one function spec at the same time, or of no
+function specs.
+</p>
+
+<p>The definition of a function spec can be obtained with <obj>fdefinition</obj>.
+<obj>(function <arg>function-spec</arg>)</obj> does so too, but here <arg>function-spec</arg>
+is not evaluated.  For example, <obj>(function foo)</obj> evaluates to the
+function definition of <obj>foo</obj>.  <obj>fdefinition</obj> is used by programs
+whose purpose is to examine function definitions, whereas <obj>function</obj>
+is used in this way by programs of all sorts to obtain a specific
+definition and use it.  See <ref definition-in-file="fd-eva" key="function-fun" title="Special Form function" type="spec"></ref>.
+</p>
+
+<p>To <arg>define a function</arg> means to create a new function and define a
+given function spec as that new function.  This is what the <obj>defun</obj>
+special form does.  Several other special forms, such as <obj>defmethod</obj>
+(<ref definition-in-file="flavor" key="defmethod-fun" title="Macro defmethod" type="mac"></ref>) and <obj>defselect</obj> (<ref definition-in-file="fd-fun" key="defselect-fun" title="Special Form defselect" type="spec"></ref>), do this too.
+</p>
+
+<p>These special forms that define functions usually take a function spec,
+create a function whose name is that function spec, and then define that
+function spec to be the newly-created function.  Most function
+definitions are done this way, and so usually if you go to a function
+spec and see what function is there, the function's name is the
+same as the function spec.  However, if you define a function named
+<obj>foo</obj> with <obj>defun</obj>, and then define the symbol <obj>bar</obj> to be this
+same function, the name of the function is unaffected; both <obj>foo</obj> and
+<obj>bar</obj> are defined to be the same function, and the name of that
+function is <obj>foo</obj>, not <obj>bar</obj>.
+</p>
+
+<index-entry index="concepts" title="basic definition"></index-entry>
+
+<index-entry index="concepts" title="encapsulation"></index-entry>
+
+<p>A function spec's definition in general consists of a <arg>basic
+definition</arg> surrounded by <arg>encapsulations</arg>.  Both the basic
+definition and the encapsulations are functions, but of recognizably
+different kinds.  What <obj>defun</obj> creates is a basic definition, and
+usually that is all there is.  Encapsulations are made by
+function-altering functions such as <obj>trace</obj>, <obj>breakon</obj> and <obj>advise</obj>.  When the
+function is called, the entire definition, which includes the tracing
+and advice, is used.  If the function is redefined with <obj>defun</obj>,
+only the basic definition is changed; the encapsulations are left in
+place.  See the section on encapsulations, <ref chapter="12" definition-in-file="fd-fun" key="encapsulate" section="9" title="Encapsulations" type="section"></ref>.
+</p>
+
+<p>A function spec is a Lisp object of one of the following types:
+
+<table><tbody><tr><td><obj><arg>a symbol</arg></obj></td><td>The function is remembered in the function cell of the symbol. See
+<ref definition-in-file="fd-sym" key="fsymeval-fun" title="Function fsymeval" type="fun"></ref> for an explanation of function cells and the primitive
+functions to manipulate them. 
+
+</td></tr><tr><td><obj>(:property <arg>symbol</arg> <arg>property</arg>)</obj></td><td>The function is remembered on the property list of the symbol; doing
+<obj>(get <arg>symbol</arg> <arg>property</arg>)</obj> returns the function.  Storing
+functions on property lists is a frequently-used technique for
+dispatching (that is, deciding at run-time which function to call, on
+the basis of input data).
+
+</td></tr><tr><td><obj>(:method <arg>flavor-name</arg> <arg>operation</arg>)</obj></td><td></td></tr><tr><td><obj>(:method <arg>flavor-name</arg> <arg>method-type</arg> <arg>operation</arg>)</obj></td><td></td></tr><tr><td><obj>(:method <arg>flavor-name</arg> <arg>method-type</arg> <arg>operation</arg> <arg>suboperation</arg>)</obj></td><td>The function is remembered inside internal data structures of the
+flavor system and is called automatically as part of handling the
+operation <arg>operation</arg> on instances of <arg>flavor-name</arg>.  See the
+chapter on flavors (<ref chapter="22" definition-in-file="flavor" key="flavor" section="0" title="Objects, Message Passing, and Flavors" type="section"></ref>) for details.
+
+</td></tr><tr><td><obj>(:handler <arg>flavor-name</arg> <arg>operation</arg>)</obj></td><td>This is a name for the function actually called when an <arg>operation</arg> message
+is sent to an instance of the flavor <arg>flavor-name</arg>.  The difference
+between <obj>:handler</obj> and <obj>:method</obj> is that the handler may be a method
+inherited from some other flavor or a <arg>combined method</arg> automatically
+written by the flavor system.  Methods are what you define in source files;
+handlers are not.  Note that redefining or encapsulating a handler affects
+only the named flavor, not any other flavors built out of it.  Thus
+<obj>:handler</obj> function specs are often used with <obj>trace</obj>
+(see <ref definition-in-file="db-aid" key="trace-fun" title="Special Form trace" type="spec"></ref>), <obj>breakon</obj> (<ref definition-in-file="db-aid" key="breakon-fun" title="Function breakon" type="fun"></ref>), and <obj>advise</obj> (<ref definition-in-file="db-aid" key="advise-fun" title="Macro advise" type="mac"></ref>).
+
+</td></tr><tr><td><obj>(:select-method <arg>function-spec</arg> <arg>operation</arg>)</obj></td><td>This function spec assumes that the definition of <arg>function-spec</arg> is
+a select-method object (see <ref definition-in-file="fd-fun" key="select-method" type="page"></ref>) containing an alist
+of operation names and functions to handle them, and refers to one
+particular element of that alist: the one for operation <arg>operation</arg>.
+
+The function is remembered in that alist element and is called when
+<arg>function-spec</arg>'s definition is called with first argument
+<arg>operation</arg>.
+
+<obj>:select-method</obj> function specs are most often used implicitly
+through <obj>defselect</obj>.  One of the things done by
+
+<lisp>(defselect foo
+  (:win (x) (cons 'win x))
+  ...)
+</lisp>is to define the function spec <obj>(:select-method foo :win)</obj>.
+
+<obj>:select-method</obj> function specs are explicitly given
+function definitions when you use <obj>defselect-incremental</obj>
+instead of <obj>defselect</obj>, as in
+
+<lisp>(defselect-incremental foo)
+(defun (:select-method foo :win) (ignore x)
+  (cons 'win x))
+</lisp>
+</td></tr><tr><td><obj>(:lambda-macro <arg>name</arg>)</obj></td><td>This is a name for the function that expands the lambda macro <arg>name</arg>.
+
+</td></tr><tr><td><obj>(:location <arg>pointer</arg>)</obj></td><td>The function is stored in the cdr of <arg>pointer</arg>, which may be a locative
+or a list.  This is for pointing at an arbitrary place
+that there is no other way to describe.  This form of function spec
+isn't useful in <obj>defun</obj> (and related special forms) because the
+reader has no printed representation for locative pointers and always
+creates new lists; these function specs are intended for programs
+that manipulate functions (see <ref chapter="12" definition-in-file="fd-fun" key="programs-that-manipulate-functions" section="7" title="How Programs Manipulate Function Specs" type="section"></ref>).
+
+</td></tr><tr><td><obj>(:within <arg>within-function</arg> <arg>function-to-affect</arg>)</obj></td><td>This refers to the meaning of the symbol <arg>function-to-affect</arg>, but
+only where it occurs in the text of the definition of
+<arg>within-function</arg>.  If you define this function spec as anything
+but the symbol <arg>function-to-affect</arg> itself, then that symbol is
+replaced throughout the definition of <arg>within-function</arg> by a new
+symbol, which is then defined as you specify.  See the section on
+<obj>si:rename-within</obj> encapsulations (<ref chapter="12" definition-in-file="fd-fun" key="rename-within-section" section="9" title="Encapsulations" type="section"></ref>) for more
+information.
+
+It is rarely useful to define a <obj>:within</obj> function spec by hand, but
+often useful to trace or advise one.  For example,
+
+<lisp>(breakon '(:within myfunction eval))
+</lisp>allows you to break when <obj>eval</obj> is called from <obj>myfunction</obj>.
+Simply doing <obj>(breakon 'eval)</obj> will probably blow away your machine.
+
+</td></tr><tr><td><obj>(:internal <arg>function-spec</arg> <arg>number</arg>)</obj></td><td>Some Lisp functions contain internal functions, created by
+<obj>(function (lambda ...))</obj> forms.  These internal functions need names when
+compiled, but they do not have symbols as names; instead they are named
+by <obj>:internal</obj> function-specs.  <arg>function-spec</arg> is the name of the
+containing function.  <arg>number</arg> is a sequence number; the first
+internal function the compiler comes across in a given function is
+numbered 0, the next 1, etc.  Internal functions are remembered inside
+the compiled function object of their containing function.
+
+</td></tr><tr><td><obj>(:internal <arg>function-spec</arg> <arg>symbol</arg>)</obj></td><td>If a Lisp function uses <obj>flet</obj> to name an internal function,
+you can use the local name defined with <obj>flet</obj> in the
+<obj>:internal</obj> function spec instead of a number.  Here is an
+example of such a function:
+
+<lisp>(defun foo (a)
+  (flet ((square (x) (* x x)))
+    (+ a (square a))))
+</lisp>After compiling <obj>foo</obj>, you could use the function spec <obj>(:internal foo square)</obj>
+to refer to the internal function locally named <obj>square</obj>.
+You could also use <obj>(:internal foo 0)</obj>.  If there are multiple <obj>flet</obj>'s
+defining local functions with the same name, only the first can be
+referred to by name this way.
+</td></tr></tbody></table></p>
+
+<p>Here is an example defining a function whose name is not a symbol:
+
+<lisp>(defun (:property foo bar-maker) (thing &amp;optional kind)
+  (set-the 'bar thing (make-bar 'foo thing kind)))
+</lisp>This puts a function on <obj>foo</obj>'s <obj>bar-maker</obj> property.  Now you can
+say
+
+<lisp>(funcall (get 'foo 'bar-maker) 'baz)
+<exdent amount="96"><caption>or </caption>(funcall #'(:property foo bar-maker) 'bax)
+</exdent></lisp></p>
+
+<p>Unlike the other kinds of function spec, a symbol <arg>can</arg> be used as a
+function.  If you apply a symbol to arguments, the symbol's function
+definition is used instead.  If the definition of the first symbol is
+another symbol, the definition of the second symbol is used, and so on,
+any number of times.  But this is an exception; in general, you can't
+apply function specs to arguments.
+</p>
+
+<p>A keyword symbol that identifies function specs (i.e., that may appear
+in the car of a list which is a function spec) is identified by a
+<obj>sys:function-spec-handler</obj> property whose value is a function that
+implements the various manipulations on function specs of that type.
+The interface to this function is internal and not documented in this
+manual.
+</p>
+
+<p>For compatibility with Maclisp, the function-defining special forms
+<obj>defun</obj>, <obj>macro</obj>, and <obj>defselect</obj> (and other defining
+forms built out of them, such as <obj>defmacro</obj>)
+also accept a list
+
+<lisp>(<arg>symbol</arg> <arg>property</arg>)
+</lisp>as a function name.  This is translated into
+
+<lisp>(:property <arg>symbol</arg> <arg>property</arg>)
+</lisp></p>
+
+<p><arg>symbol</arg> must not be one of the keyword symbols that
+identify a function spec, since that would be ambiguous.
+</p>
+</section><a name="Simple Function Definitions"></a>
+
+<section chapter-number="12" name="Simple Function Definitions" number="3" title="Simple Function Definitions"><definition>
+<define key="defun-fun" name="defun" type="spec"></define>
+
+<description>The usual way of defining a function that is part of a
+program.  A <obj>defun</obj> form looks like:
+
+<lisp>(defun <arg>name</arg> <arg>lambda-list</arg>
+  <arg>body</arg>...)
+</lisp>
+<arg>name</arg> is the function spec you wish to define as a function.
+The <arg>lambda-list</arg> is a list of the names to give to the arguments of
+the function.  Actually, it is a little more general than that; it can
+contain <arg>lambda-list keywords</arg> such as <obj>&amp;optional</obj> and <obj>&amp;rest</obj>.
+(These keywords are explained in <ref chapter="3" definition-in-file="fd-eva" key="lambda-list" section="3" title="Functions" type="section"></ref> and other
+keywords are explained in <ref chapter="3" definition-in-file="fd-eva" key="lambda-list-keywords" section="3" title="Functions" type="section"></ref>.)
+See <ref definition-in-file="fd-fun" key="additional-defun-explanation" type="page"></ref> for some additional syntactic features of <obj>defun</obj>.
+
+<obj>defun</obj> creates a list that looks like
+
+<lisp>(named-lambda <arg>name</arg> <arg>lambda-list body</arg>...)
+</lisp>and puts it in the function cell of <arg>name</arg>.
+<arg>name</arg> is now defined as a function and can be called by other forms.
+
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(defun addone (x)
+  (1+ x))
+
+(defun foo (a &amp;optional (b 5) c &amp;rest e &amp;aux j)
+  (setq j (+ (addone a) b))
+  (cond ((not (null c))
+         (cons j e))
+        (t j))) 
+</exdent></lisp>
+<obj>addone</obj> is a function which expects a number as an argument, and
+returns a number one larger.  <obj>foo</obj> is a complicated function that
+takes one required argument, two optional arguments, and any number of
+additional arguments that are given to the function as a list named 
+<obj>e</obj>.
+
+A declaration (a list starting with <obj>declare</obj>) can appear as the first
+element of the body.  It applies to the entire function definition;
+if it is a <obj>special</obj> declaration, it applies to bindings made in
+the lambda list and to free references anywhere in the function.  For
+example,
+
+<lisp>(defun foo (x)
+  (declare (special x))
+  (bar))             ;bar<standard> uses <obj>x</obj> free.</standard>
+</lisp>causes the binding of <obj>x</obj> to be a dynamic binding, and
+
+<lisp>(defun foo (&amp;rest args)
+  (declare (arglist a b c))
+  (apply 'bar args))
+</lisp>causes <obj>(arglist 'foo)</obj> to return <obj>(a b c)</obj> rather than
+<obj>(&amp;rest args)</obj>, presumably because the former is more informative
+in the particular application.
+
+A documentation string can also appear at the beginning of the body;
+it may precede or follow a declaration.  This documentation string becomes part of the
+function's debugging info and can be obtained with the function
+<obj>documentation</obj> (see <ref definition-in-file="fd-hac" key="documentation-fun" title="Function documentation" type="fun"></ref>).  The first line of the
+string should be a complete sentence that makes sense read by itself,
+since there are two editor commands to get at the documentation, one of
+which is ``brief'' and prints only the first line.  Example:
+
+<lisp>(defun my-append (&amp;rest lists)
+   &quot;Like append but copies all the lists.
+This is like the Lisp function append, except that
+append copies all lists except the last, whereas
+this function copies all of its arguments
+including the last one.&quot;
+   ...)
+</lisp></description></definition>
+<p>A documentation string may not be the last element of the body;
+a string in that position is interpreted as a form to evaluate
+and return and is not considered to be a documentation string.
+</p>
+
+<p>For more information on defining functions, and other ways of doing so,
+see <ref chapter="12" definition-in-file="fd-fun" key="function-defining" section="6" title="Function-Defining Special Forms" type="section"></ref>.
+</p>
+</section><a name="User Operations on Functions"></a>
+
+
+<section chapter-number="12" name="User Operations on Functions" number="4" title="User Operations on Functions"><p>Here is a list of the various things a user (as opposed to a program) is
+likely to want to do to a function.  In all cases, you specify a
+function spec to say where to find the function.
+</p>
+
+<p>To print out the definition of the function spec with indentation to
+make it legible, use <obj>grindef</obj> (see <ref definition-in-file="rdprt" key="grindef-fun" title="Macro grindef" type="mac"></ref>).  This works only
+for interpreted functions.  If the definition is a compiled function, it
+can't be printed out as Lisp code, but its compiled code can be printed
+by the <obj>disassemble</obj> function (see <ref definition-in-file="fd-hac" key="disassemble-fun" title="Function disassemble" type="fun"></ref>).
+</p>
+
+<p>To find out about how to call the function, you can ask to see its
+documentation or its argument names.  (The argument names are usually
+chosen to have mnemonic significance for the caller).  Use <obj>arglist</obj>
+(<ref definition-in-file="fd-fun" key="arglist-fun" title="Function arglist" type="fun"></ref>) to see the argument names and <obj>documentation</obj>
+(<ref definition-in-file="fd-hac" key="documentation-fun" title="Function documentation" type="fun"></ref>) to see the documentation string.  There are also
+editor commands for doing these things: the <obj>Control-Shift-D</obj> and
+<obj>Meta-Shift-D</obj> commands are for looking at a function's documentation,
+and <obj>Control-Shift-A</obj> is for looking at an argument list.
+</p>
+
+<p><obj>Control-Shift-A</obj> and <obj>Control-Shift-D</obj> do not ask for the function
+name; they act on the function that is called by the innermost
+expression which the cursor is inside.  Usually this is the function
+that will be called by the form you are in the process of writing.
+They are available in the rubout handler as well.
+</p>
+
+<p>You can see the function's debugging info alist by means of the function
+<obj>debugging-info</obj> (see <ref definition-in-file="fd-fun" key="debugging-info-fun" title="Function debugging-info" type="fun"></ref>).
+</p>
+
+<p>When you are debugging, you can use <obj>trace</obj> (see <ref definition-in-file="db-aid" key="trace-fun" title="Special Form trace" type="spec"></ref>) to
+obtain a printout or a break loop whenever the function is called.  You
+can use <obj>breakon</obj> (see <ref definition-in-file="db-aid" key="breakon-fun" title="Function breakon" type="fun"></ref>) to cause the error handler to
+be entered whenever the function is called; from there, you can step
+through further function calls and returns.  You can customize the
+definition of the function, either temporarily or permanently, using
+<obj>advise</obj> (see <ref definition-in-file="db-aid" key="advise-fun" title="Macro advise" type="mac"></ref>).
+</p>
+</section><a name="lambda-macro-section"></a>
+
+
+<section chapter-number="12" name="lambda-macro-section" number="5" title="Kinds of Functions"><p>There are many kinds of functions in Zetalisp.  This section
+briefly describes each kind of function.  Note that a function is also a
+piece of data and can be passed as an argument, returned, put in a list,
+and so forth.
+</p>
+
+<p>There are four kinds of functions, classified by how they work.
+</p>
+
+<p>First, there are <arg>interpreted</arg> functions: you define them with
+<obj>defun</obj>, they are represented as list structure, and they are
+interpreted by the Lisp evaluator.
+</p>
+
+<p>Secondly, there are <arg>compiled</arg> functions: they are defined
+by <obj>compile</obj> or by loading a QFASL file, they are represented by a
+special Lisp data type, and they are executed directly by the microcode.
+Similar to compiled functions are microcode functions, which are written
+in microcode (either by hand or by the micro-compiler) and executed directly
+by the hardware.
+</p>
+
+<p>Thirdly, there are various types of Lisp object that can be applied to
+arguments, but when they are applied they dig up another function
+somewhere and apply it instead.  These include select-methods,
+closures, instances, and entities.
+</p>
+
+<p>Finally, there are various types of Lisp object that, when called as
+functions, do something special related to the specific data type.
+These include arrays and stack-groups.
+</p>
+
+
+
+<subsection name="NIL" title="Interpreted Functions"><p>An interpreted function is a piece of list structure that represents a
+program according to the rules of the Lisp interpreter.  Unlike other
+kinds of functions, interpreted functions can be printed out and read
+back in (they have a printed representation that the reader understands),
+can be pretty-printed (see <ref definition-in-file="rdprt" key="grindef-fun" title="Macro grindef" type="mac"></ref>), and can be
+examined with the usual functions for list-structure manipulation.
+</p>
+
+<p>There are four kinds of interpreted functions: <obj>lambda</obj>s,
+<obj>named-lambda</obj>s, <obj>subst</obj>s, and <obj>named-subst</obj>s.  A <obj>lambda</obj> function is the
+simplest kind.  It is a list that looks like this:
+
+<lisp>(lambda <arg>lambda-list</arg> <arg>form1</arg> <arg>form2</arg>...)
+</lisp>The symbol <obj>lambda</obj> identifies this list as a <obj>lambda</obj>
+function.  <arg>lambda-list</arg> is a description of what arguments the
+function takes; see <ref chapter="3" definition-in-file="fd-eva" key="lambda-list" section="3" title="Functions" type="section"></ref> for details.  The <arg>forms</arg>
+make up the body of the function.  When the function is called,
+the argument variables are bound to the values of the arguments
+as described by <arg>lambda-list</arg>, and then the forms in the body are
+evaluated, one by one.  The values of the function are the values of its
+last form.
+</p>
+
+<p>A <obj>named-lambda</obj> is like a <obj>lambda</obj> but contains an extra element in
+which the system remembers the function's name, documentation, and other
+information.  Having the function's name there allows the error handler
+and other tools to give the user more information.  You would not
+normally write a <obj>named-lambda</obj> yourself; <obj>named-lambda</obj> exists so
+that <obj>defun</obj> can use it.  A <obj>named-lambda</obj> function looks like this:
+
+<lisp>(named-lambda <arg>name</arg> <arg>lambda-list</arg> <arg>body forms</arg>...)
+</lisp>If the <arg>name</arg> slot contains a symbol, it is the function's name.
+Otherwise it is a list whose car is the name and whose cdr is the
+function's debugging information alist.  (See <obj>debugging-info</obj>,
+<ref definition-in-file="fd-fun" key="debugging-info-fun" title="Function debugging-info" type="fun"></ref>.)  Note that the name need not be a symbol;
+it can be any function spec.  For example,
+
+<lisp>(defun (foo bar) (x)
+  (car (reverse x)))
+</lisp>gives <obj>foo</obj> a <obj>bar</obj> property whose value is
+
+<lisp>(named-lambda ((:property foo bar)) (x) (car (reverse x)))
+</lisp></p>
+
+<index-entry index="concepts" title="subst"></index-entry>
+
+<p>A <obj>subst</obj> is a function which is open-coded by the compiler.
+A <obj>subst</obj> is just like a <obj>lambda</obj> as far as the interpreter is concerned.
+It is a list that looks like this:
+
+<lisp>(subst <arg>lambda-list</arg> <arg>form1</arg> <arg>form2</arg>...)
+</lisp>The difference between a <obj>subst</obj> and a <obj>lambda</obj> is the way they are
+handled by the compiler.  A call to a normal function is compiled as a
+<arg>closed subroutine</arg>; the compiler generates code to compute the values
+of the arguments and then apply the function to those values.  A call to
+a <obj>subst</obj> is compiled as an <arg>open subroutine</arg>; the compiler
+incorporates the body forms of the <obj>subst</obj> into the function being
+compiled, substituting the argument forms for references to the
+variables in the <obj>subst</obj>'s <arg>lambda-list</arg>.  <obj>subst</obj>'s are described
+more fully on <ref definition-in-file="macros" key="defsubst-fun" title="Special Form defsubst" type="spec"></ref>, with the explanation of <obj>defsubst</obj>.
+</p>
+
+<index-entry index="concepts" title="named-subst"></index-entry>
+
+<p>A <obj>named-subst</obj> is the same as a <obj>subst</obj> except that it has a name
+just as a <obj>named-lambda</obj> does.  It looks like
+
+<lisp>(named-subst <arg>name</arg> <arg>lambda-list</arg> <arg>form1</arg> <arg>form2</arg> ...)
+</lisp>where <arg>name</arg> is interpreted the same way as in a <obj>named-lambda</obj>.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Lambda Macros"><p>Lambda macros may appear in functions where <obj>lambda</obj> would have
+previously appeared.  When the compiler or interpreter detects a
+function whose car is a lambda macro, they expand the macro in much
+the same way that ordinary Lisp macros are expanded--the lambda
+macro is called with the function as its argument and is expected to
+return another function as its value.  The definition of a lambda macro
+(that is, the function which expands it) may be accessed with the
+(<obj>:lambda-macro</obj> <arg>name</arg>) function spec.
+</p>
+
+<p>The value returned by the lambda macro expander function may be any
+valid function.  Usually it is a list starting with <obj>lambda</obj>,
+<obj>subst</obj>, <obj>named-lambda</obj> or <obj>named-subst</obj>, but it could
+also be another use of a lambda macro, or even a compiled function.
+</p>
+<definition><define key="lambda-macro-fun" name="lambda-macro" type="mac"><args>name lambda-list <standard>&amp;body</standard> body</args>
+</define>
+
+<description>By analogy with <obj>macro</obj>, defines a lambda macro to be called
+<arg>name</arg>. <arg>lambda-list</arg> should consist of one variable, which
+is bound to the function that caused the lambda macro to be called.  The
+lambda macro must return a function.  For example:
+
+<lisp>(lambda-macro ilisp (x)
+  `(lambda (&amp;optional ,@(second x) &amp;rest ignore) . ,(cddr x)))
+</lisp>defines a lambda macro called <obj>ilisp</obj> which can be used to define functions
+that accept arguments like a standard Interlisp function: all
+arguments are optional and extra arguments are ignored.  A typical use
+would be:
+
+
+<lisp>(fun-with-functional-arg #'(ilisp (x y z) (list x y z)))
+</lisp>
+This passes to <obj>fun-with-functional-arg</obj> a function which will ignore
+extra arguments beyond the third, and will default <obj>x</obj>, <obj>y</obj> and
+<obj>z</obj> to <obj>nil</obj>.
+</description></definition><definition>
+<define key="deflambda-macro-fun" name="deflambda-macro" type="mac"></define>
+
+<description><obj>deflambda-macro</obj> is like <obj>defmacro</obj>, but defines a lambda macro
+instead of a normal macro.  Here is how <obj>ilisp</obj> could be defined
+using <obj>deflambda-macro</obj>:
+
+<lisp>(deflambda-macro ilisp (argument-list &amp;body body)
+  `(lambda (&amp;optional ,@argument-list &amp;rest ignore) . ,body))
+</lisp></description></definition><definition><define key="deffunction-fun" name="deffunction" type="mac"><args>function-spec lambda-macro-name lambda-list <standard>&amp;body</standard> body </args>
+</define>
+
+<description>Defines a function with a definition that uses an
+arbitrary lambda macro instead of <obj>lambda</obj>.  It takes arguments like
+<obj>defun</obj>, expect that the argument immediatly following the function
+specifier is the name of the lambda macro to be used.  <obj>deffunction</obj>
+expands the lambda macro immediatly, so the lambda macro must have
+been previously defined.
+
+Example:
+
+<lisp>(deffunction some-interlisp-like-function ilisp (x y z)
+  (list x y z))
+</lisp>would define a function called <obj>some-interlisp-like-function</obj>
+with the definition <obj>(ilisp (x y z) (list x y z))</obj>.
+
+<obj>(defun foo ...)</obj> could be considered an abbreviation for
+<obj>(deffunction foo lambda ...)</obj>
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Compiled Functions"><index-entry index="concepts" title="function entry frame"></index-entry>
+
+<index-entry index="concepts" title="FEF"></index-entry>
+
+<p>There are two kinds of compiled functions: <arg>macrocoded</arg> functions
+and <arg>microcoded</arg> functions.  The Lisp compiler converts <obj>lambda</obj>
+and <obj>named-lambda</obj> functions into macrocoded functions.  A
+macrocoded function's printed representation looks like:
+
+<lisp>#&lt;dtp-fef-pointer append 1424771&gt;
+</lisp>This type of Lisp object is also called a `Function Entry Frame', or
+`FEF' for short.  Like `car' and `cdr', the name is historical in origin
+and doesn't really mean anything.  The object contains Lisp Machine
+machine code that does the computation expressed by the function; it
+also contains a description of the arguments accepted, any constants
+required, the name, documentation, and other things.  Unlike Maclisp
+``subr-objects'', macrocoded functions are full-fledged objects and
+can be passed as arguments, stored in data structure, and applied to arguments.
+</p>
+
+<p>The printed representation of a microcoded function looks like:
+
+<lisp>#&lt;dtp-u-entry last 270&gt;
+</lisp>Most microcompiled functions are basic Lisp primitives or subprimitives
+written in Lisp Machine microcode.  You can also convert your own
+macrocode functions into microcode functions in some circumstances,
+using the micro-compiler.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Other Kinds of Functions"><p>A closure is a kind of function that contains another function and a
+set of special variable bindings.  When the closure is applied, it
+puts the bindings into effect and then applies the other function.  When
+that returns, the closure bindings are removed.  Closures are made with
+the function <obj>closure</obj>.  See <ref chapter="13" definition-in-file="fd-clo" key="closure" section="0" title="Closures" type="section"></ref> for more information.
+Entities are slightly different from closures; see <ref chapter="13" definition-in-file="fd-clo" key="entity" section="4" title="Entities" type="section"></ref>.
+</p>
+
+<p>A select-method (internal type code <obj>dtp-select-method</obj>) contains an alist of symbols and
+functions.  When one is called, the first argument is looked up in the
+alist to find the particular function to be called.  This function is
+applied to the rest of the arguments.  The alist may have a list of
+symbols in place of a symbol, in which case the associated function is
+called if the first argument is any of the symbols on the list.  If
+<obj>cdr</obj> of <obj>last</obj> of the alist is non-<obj>nil</obj>, it is a <arg>default
+handler</arg> function, which gets called if the message key is not found
+in the alist.  Select-methods can be created with the <obj>defselect</obj>
+special form (see <ref definition-in-file="fd-fun" key="defselect-fun" title="Special Form defselect" type="spec"></ref>).  If the select-method is the
+definition of a function-spec, the individual functions in the alist
+can be referred to or defined using <obj>:select-method</obj> function specs (see
+<ref definition-in-file="fd-fun" key="select-method-function-spec" type="page"></ref>).
+</p>
+
+<p>An instance is a message-receiving object that has both a state and a table
+of message-handling functions (called <arg>methods</arg>).  Refer to the chapter
+on flavors (<ref chapter="22" definition-in-file="flavor" key="flavor" section="0" title="Objects, Message Passing, and Flavors" type="section"></ref>) for further information.
+</p>
+
+<p>An array can be used as a function.  The arguments to the array are
+the indices and the value is the contents of the element of the
+array.  This is for Maclisp compatibility and is not recommended usage.
+Use <obj>aref</obj> (<ref definition-in-file="fd-arr" key="aref-fun" title="Function aref" type="fun"></ref>) instead.
+</p>
+
+<p>A stack group can be called as a function.  This is one way to pass control
+to another stack group.  See <ref chapter="14" definition-in-file="fd-sg" key="stack-group" section="0" title="Stack Groups" type="section"></ref>.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Special Forms and Functions"><index-entry index="concepts" title="special forms"></index-entry>
+
+<p>The special forms of Zetalisp, such as <obj>quote</obj>, <obj>let</obj> and
+<obj>cond</obj>, are actually implemented with an unusual sort of function.
+</p>
+
+<p>First, let's restate the outline of how the evaluator works.  When the
+evaluator is given a list whose first element is a symbol, the form may
+be a function form, a special form, or a macro form (see
+<ref definition-in-file="fd-eva" key="description-of-evaluation" type="page"></ref>).  If the definition of the symbol is a
+function, then the function is just applied to the result of evaluating
+the rest of the subforms.  If the definition is a cons whose car is
+<obj>macro</obj>, then it is a macro form; these are explained in <ref chapter="19" definition-in-file="macros" key="macro" section="0" title="Macros" type="section"></ref>.
+What about special forms?
+</p>
+
+<p>A special form is implemented by a function that is flagged to tell
+the evaluator to refrain from evaluating some or all of the arguments
+to the function.  Such functions make use of the lambda-list
+keyword <obj>&amp;quote</obj>.
+</p>
+
+<p>The evaluator, on seeing the <obj>&amp;quote</obj> in the lambda list of an
+interpreted function (or something equivalent in a compiled function)
+skips the evaluation of the arguments to which the <obj>&amp;quote</obj>
+applies.  Aside from that, it calls the function normally.
+</p>
+
+<p>For example, <obj>quote</obj> could be defined as
+
+<lisp>(defun quote (&amp;quote arg) arg)
+</lisp>Evaluation of <obj>(quote x)</obj> would see the <obj>&amp;quote</obj> in the
+definition, implying that the argument <arg>arg</arg> should not be
+evaluated.  Therefore, the argument passed to the definition
+of <obj>quote</obj> would be the symbol <obj>x</obj> rather than the value of <obj>x</obj>.
+From then on, the definition of <obj>quote</obj> would execute in the normal
+fashion, so <obj>x</obj> would be the value of <obj>arg</obj> and <obj>x</obj> would
+be returned.
+</p>
+
+<p><obj>&amp;quote</obj> applies to all the following arguments, but it can be
+cancelled with <obj>&amp;eval</obj>.  A simple <obj>setq</obj> that accepted only one
+variable and one value could be defined as follows:
+
+<lisp>(defun setq (&amp;quote variable &amp;eval value)
+  (set variable value))
+</lisp>The actual definition of <obj>setq</obj> is more complicated and uses
+a lambda list <obj>(&amp;quote &amp;rest variables-and-values)</obj>.  Then it must
+go through the rest-argument, evaluating every other element.
+</p>
+
+<p>The definitions of special forms are designed with the assumption that
+they will be called by <obj>eval</obj>.  It does not usually make much sense to
+call one with <obj>funcall</obj> or <obj>apply</obj>.  <obj>funcall</obj> and <obj>apply</obj> do
+not evaluate any arguments; they receive <arg>values</arg> of arguments, rather
+than expressions for them, and pass these values directly to the
+function to be called.  There is no evaluation for <obj>funcall</obj> or
+<obj>apply</obj> to refrain from performing.  Most special forms explicitly
+call <obj>eval</obj> on some of their arguments, or parts of them, and if
+called with <obj>apply</obj> or <obj>funcall</obj> they will <arg>still</arg> do so.  This
+behavior is rarely useful, so calling special forms with <obj>apply</obj> or
+<obj>funcall</obj> should be avoided.  Encapsulations can do this successfully,
+because they can arrange that quoted arguments are quoted also on entry
+to the encapsulation.
+</p>
+
+<p>It is possible to define your own special form using <obj>&amp;quote</obj>.  Macros
+can also be used to accomplish the same thing.  It is preferable to
+implement language extensions as macros rather than special forms,
+because macros directly define a Lisp-to-Lisp translation and therefore
+can be understood by both the interpreter and the compiler.  Special
+forms, on the other hand, only extend the interpreter.  The compiler has
+to be modified in an <arg>ad hoc</arg> way to understand each new special form
+so that code using it can be compiled.  For example, it would not work
+for a compiled function to call the interpreted definition of <obj>setq</obj>;
+the <obj>set</obj> in that definition would not be able to act on local
+variables of the compiled function.
+</p>
+
+<p>Since all real programs are eventually compiled,
+writing your own special functions is strongly discouraged.
+The purpose of <obj>&amp;quote</obj> is to be used in the system's own
+standard special forms.
+</p>
+
+<p>New Lisp constructs in the system are also implemented as macros
+most of the time; macros are less work for us, too.
+</p>
+</subsection></section><a name="function-defining"></a>
+
+
+<section chapter-number="12" name="function-defining" number="6" title="Function-Defining Special Forms"><p><obj>defun</obj> is a special form that is put in a program to define a
+function; <obj>defsubst</obj> and <obj>macro</obj> are others.
+This section explains how these special forms work, how
+they relate to the different kinds of functions, and how they interface to the
+rest of the function-manipulation system.
+</p>
+
+<p>Function-defining special forms typically take as arguments a function
+spec and a description of the function to be made, usually in the form
+of a list of argument names and some forms that constitute the body of
+the function.  They construct a function, give it the function spec as
+its name, and define the function spec to be the new function.
+Different special forms make different kinds of functions.  <obj>defun</obj>
+makes a <obj>named-lambda</obj> function, and <obj>defsubst</obj> makes a <obj>named-subst</obj>
+function.  <obj>macro</obj> makes a macro; though the macro definition is not
+really a function, it is like a function as far as definition handling
+is concerned.
+</p>
+
+<p>These special forms are used in writing programs because the function
+names and bodies are constants.  Programs that define functions usually
+want to compute the functions and their names, so they use <obj>fdefine</obj>.
+See <ref definition-in-file="fd-fun" key="fdefine-fun" title="Function fdefine" type="fun"></ref>.
+</p>
+
+<p>All of these function-defining special forms alter only the basic
+definition of the function spec.  Encapsulations are preserved.
+See <ref chapter="12" definition-in-file="fd-fun" key="encapsulate" section="9" title="Encapsulations" type="section"></ref>.
+</p>
+
+<p>The special forms only create interpreted functions.  There is no
+special way of defining a compiled function.  Compiled functions are
+made by compiling interpreted ones.  The same special form that defines
+the interpreted function, when processed by the compiler, yields the
+compiled function.  See <ref chapter="18" definition-in-file="compil" key="compiler" section="0" title="The Compiler" type="section"></ref> for details.
+</p>
+
+<p>Note that the editor understands these and other ``defining'' special forms
+(e.g. <obj>defmethod</obj>, <obj>defvar</obj>, <obj>defmacro</obj>, <obj>defstruct</obj>, etc.)
+to some extent, so that when you ask for the definition of something, the editor
+can find it in its source file and show it to you.  The general convention
+is that anything that is used at top level (not inside a function)
+and starts with <obj>def</obj> should be a special form for defining things
+and should be understood by the editor.  <obj>defprop</obj> is an exception.
+</p>
+
+<p>The <obj>defun</obj> special form (and the <obj>defunp</obj> macro which expands into a
+<obj>defun</obj>) are used for creating ordinary interpreted functions (see <ref definition-in-file="fd-fun" key="defun-fun" title="Special Form defun" type="spec"></ref>).
+</p>
+
+<p>For Maclisp compatibility, a <arg>type</arg> symbol may be inserted between
+<arg>name</arg> and <arg>lambda-list</arg> in the <obj>defun</obj> form.  The following types
+are understood:
+
+<table><tbody><tr><td><obj>expr</obj></td><td>The same as no type.
+</td></tr><tr><td><obj>fexpr</obj></td><td><obj>&amp;quote</obj> and <obj>&amp;rest</obj> are prefixed to the lambda list.
+</td></tr><tr><td><obj>macro</obj></td><td>A macro is defined instead of a normal function.
+</td></tr></tbody></table></p>
+
+<p>If <arg>lambda-list</arg> is a non-<obj>nil</obj> symbol instead of a list,
+the function is recognized as a Maclisp <arg>lexpr</arg> and it is converted
+in such a way that the <obj>arg</obj>, <obj>setarg</obj>, and <obj>listify</obj> functions
+can be used to access its arguments (see <ref definition-in-file="fd-fun" key="arg-fun" title="Function arg" type="fun"></ref>).
+</p>
+
+<p>The <obj>defsubst</obj> special form is used to create substitutible functions.  It
+is used just like <obj>defun</obj> but produces a list starting with <obj>named-subst</obj>
+instead of one starting with <obj>named-lambda</obj>.  The <obj>named-subst</obj> function
+acts just like the corresponding <obj>named-lambda</obj> function when applied,
+but it can also be open-coded (incorporated into its callers) by the compiler.
+See <ref definition-in-file="macros" key="defsubst-fun" title="Special Form defsubst" type="spec"></ref> for full information.
+</p>
+
+<p>The <obj>macro</obj> special form is the primitive means of creating a macro.
+It gives a function spec a definition that is a macro definition rather
+than a actual function.  A macro is not a function because it cannot be
+applied, but it <arg>can</arg> appear as the car of a form to be evaluated.
+Most macros are created with the more powerful <obj>defmacro</obj> special form.
+See <ref chapter="19" definition-in-file="macros" key="macro" section="0" title="Macros" type="section"></ref>.
+</p>
+
+<p>The <obj>defselect</obj> special form defines a select-method function.  See <ref definition-in-file="fd-fun" key="defselect-fun" title="Special Form defselect" type="spec"></ref>.
+</p>
+<nopara></nopara>
+<p>Unlike the above special forms, the next two (<obj>deff</obj> and <obj>def</obj>)
+do not create new functions.  They simply serve as hints to the editor
+that a function is being stored into a function spec here, and therefore
+if someone asks for the source code of the definition of that function spec,
+this is the place to look for it.
+</p>
+<definition>
+<define key="def-fun" name="def" type="spec"></define>
+
+<description>If a function is created in some strange way, wrapping a <obj>def</obj> special
+form around the code that creates it informs the editor of the connection.
+The form
+
+<lisp>(def <arg>function-spec</arg>
+  <arg>form1</arg> <arg>form2</arg>...)
+</lisp>simply evaluates the forms <arg>form1</arg>, <arg>form2</arg>, etc.  It is assumed
+that these forms will create or obtain a function somehow, and make
+it the definition of <arg>function-spec</arg>.
+
+Alternatively, you could put <obj>(def <arg>function-spec</arg>)</obj> in
+front of or anywhere near the forms which define the function.  The
+editor only uses it to tell which line to put the cursor on.
+</description></definition><definition><define key="deff-fun" name="deff" type="spec"><args>function-spec definition-creator</args>
+</define>
+
+<description><obj>deff</obj> is a simplified version of <obj>def</obj>.  It
+evaluates the form <arg>definition-creator</arg>, which should produce a function,
+and makes that function the definition of <arg>function-spec</arg>, which is not
+evaluated.  <obj>deff</obj>
+is used for giving a function spec a definition which is not obtainable
+with the specific defining forms such as <obj>defun</obj>.
+For example,
+
+<lisp>(deff foo 'bar)
+</lisp>makes <obj>foo</obj> equivalent to <obj>bar</obj>, with an indirection so that if
+<obj>bar</obj> changes <obj>foo</obj> will likewise change; conversely,
+
+<lisp>(deff foo (function bar))
+</lisp>copies the definition of <obj>bar</obj> into <obj>foo</obj> with no indirection, so that
+further changes to <obj>bar</obj> will have no effect on <obj>foo</obj>.
+</description></definition><definition><define key="deff-macro-fun" name="deff-macro" type="spec"><args>function-spec definition-creator</args>
+</define>
+
+<description>Is like <obj>deff</obj> (see <ref definition-in-file="fd-fun" key="deff-fun" title="Special Form deff" type="spec"></ref>) but for defining macros.
+<arg>definition-creator</arg> is evaluated to produce a suitable
+definition-as-a-macro and then <arg>function-spec</arg> is defined that way.
+The definition-as-a-macro should be a cons whose car is <obj>macro</obj>
+and whose cdr is an expander function.  Alternatively, a definition
+as a subst function can be used; either a list starting with
+<obj>subst</obj> or <obj>named-subst</obj> or a FEF which records it was compiled
+from such a list.
+
+The difference between <obj>deff</obj> and <obj>deff-macro</obj> is that <obj>compile-file</obj>
+assumes that <obj>deff-macro</obj> is defining something which should be expanded
+during compilation.  For the rest of the file, the macro defined here
+is available for expansion.  When the file is ultimately loaded,
+or if compilation is done in-core, <obj>deff</obj> and <obj>deff-macro</obj> are
+equivalent.
+</description></definition><definition>
+<define key="@define-fun" name="@define" type="mac"></define>
+
+<description>This macro turns into <obj>nil</obj>, doing nothing.  It exists for the sake of the
+@ listing generation program, which uses it to declare names of special forms
+that define objects (such as functions) that @ should cross-reference.
+</description></definition><definition><define key="si:defun-compatibility-fun" name="si:defun-compatibility" type="fun"><args>x</args>
+</define>
+
+<description>This function is used by <obj>defun</obj> and the compiler to convert
+Maclisp-style lexpr, fexpr, and macro <obj>defun</obj>s to Zetalisp
+definitions.  <arg>x</arg> should be the cdr of a <obj>(defun ...)</obj> form.
+<obj>defun-compatibility</obj> returns a corresponding <obj>(defun ...)</obj> or
+<obj>(macro ...)</obj> form, in the usual Zetalisp format.  You shouldn't
+ever need to call this yourself.
+</description></definition><definition>
+<define key="defselect-fun" name="defselect" type="spec"></define>
+
+<description><obj>defselect</obj> defines a function which is a select-method.  This
+function contains a table of subfunctions; when it is called, the first
+argument, a symbol on the keyword package called the <arg>operation</arg>,
+is looked up in the table to determine which subfunction to call.  Each
+subfunction can take a different number of arguments and have a
+different pattern of arguments.
+<obj>defselect</obj> is useful for a variety of ``dispatching'' jobs.  By analogy
+with the more general message-passing facilities described in <ref chapter="22" definition-in-file="flavor" key="flavor" section="0" title="Objects, Message Passing, and Flavors" type="section"></ref>,
+the subfunctions are called <arg>methods</arg> and the list of arguments
+is sometimes called a <arg>message</arg>.
+
+The special form looks like
+
+<lisp>(defselect (<arg>function-spec</arg> <arg>default-handler</arg> <arg>no-which-operations</arg>)
+  (<arg>operation</arg> (<arg>args...</arg>)
+        <arg>body...</arg>)
+  (<arg>operation</arg> (<arg>args...</arg>)
+        <arg>body...</arg>)
+  ...)
+</lisp><arg>function-spec</arg> is the name of the function to be defined.
+<arg>default-handler</arg> is optional; it must be a symbol and is a function
+which gets called if the select-method is called with an unknown
+operation.  If <arg>default-handler</arg> is unsupplied or <obj>nil</obj>, then an
+unknown operation causes an error with condition name
+<obj>sys:unclaimed-message</obj> (see <ref definition-in-file="flavor" key="sys:unclaimed-message-condition" title="Condition sys:unclaimed-message" type="condition"></ref>).
+
+Normally, methods for the operations <obj>:which-operations</obj>,
+<obj>:operation-handled-p</obj> and <obj>:send-if-handles</obj> are generated
+automatically based on the set of existing methods.  These operations
+have the same meaning as they do on flavor instances; see <ref chapter="22" definition-in-file="flavor" key="vanilla-flavor" section="10" title="Vanilla Flavor" type="section"></ref>
+for their definitions.  If <arg>no-which-operations</arg> is
+non-<obj>nil</obj>, these methods are not created automatically; however, you
+can supply them yourself.
+
+If <arg>function-spec</arg> is a symbol, and <arg>default-handler</arg> and <arg>no-which-operations</arg>
+are not supplied, then the first subform of the <obj>defselect</obj> may be just <arg>function-spec</arg>
+by itself, not enclosed in a list.
+
+The remaining subforms in a <obj>defselect</obj> are the clauses, each
+defining one method.  <arg>operation</arg> is the operation to be handled by
+this clause or a list of several operations to be handled by the same
+clause.  <arg>args</arg> is a lambda-list; it should not include the first
+argument, which is the operation.  <arg>body</arg> is the body of the
+function.
+
+A clause can instead look like:
+
+<lisp>  (<arg>operation</arg> . <arg>symbol</arg>)
+</lisp>In this case, <arg>symbol</arg> is the name of a function that is to be
+called when the <arg>operation</arg> operation is performed.  It will be
+called with the same arguments as the select-method, including the
+operation symbol itself.
+
+The individual methods of the <obj>defselect</obj> can be examined,
+redefined, traced, etc. using <obj>:select-method</obj> function specs
+(see <ref definition-in-file="fd-fun" key="select-method-function-spec" type="page"></ref>).
+</description></definition><definition><define key="defselect-incremental-fun" name="defselect-incremental" type="spec"><args>function-spec default-handler</args>
+</define>
+
+<description><obj>defselect</obj> defines a select-method function all at once.  By
+contrast, <obj>defselect-incremental</obj> defines an empty select-method
+to which methods can be added with <obj>defun</obj>.
+
+Specifically, <obj>defselect-incremental</obj> <arg>function-spec</arg>, with just a
+default handler and the standard methods <obj>:which-operations</obj>,
+<obj>:operation-handled-p</obj> and <obj>:send-if-handles</obj>.
+
+Individual methods are defined by using <obj>defun</obj> on a function spec
+of the form <obj>(:select-method <arg>function-spec</arg> <arg>operation</arg>)</obj>.
+<arg>function-spec</arg> specifies where to find the select-method, and
+<arg>operation</arg> is the operation for which a method should be defined.
+The argument list of the <obj>defun</obj> must include a first argument
+which receives the operation name.
+
+
+<lisp><exdent amount="96"><caption>Example: </caption>(defselect-incremental foo ignore)
+   ;<standard>The function <obj>ignore</obj> is the default handler</standard>
+(defun (:select-method foo :lose) (ignore a)
+  (1+ a))
+</exdent><exdent amount="96"><caption>defines the same function <obj>foo</obj> as </caption>(defselect (foo ignore)
+  (:lose (a) (1+ a)))
+</exdent></lisp>These two examples are not completely equivalent, however.  Reevaluating
+the <obj>defselect</obj> gets rid of any methods that used to exist but have
+been deleted from the <obj>defselect</obj> itself.  Reevaluating the
+<obj>defselect-incremental</obj> has no such effect, and reevaluating an
+individual <obj>defun</obj> redefines only that method.  Methods can be removed
+only with <obj>fundefine</obj>.
+</description></definition>
+
+
+<subsection name="NIL" title="Maclisp Lexprs"><index-entry index="concepts" title="lexpr"></index-entry>
+
+<p>Lexprs are the way Maclisp functions can accept variable numbers of arguments.
+They are supported for compatibility only; <obj>&amp;optional</obj> and <obj>&amp;rest</obj>
+are much preferable.  A lexpr definition looks like
+
+<lisp>(defun foo nargs <arg>body</arg>...)
+</lisp>where a symbol (<obj>nargs</obj>, here) appears in place of a lambda-list.
+When the function is called, <obj>nargs</obj> is bound to the number of arguments
+it was given.  The arguments themselves are accessed using the functions
+<obj>arg</obj>, <obj>setarg</obj>, and <obj>listify</obj>.
+</p>
+<definition><define key="arg-fun" name="arg" type="fun"><args>x</args>
+</define>
+
+<description><obj>(arg nil)</obj>, when evaluated during the application of
+a lexpr, gives the number of arguments supplied to that
+lexpr.
+This is primarily a debugging aid, since lexprs also receive their number of arguments
+as the value of their <obj>lambda</obj>-variable.
+
+<obj>(arg <arg>i</arg>)</obj>, when evaluated during the application of a lexpr, gives the value of the
+<arg>i</arg>'th argument to the lexpr.  <arg>i</arg> must be a fixnum in this case. It is an error if <arg>i</arg> is less than 1 or greater than the number
+of arguments supplied to the lexpr.  Example:
+
+<lisp>(defun foo nargs            ;<standard>define a lexpr </standard>foo.
+    (print (arg 2))         ;<standard>print the second argument.</standard>
+    (+ (arg 1)              ;<standard>return the sum of the first</standard>
+       (arg (- nargs 1))))  ;<standard>and next to last arguments.</standard>
+</lisp></description></definition><definition><define key="setarg-fun" name="setarg" type="fun"><args>i x</args>
+</define>
+
+<description><obj>setarg</obj> is used only during the application of a lexpr.
+<obj>(setarg <arg>i x</arg>)</obj> sets the
+lexpr's <arg>i</arg>'th argument to <arg>x</arg>.
+<arg>i</arg> must be greater than zero
+and not greater than the number of arguments passed to the lexpr.
+After <obj>(setarg <arg>i x</arg>)</obj> has been done, <obj>(arg <arg>i</arg>)</obj> returns <arg>x</arg>.
+</description></definition><definition><define key="listify-fun" name="listify" type="fun"><args>n</args>
+</define>
+
+<description><obj>(listify <arg>n</arg>)</obj> manufactures a list of <arg>n</arg> of the
+arguments of a lexpr.  With a positive argument <arg>n</arg>, it returns a
+list of the first <arg>n</arg> arguments of the lexpr.  With a negative
+argument <arg>n</arg>, it returns a list of the last <obj>(abs <arg>n</arg>)</obj>
+arguments of the lexpr.  Basically, it works as if defined as follows: 
+
+<lisp>(defun listify (n)
+     (cond ((minusp n)
+            (listify1 (arg nil) (+ (arg nil) n 1)))
+           (t
+            (listify1 n 1))))
+
+(defun listify1 (n m)      ;<standard> auxiliary function.</standard>
+     (do ((i n (1- i))
+          (result nil (cons (arg i) result)))
+         ((&lt; i m) result)))
+</lisp></description></definition></subsection></section><a name="programs-that-manipulate-functions"></a>
+
+<section chapter-number="12" name="programs-that-manipulate-functions" number="7" title="How Programs Manipulate Function Specs"><definition><define key="fdefine-fun" name="fdefine" type="fun"><args>function-spec definition <standard>&amp;optional</standard> (carefully <obj>nil</obj>) (no-query <obj>nil</obj>)</args>
+</define>
+
+<description>This is the primitive used by <obj>defun</obj> and everything else in the system
+to change the definition of a function spec.  If <arg>carefully</arg> is
+non-<obj>nil</obj>, which it usually should be, then only the basic definition
+is changed; the previous basic definition is saved if possible (see
+<obj>undefun</obj>, <ref definition-in-file="fd-fun" key="undefun-fun" title="Function undefun" type="fun"></ref>), and any encapsulations of the function such
+as tracing and advice are carried over from the old definition to the
+new definition.  <arg>carefully</arg> also causes the user to be queried if the
+function spec is being redefined by a file different from the one that
+defined it originally.  However, this warning is suppressed if either the
+argument <arg>no-query</arg> is non-<obj>nil</obj>, or if the global variable
+<obj>inhibit-fdefine-warnings</obj> is <obj>t</obj>.
+
+If <obj>fdefine</obj> is called while a file is being loaded, it records what
+file the function definition came from so that the editor can find the
+source code.
+
+If <arg>function-spec</arg> was already defined as a function, and
+<arg>carefully</arg> is non-<obj>nil</obj>, the function-spec's
+<obj>:previous-definition</obj> property is used to save the previous
+definition.  This property is used by the <obj>undefun</obj> function
+(<ref definition-in-file="fd-fun" key="undefun-fun" title="Function undefun" type="fun"></ref>), which restores the previous definition.  The
+properties for different kinds of function specs are stored in different
+places; when a function spec is a symbol its properties are stored on
+the symbol's property list.
+
+<obj>defun</obj> and the other function-defining special forms all supply <obj>t</obj>
+for <arg>carefully</arg> and <obj>nil</obj> or nothing for <arg>no-query</arg>.  Operations
+that construct encapsulations, such as <obj>trace</obj>, are the only ones
+which use <obj>nil</obj> for <arg>carefully</arg>.
+</description></definition><definition><define key="si:record-source-file-name-fun" name="si:record-source-file-name" type="fun"><args>name <standard>&amp;optional</standard> (type <obj>defun</obj>) no-query</args>
+</define>
+
+<description>Records a definition of <arg>name</arg>, of type <arg>type</arg>.  <arg>type</arg> should be
+<obj>defun</obj> to record a function definition; then <arg>name</arg> is a function
+spec.  <arg>type</arg> can also be <obj>defvar</obj>, <obj>defflavor</obj>, <obj>defresource</obj>,
+<obj>defsignal</obj> or anything else you want to use.
+
+The value of <obj>sys:fdefine-file-pathname</obj> is assumed to be the generic
+pathname of the file the definition is coming from, or <obj>nil</obj> if the
+definition is not from a file.  If a definition of the same <arg>name</arg> and
+<arg>type</arg> has already been seen but not in the same file, and
+<arg>no-query</arg> is <obj>nil</obj>, a condition is signaled and then the user is
+queried.
+
+If <obj>si:record-source-file-name</obj> returns <obj>nil</obj>, it means that the
+user or a condition handler said the redefinition should not be
+performed.
+</description></definition><definition>
+<define key="sys:fdefine-file-pathname-var" name="sys:fdefine-file-pathname" type="var"></define>
+
+<description>While the system is loading a file, this is the generic pathname for the file.
+The rest of the time it is <obj>nil</obj>.  <obj>fdefine</obj> uses this to
+remember what file defines each function.
+</description></definition><definition><define key="si:get-source-file-name-fun" name="si:get-source-file-name" type="fun"><args>function-spec <standard>&amp;optional</standard> type</args>
+</define>
+
+<description>Returns the generic pathname for the file in which <arg>function-spec</arg>
+received a definition of type <arg>type</arg>.  If <arg>type</arg> is <obj>nil</obj>, the most
+recent definition is used, regardless of its type.
+
+<arg>function-spec</arg> really is a function spec only if <arg>type</arg> is <obj>defun</obj>;
+for example, if <arg>type</arg> is <obj>defvar</obj>, <arg>function-spec</arg> is a variable
+name.  Other types that are used by the system are <obj>defflavor</obj> and
+<obj>defstruct</obj>.
+
+This function returns the generic pathname of the source file.
+To obtain the actual source file pathname, use the
+<obj>:source-pathname</obj> operation (see <ref definition-in-file="pathnm" key="pathname-source-pathname-method" title="Method pathname :source-pathname" type="method"></ref>).
+
+A second value is returned, which is the type of the definition that was
+reported.
+</description></definition><definition><define key="si:get-all-source-file-names-fun" name="si:get-all-source-file-names" type="fun"><args>function-spec</args>
+</define>
+
+<description>Returns a list describing the generic pathnames of all the definitions this
+function-spec has received, of all types.  The list is an alist whose
+elements look like
+
+<lisp>(<arg>type</arg> <arg>pathname</arg>...)
+</lisp></description></definition><definition><define key="sys:redefinition-flavor-condition" name="sys:redefinition" type="flavor-condition"><args>(<obj>sys:warning</obj>)</args>
+</define>
+
+<description>This condition, which is not an error, is signaled by
+<obj>si:record-source-file-name</obj> when something is redefined by a different
+file.  The handler for this condition can control what is done about the redefinition.
+
+The condition instance provides the operations <obj>:name</obj>,
+<obj>:definition-type</obj>, <obj>:old-pathname</obj> and <obj>:new-pathname</obj>.
+<obj>:name</obj> and <obj>:definition-type</obj> return the <arg>name</arg> and <arg>type</arg>
+arguments to <obj>si:record-source-file-name</obj>.  <obj>:old-pathname</obj> and
+<obj>:new-pathname</obj> return two generic pathnames saying where the old
+definition was and where this one is.  The new pathname may be <obj>nil</obj>,
+meaning that the redefinition is being done by the user, not in any
+file.
+
+Two proceed types are available, <obj>:proceed</obj> and
+<obj>:inhibit-definition</obj>.  The first tells <obj>si:record-source-file-name</obj>
+to return <obj>t</obj>, the second tells it to return <obj>nil</obj>.  If the
+condition is not handled at all, the user is queried or warned according
+to the value of <obj>inhibit-fdefine-warnings</obj>.
+</description></definition><definition>
+<define key="inhibit-fdefine-warnings-var" name="inhibit-fdefine-warnings" type="var"></define>
+
+<description>This variable is normally <obj>nil</obj>.  Setting it to <obj>t</obj> prevents
+<obj>si:record-source-file-name</obj> from warning you and asking about
+questionable redefinitions such as a function being redefined by a
+different file than defined it originally, or a symbol that belongs to
+one package being defined by a file that belongs to a different package.
+Setting it to <obj>:just-warn</obj> allows the warnings to be printed out, but
+prevents the queries from happening; it assumes that your answer is
+`yes', i.e. that it is all right to redefine the function.
+</description></definition><definition><define key="fset-carefully-fun" name="fset-carefully" type="fun"><args>symbol definition <standard>&amp;optional</standard> force-flag</args>
+</define>
+
+<description>This function is obsolete.  It is equivalent to
+
+<lisp>(fdefine <arg>symbol</arg> <arg>definition</arg> t <arg>force-flag</arg>)
+</lisp></description></definition><definition><define key="fdefinedp-fun" name="fdefinedp" type="fun"><args>function-spec</args>
+</define>
+
+<description>This returns <obj>t</obj> if <arg>function-spec</arg> has a definition, <obj>nil</obj> if
+it does not.
+</description></definition><definition><define key="fdefinition-fun" name="fdefinition" type="fun"><args>function-spec</args>
+</define>
+
+<description>This returns <arg>function-spec</arg>'s definition.  If it has none, an error
+occurs.
+</description></definition><definition><define key="fdefinition-location-fun" name="fdefinition-location" type="fun"><args>function-spec</args>
+</define>
+
+<description>Equivalent to <obj>(locf (fdefinition <arg>function-spec</arg>))</obj>.  For some
+kinds of function specs, though not for symbols, this (whichever way you
+write it) can cause data structure to be created to hold a definition.
+For example, if <arg>function-spec</arg> is of the <obj>:property</obj> kind, then an
+entry may have to be added to the property list if it isn't already
+there.
+</description></definition><definition><define key="fundefine-fun" name="fundefine" type="fun"><args>function-spec</args>
+</define>
+
+<description>Makes <arg>function-spec</arg> undefined; the cell where its definition is
+stored becomes void.  For symbols this is equivalent to <obj>fmakunbound</obj>.
+If the function is encapsulated, <obj>fundefine</obj> removes both the basic
+definition and the encapsulations.  Some types of function specs
+(<obj>:location</obj> for example) do not implement <obj>fundefine</obj>.
+<obj>fundefine</obj> on a <obj>:within</obj> function spec removes the replacement of
+<arg>function-to-affect</arg>, putting the definition of <arg>within-function</arg>
+back to its normal state.  <obj>fundefine</obj> on a <obj>:method</obj> function spec
+removes the method completely, so that future messages will be handled
+by some other method (see the flavor chapter).
+</description></definition><definition><define key="undefun-fun" name="undefun" type="fun"><args>function-spec</args>
+</define>
+
+<description>If <arg>function-spec</arg> has a saved previous basic definition, this
+interchanges the current and previous basic definitions, leaving the
+encapsulations alone.  If <arg>function-spec</arg> has no saved previous
+definition, <obj>undefun</obj> asks the user whether to make it undefined.
+
+This undoes the effect of redefining a function.
+See also <obj>uncompile</obj> (<ref definition-in-file="compil" key="uncompile-fun" title="Function uncompile" type="fun"></ref>).
+</description></definition><definition><define key="si:function-spec-get-fun" name="si:function-spec-get" type="fun"><args>function-spec indicator</args>
+</define>
+
+<description>Returns the value of the <arg>indicator</arg> property of <arg>function-spec</arg>,
+or <obj>nil</obj> if it doesn't have such a property.
+</description></definition><definition><define key="si:function-spec-putprop-fun" name="si:function-spec-putprop" type="fun"><args>function-spec value indicator</args>
+</define>
+
+<description>Gives <arg>function-spec</arg> an <arg>indicator</arg> property whose value is <arg>value</arg>.
+</description></definition><definition><define key="si:function-spec-lessp-fun" name="si:function-spec-lessp" type="fun"><args>function-spec1 function-spec2</args>
+</define>
+
+<description>Compares the two function specs with an ordering that is useful in sorting
+lists of function specs for presentation to the user.
+</description></definition><definition><define key="si:function-parent-fun" name="si:function-parent" type="fun"><args>function-spec</args>
+</define>
+
+<description>If <arg>function-spec</arg> does not have its own definition, textually speaking,
+but is defined as part of the definition of something else, this function
+returns the function spec for that something else.  For example, if
+<arg>function-spec</arg> is an accessor function for a <obj>defstruct</obj>, the value
+returned is the name of the <obj>defstruct</obj>.
+
+The intent is that if the caller has not been able to find the definition
+of <arg>function-spec</arg> in a more direct fashion, it can try looking for the
+definition of the <arg>function-parent</arg> of <arg>function-spec</arg>.
+This is used by the editor's <obj>Meta-.</obj> command.
+</description></definition><definition><define key="sys:invalid-function-spec-condition" name="sys:invalid-function-spec" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This condition name belongs to the error signaled when you refer
+to a function spec that is syntactically invalid; such as,
+if it is a list whose car is not a recognized type of function spec.
+
+The condition object supports the operation <obj>:function-spec</obj>,
+which returns the function spec which was invalid.
+
+Note that in a few cases the condition <obj>:wrong-type-argument</obj> is
+signaled instead.  These are the cases in which the error is
+correctable.
+</description></definition></section><a name="How Programs Examine Functions"></a>
+
+
+<section chapter-number="12" name="How Programs Examine Functions" number="8" title="How Programs Examine Functions"><p>These functions take a function as argument and return information about
+that function.  Some also accept a function spec and operate on its
+definition.  The others do not accept function specs in general but do
+accept a symbol as standing for its definition.  (Note that a symbol is
+a function as well as a function spec).
+</p>
+
+<p>The function <obj>documentation</obj> can be used to examine a function's
+documentation string.  See <ref definition-in-file="fd-hac" key="documentation-fun" title="Function documentation" type="fun"></ref>.
+</p>
+<definition><define key="debugging-info-fun" name="debugging-info" type="fun"><args>function</args>
+</define>
+
+<description>This returns the debugging info alist of <arg>function</arg>, or <obj>nil</obj> if it has none.
+</description></definition><definition><define key="arglist-fun" name="arglist" type="fun"><args>function <standard>&amp;optional</standard> real-flag</args>
+</define>
+
+<description><obj>arglist</obj> is given a function or a function spec, and returns its best
+guess at the nature of the function's lambda-list.  It can also
+return a second value which is a list of descriptive names for the
+values returned by the function.
+        If <arg>function</arg> is a symbol, <obj>arglist</obj>
+of its function definition is used.
+        If the <arg>function</arg> is an actual <obj>lambda</obj>-expression,
+its cadr, the lambda-list, is returned.  But if <arg>function</arg>
+is compiled, <obj>arglist</obj> attempts to reconstruct the lambda-list of the original
+definition, using whatever debugging information was saved by the compiler.
+        Some functions' real argument lists are not what would be most
+descriptive to a user.  A function may take a rest argument for
+technical reasons even though there are standard meanings for the first
+elements of that argument.  For such cases, the definition of the
+function can specify, with a local declaration, a value to be returned
+when the user asks about the argument list.  Example:
+
+<lisp>(defun foo (&amp;rest rest-arg)
+  (declare (arglist x y &amp;rest z))
+  .....)
+</lisp>
+<arg>real-flag</arg> has one of three values:
+
+<table><tbody><tr><td><obj>nil</obj></td><td>Return the arglist declared by the user in preference to the actual one.
+</td></tr><tr><td><obj>t</obj></td><td>Return the actual arglist as computed from the function definition's
+handling of arguments, ignoring any <obj>arglist</obj> declaration.
+For a compiled function, this omits all keyword arguments (replacing
+them with a rest argument) and may replace initial values of optional
+arguments with <obj>si:*hairy*</obj> if the actual expressions are too complicated.
+</td></tr><tr><td><obj>compile</obj></td><td>Like <obj>nil</obj>, but in the case of a compiled function it returns
+the actual arglist of the lambda-expression that was originally compiled.
+The compiler uses this as a basis for checking for incorrect calls
+to the function.
+</td></tr></tbody></table>
+Programs interested in how many and what kind (evaluated or quoted) of
+arguments to pass should use <obj>args-info</obj> instead.
+
+        When a function returns multiple values, it is useful to give
+the values names so that the caller can be reminded which value is
+which.  By means of a <obj>return-list</obj> declaration in the function's
+definition, entirely analogous to the <obj>arglist</obj> declaration above,
+you can specify a list of mnemonic names for the returned values.  This
+list is then returned by <obj>arglist</obj> as the second value.
+
+<lisp>(arglist 'arglist)
+  =&gt; (function &amp;optional real-flag) <standard>and</standard> (arglist return-list)
+</lisp></description></definition><definition><define key="function-name-fun" name="function-name" type="fun"><args>function <standard>&amp;optional</standard> try-flavor-name</args>
+</define>
+
+<description>Returns the name of the function <arg>function</arg>, if that can be determined.
+If <arg>function</arg> does not describe what its name is, <arg>function</arg> itself is returned.
+
+If <arg>try-flavor-name</arg> is non-<obj>nil</obj>, then if <arg>function</arg> is a flavor
+instance (which can, after all, be used as a function), then the flavor
+name is returned.  If the optional argument is <obj>nil</obj>, flavor instances
+are treated as anonymous.
+</description></definition><definition><define key="eh:arg-name-fun" name="eh:arg-name" type="fun"><args>function arg-number</args>
+</define>
+
+<description>Returns the name of argument number <arg>arg-number</arg> in function <arg>function</arg>.
+Returns <obj>nil</obj> if the function doesn't have such an argument,
+or if the name is not recorded.
+<obj>&amp;rest</obj> arguments are not obtained with <obj>arg-number</obj>;
+use <obj>rest-arg-name</obj> to obtain the name of <arg>function</arg>'s
+<obj>&amp;rest</obj> argument, if any.
+</description></definition><definition><define key="eh:rest-arg-name-fun" name="eh:rest-arg-name" type="fun"><args>function</args>
+</define>
+
+<description>Returns the name of the rest argument of function <arg>function</arg>, or
+<obj>nil</obj> if <arg>function</arg> does not have one.
+</description></definition><definition><define key="eh:local-name-fun" name="eh:local-name" type="fun"><args>function local-number</args>
+</define>
+
+<description>Returns the name of local variable number <arg>local-number</arg> in function <arg>function</arg>.
+If <arg>local-number</arg> is zero, this gets the name of the rest arg
+in any function that accepts a rest arg.
+Returns <obj>nil</obj> if the function doesn't have such a local.
+</description></definition><definition><define key="args-info-fun" name="args-info" type="fun"><args>function</args>
+</define>
+
+<description>Returns a fixnum called the ``numeric argument descriptor''
+of the <arg>function</arg>, which describes the way the function takes arguments.
+This descriptor is used internally by the microcode, the evaluator, and
+the compiler.  <arg>function</arg> can be a function or a function spec.
+
+The information is stored in various bits and byte fields in the
+fixnum, which are referenced by the symbolic names shown below.
+By the usual Lisp Machine convention, those starting with a single `<obj>%</obj>'
+are bit-masks (meant to be <obj>logand</obj>'ed or <obj>bit-test</obj>'ed with the number), and those
+starting with `<obj>%%</obj>' are byte specifiers, meant to be used with <obj>ldb</obj>
+or <obj>ldb-test</obj>.
+        Here are the fields:
+
+<table><tbody><tr><td><obj>%%arg-desc-min-args</obj></td>
+<td><index-entry index="variables" title="%%arg-desc-min-args"></index-entry>
+This is the minimum number of arguments that may be passed
+to this function, i.e. the number of required parameters.
+
+</td></tr><tr><td><obj>%%arg-desc-max-args</obj></td>
+<td><index-entry index="variables" title="%%arg-desc-max-args"></index-entry>
+This is the maximum number of arguments that may be passed
+to this function, i.e. the sum of the number of required
+parameters and the number of optional parameters.
+If there is a rest argument, this is not really the maximum
+number of arguments that may be passed; an arbitrarily-large
+number of arguments is permitted, subject to limitations on
+the maximum size of a stack frame (about 200 words).
+
+</td></tr><tr><td><obj>%arg-desc-evaled-rest</obj></td>
+<td><index-entry index="variables" title="%arg-desc-evaled-rest"></index-entry>
+If this bit is set, the function has a rest argument, and it is not quoted.
+
+</td></tr><tr><td><obj>%arg-desc-quoted-rest</obj></td>
+<td><index-entry index="variables" title="%arg-desc-quoted-rest"></index-entry>
+If this bit is set, the function has a rest argument, and it is quoted.
+Most special forms have this bit.
+
+</td></tr><tr><td><obj>%arg-desc-fef-quote-hair</obj></td>
+<td><index-entry index="variables" title="%arg-desc-fef-quote-hair"></index-entry>
+If this bit is set, there are some quoted arguments other
+than the rest argument (if any), and the pattern of quoting is too complicated
+to describe here.  The ADL (Argument Description List) in the FEF should be consulted.
+This is only for special forms.
+
+</td></tr><tr><td><obj>%arg-desc-interpreted</obj></td>
+<td><index-entry index="variables" title="%arg-desc-interpreted"></index-entry>
+This function is not a compiled-code object, and a numeric argument descriptor
+cannot be computed.
+Usually <obj>args-info</obj> does not return this bit, although <obj>%args-info</obj> does.
+
+</td></tr><tr><td><obj>%arg-desc-fef-bind-hair</obj></td>
+<td><index-entry index="variables" title="%arg-desc-fef-bind-hair"></index-entry>
+There is argument initialization, or something else too
+complicated to describe here.
+The ADL (Argument Description List) in the FEF should be consulted.
+</td></tr></tbody></table>
+Note that <obj>%arg-desc-quoted-rest</obj> and <obj>%arg-desc-evaled-rest</obj> cannot both be set.
+</description></definition><definition><define key="%args-info-fun" name="%args-info" type="fun"><args>function</args>
+</define>
+
+<description>This is an internal function; it is like <obj>args-info</obj>
+but does not work for interpreted functions.  Also, <arg>function</arg>
+must be a function, not a function spec.  It exists because it has
+to be in the microcode anyway, for <obj>apply</obj> and the basic
+function-calling mechanism.
+</description></definition></section><a name="closure"></a>
+
+
+<section chapter-number="12" name="closure" number="9" title="Encapsulations"><index-entry index="concepts" title="encapsulation"></index-entry>
+
+<index-entry index="concepts" title="basic definition"></index-entry>
+
+<p>The definition of a function spec actually has two parts: the <arg>basic
+definition</arg>, and <arg>encapsulations</arg>.  The basic definition is what
+is created by functions like <obj>defun</obj>, and encapsulations are additions made by
+<obj>trace</obj> or <obj>advise</obj> to the basic definition.  The purpose of making
+the encapsulation a separate object is to keep track of what was made by
+<obj>defun</obj> and what was made by <obj>trace</obj>.  If <obj>defun</obj> is done a second
+time, it replaces the old basic definition with a new one while leaving
+the encapsulations alone.
+</p>
+
+<p>Only advanced users should ever need to use encapsulations directly via
+the primitives explained in this section.  The most common things to do
+with encapsulations are provided as higher-level, easier-to-use
+features: <obj>trace</obj> (see <ref definition-in-file="db-aid" key="trace-fun" title="Special Form trace" type="spec"></ref>), <obj>breakon</obj> (see <ref definition-in-file="db-aid" key="breakon-fun" title="Function breakon" type="fun"></ref>)
+and <obj>advise</obj> (see <ref definition-in-file="db-aid" key="advise-fun" title="Macro advise" type="mac"></ref>).
+</p>
+
+<p>The actual definition of the function spec is the outermost
+encapsulation; this contains the next encapsulation, and so on.  The
+innermost encapsulation contains the basic definition.  The way
+this containing is done is as follows.
+An encapsulation is actually a function whose debugging info alist
+contains an element of the form
+
+<lisp>(si:encapsulated-definition <arg>uninterned-symbol</arg> <arg>encapsulation-type</arg>)
+</lisp>The presence of such an element in the debugging info alist
+is how you recognize a function to be an encapsulation.  An encapsulation
+is usually an interpreted function (a list starting with <obj>named-lambda</obj>) but
+it can be a compiled function also, if the application which created it
+wants to compile it.
+</p>
+
+<p><arg>uninterned-symbol</arg>'s function definition is the thing that the
+encapsulation contains, usually the basic definition of the function spec.  Or it
+can be another encapsulation, which has in it another debugging info
+item containing another uninterned symbol.  Eventually you get to a
+function which is not an encapsulation; it does not have the sort of
+debugging info item which encapsulations all have.  That function is the basic
+definition of the function spec.
+</p>
+
+<p>Literally speaking, the definition of the function spec is the
+outermost encapsulation, period.  The basic definition is not the
+definition.  If you are asking for the definition of the function spec
+because you want to apply it, the outermost encapsulation is exactly
+what you want.  But the basic definition can be found mechanically
+from the definition, by following the debugging info alists.  So it
+makes sense to think of it as a part of the definition.  In regard to
+the function-defining special forms such as <obj>defun</obj>, it is
+convenient to think of the encapsulations as connecting between the
+function spec and its basic definition.
+</p>
+
+<p>An encapsulation is created with the macro <obj>si:encapsulate</obj>.
+</p>
+<definition>
+<define key="si:encapsulate-fun" name="si:encapsulate" type="mac"></define>
+
+<description>A call to <obj>si:encapsulate</obj> looks like
+
+<lisp>(si:encapsulate <arg>function-spec</arg> <arg>outer-function</arg> <arg>type</arg>
+             <arg>body-form</arg>
+             <arg>extra-debugging-info</arg>)
+</lisp>All the subforms of this macro are evaluated.  In fact, the macro could
+almost be replaced with an ordinary function, except for the way
+<arg>body-form</arg> is handled.
+
+<arg>function-spec</arg> evaluates to the function spec whose definition the
+new encapsulation should become.  <arg>outer-function</arg> is another function
+spec, which should often be the same one.  Its only purpose is to be
+used in any error messages from <obj>si:encapsulate</obj>.
+
+<arg>type</arg> evaluates to a symbol which identifies the purpose of the
+encapsulation and says what the application is.  For example, that could
+be <obj>advise</obj> or <obj>trace</obj>.  The list of possible types is defined by
+the system because encapsulations are supposed to be kept in an order
+according to their type (see <obj>si:encapsulation-standard-order</obj>,
+<ref definition-in-file="fd-fun" key="si:encapsulation-standard-order-var" title="Variable si:encapsulation-standard-order" type="var"></ref>).  <arg>type</arg> should have an
+<obj>si:encapsulation-grind-function</obj> property which tells <obj>grindef</obj> what to
+do with an encapsulation of this type.
+
+<arg>body-form</arg> evaluates to the body of the
+encapsulation-definition, the code to be executed when it is called.
+Backquote is typically used for this expression; see <ref chapter="19" definition-in-file="macros" key="backquote" section="2" title="Aids for Defining Macros" type="section"></ref>.
+<obj>si:encapsulate</obj> is a macro because, while <arg>body</arg> is
+being evaluated, the variable <obj>si:encapsulated-function</obj> is bound to a
+list of the form <obj>(function <arg>uninterned-symbol</arg>)</obj>, referring to the
+uninterned symbol used to hold the prior definition of
+<arg>function-spec</arg>.  If <obj>si:encapsulate</obj> were a function, <arg>body-form</arg>
+would just get evaluated normally by the evaluator before <obj>si:encapsulate</obj>
+ever got invoked, and so there would be no opportunity to bind <obj>si:encapsulated-function</obj>.
+The form <arg>body-form</arg> should contain <obj>`(apply ,si:encapsulated-function arglist)</obj>
+somewhere if the encapsulation is
+to live up to its name and truly serve to encapsulate the original
+definition.  (The variable <obj>arglist</obj> is bound by some of the code
+which the <obj>si:encapsulate</obj> macro produces automatically.  When the
+body of the encapsulation is run <obj>arglist</obj>'s value will be the list of
+the arguments which the encapsulation received.)
+
+<arg>extra-debugging-info</arg> evaluates to a list of extra items to put into
+the debugging info alist of the encapsulation function (besides the one
+starting with <obj>si:encapsulated-definition</obj>, which every encapsulation
+must have).  Some applications find this useful for recording
+information about the encapsulation for their own later use.
+
+If <obj>compile-encapsulations-flag</obj> is non-<obj>nil</obj>, the encapsulation is
+compiled before it is installed.  The encapsulations on a particular
+function spec can be compiled by calling <obj>compile-encapsulations</obj>.
+See <ref definition-in-file="compil" key="compile-encapsulations-fun" title="Function compile-encapsulations" type="fun"></ref>.
+Compiled encapsulations can still be unencapsulated since the
+information needed to do so is stored in the debugging info alist, which
+is preserved by compilation.  However, applications which wish to modify
+the code of the encapsulations they previously created must check for
+encapsulations that have been compiled and uncompile them.  This can be
+done by finding the <obj>sys:interpreted-definition</obj> entry in the debugging
+info alist, which is present in all compiled functions except those made by
+file-to-file compilation.
+
+When a special function is encapsulated, the encapsulation is itself a
+special function with the same argument quoting pattern.  Therefore,
+when the outermost encapsulation is started, each argument has been
+evaluated or not as appropriate.  Because each encapsulation calls the
+prior definition with <obj>apply</obj>, no further evaluation takes place, and the
+basic definition of the special form also finds the arguments evaluated
+or not as appropriate.  The basic definition may call <obj>eval</obj> on some
+of these arguments or parts of them; the encapsulations should not.
+
+Macros cannot be encapsulated, but their expander functions can be; if
+the definition of <arg>function-spec</arg> is a macro, then <obj>si:encapsulate</obj>
+automatically encapsulates the expander function instead.  In this case,
+the definition of the uninterned symbol is the original macro
+definition, not just the original expander function.
+It would not work for the encapsulation to apply the macro definition.
+So during the evaluation of <arg>body-form</arg>, <obj>si:encapsulated-function</obj> is bound
+to the form <obj>(cdr (function <arg>uninterned-symbol</arg>))</obj>, which extracts the
+expander function from the prior definition of the macro.
+
+Because only the expander function is actually encapsulated, the
+encapsulation does not see the evaluation or execution of the
+expansion itself.  The value returned by the encapsulation is the
+expansion of the macro call, not the value computed by the expansion.
+</description></definition>
+<p>A program which creates encapsulations often needs to examine an encapsulation
+it created and find the body.  For example, adding a second piece of advice
+to one function requires doing this.  The proper way to do it is to use
+<obj>si:encapsulation-body</obj>.
+</p>
+<definition><define key="si:encapsulation-body-fun" name="si:encapsulation-body" type="fun"><args>encapsulation</args>
+</define>
+
+<description>Returns a list whose car is the body-form of <arg>encapsulation</arg>.
+It is the form that was the fourth argument of 
+<obj>si:encapsulate</obj> when <arg>encapsulation</arg> was created.
+To illustrate this relationship,
+
+<lisp>(si:encapsulate 'foo 'foo 'trace 'body))
+
+(si:encapsulation-body (fdefinition 'foo))
+  =&gt; (body)
+</lisp></description></definition>
+<p>It is possible for one function to have multiple encapsulations,
+created by different subsystems.  In this case, the order of
+encapsulations is independent of the order in which they were made.
+It depends instead on their types.  All possible encapsulation types
+have a total order and a new encapsulation is put in the right place
+among the existing encapsulations according to its type and their types.
+</p>
+<definition>
+<define key="si:encapsulation-standard-order-var" name="si:encapsulation-standard-order" type="var"></define>
+
+<description>The value of this variable is a list of the allowed encapsulation types,
+in the order in which the encapsulations are supposed to be kept
+(innermost encapsulations first).  If you want to add new kinds
+of encapsulations, you should add another symbol to this list.
+Initially its value is
+
+<lisp>(advise breakon trace si:rename-within)
+</lisp><obj>advise</obj> encapsulations are used to hold advice (see <ref definition-in-file="db-aid" key="advise-fun" title="Macro advise" type="mac"></ref>).
+<obj>breakon</obj> encapsulations are used for implementing <obj>breakon</obj> (see <ref definition-in-file="db-aid" key="breakon-fun" title="Function breakon" type="fun"></ref>).
+<obj>trace</obj>
+encapsulations are used for implementing tracing (see <ref definition-in-file="db-aid" key="trace-fun" title="Special Form trace" type="spec"></ref>).
+<obj>si:rename-within</obj> encapsulations are used to record the fact that
+function specs of the form <obj>(:within <arg>within-function</arg>
+<arg>altered-function</arg>)</obj> have been defined.  The encapsulation goes on
+<arg>within-function</arg> (see <ref chapter="12" definition-in-file="fd-fun" key="rename-within-section" section="9" title="Encapsulations" type="section"></ref> for more information).
+</description></definition>
+<p>Every symbol used as an encapsulation type must be on the list
+<obj>si:encapsulation-standard-order</obj>.  In addition, it should have an
+<obj>si:encapsulation-grind-function</obj> property whose value is a function that
+<obj>grindef</obj> will call to process encapsulations of that type.  This
+function need not take care of printing the encapsulated function
+because <obj>grindef</obj> will do that itself.  But it should print any
+information about the encapsulation itself which the user ought to see.
+Refer to the code for the grind function for <obj>advise</obj> to see how to
+write one.
+</p>
+
+<p>To find the right place in the ordering to insert a new encapsulation,
+it is necessary to parse existing ones.  This is done with the function
+<obj>si:unencapsulate-function-spec</obj>.
+</p>
+<definition><define key="si:unencapsulate-function-spec-fun" name="si:unencapsulate-function-spec" type="fun"><args>function-spec <standard>&amp;optional</standard> encapsulation-types</args>
+</define>
+
+<description>This takes one function spec and returns another.  If the original
+function spec is undefined, or has only a basic definition (that is,
+its definition is not an encapsulation), then the original function
+spec is returned unchanged.
+
+If the definition of <arg>function-spec</arg> is an encapsulation, then
+its debugging info is examined to find the uninterned symbol that
+holds the encapsulated definition and the encapsulation type.
+If the encapsulation is of a type that is to be skipped over, the
+uninterned symbol replaces the original function spec and the process
+repeats.
+
+The value returned is the uninterned symbol from inside the last
+encapsulation skipped.  This uninterned symbol is the first one that
+does not have a definition that is an encapsulation that should be
+skipped.  Or the value can be <arg>function-spec</arg> if <arg>function-spec</arg>'s
+definition is not an encapsulation that should be skipped.
+
+The types of encapsulations to be skipped over are specified by
+<arg>encapsulation-types</arg>.  This can be a list of the types to be
+skipped, or <obj>nil</obj> meaning skip all encapsulations (this is the default).  Skipping all
+encapsulations means returning the uninterned symbol that holds the basic
+definition of <arg>function-spec</arg>.  That is, the <arg>definition</arg> of
+the function spec returned is the <arg>basic definition</arg> of the function spec
+supplied.  Thus,
+
+<lisp>(fdefinition (si:unencapsulate-function-spec 'foo))
+</lisp>returns the basic definition of <obj>foo</obj>, and
+
+<lisp>(fdefine (si:unencapsulate-function-spec 'foo) 'bar)
+</lisp>sets the basic definition (just like using <obj>fdefine</obj> with
+<arg>carefully</arg> supplied as <obj>t</obj>).
+
+<arg>encapsulation-types</arg> can also be a symbol, which should be an
+encapsulation type; then we skip all types that are supposed to come
+outside of the specified type.  For example, if
+<arg>encapsulation-types</arg> is <obj>trace</obj>, then we skip all types of
+encapsulations that come outside of <obj>trace</obj> encapsulations, but we
+do not skip <obj>trace</obj> encapsulations themselves.  The result is a
+function spec that is where the <obj>trace</obj> encapsulation ought to
+be, if there is one.  Either the definition of this function spec is a
+<obj>trace</obj> encapsulation, or there is no <obj>trace</obj> encapsulation
+anywhere in the definition of <arg>function-spec</arg>, and this function
+spec is where it would belong if there were one.  For example,
+
+<lisp>(let ((tem (si:unencapsulate-function-spec spec 'trace)))
+  (and (eq tem (si:unencapsulate-function-spec tem '(trace)))
+       (si:encapsulate tem spec 'trace `(...<arg>body</arg>...))))
+</lisp>finds the place where a <obj>trace</obj> encapsulation ought to go and
+makes one unless there is already one there.
+
+
+<lisp>(let ((tem (si:unencapsulate-function-spec spec 'trace)))
+  (fdefine tem (fdefinition (si:unencapsulate-function-spec
+                                tem '(trace)))))
+</lisp>eliminates any <obj>trace</obj> encapsulation by replacing it by whatever it
+encapsulates.  (If there is no <obj>trace</obj> encapsulation, this code
+changes nothing.)
+
+These examples show how a subsystem can insert its own type of
+encapsulation in the proper sequence without knowing the names of any
+other types of encapsulations.  Only the variable
+<obj>si:encapsulation-standard-order</obj>, which is used by
+<obj>si:unencapsulate-function-spec</obj>, knows the order.
+</description></definition>
+
+
+<subsection name="NIL" title="Rename-Within Encapsulations"><index-entry index="concepts" title="rename-within"></index-entry>
+
+<index-entry index="concepts" title="function renaming"></index-entry>
+
+<p>One special kind of encapsulation is the type <obj>si:rename-within</obj>.  This
+encapsulation goes around a definition in which renamings of functions
+have been done.
+</p>
+
+<p>How is this used?
+</p>
+
+<p>If you define, advise, or trace <obj>(:within foo bar)</obj>, then <obj>bar</obj>
+gets renamed to <obj>#:altered-bar-within-foo</obj> wherever it is called from
+<obj>foo</obj>, and <obj>foo</obj> gets a <obj>si:rename-within</obj> encapsulation to
+record the fact.  The purpose of the encapsulation is to enable
+various parts of the system to do what seems natural to the user.
+For example, <obj>grindef</obj> (see <ref definition-in-file="rdprt" key="grindef-fun" title="Macro grindef" type="mac"></ref>) notices the
+encapsulation, and so knows to print <obj>bar</obj> instead of
+<obj>#:altered-bar-within-foo</obj> when grinding the definition of <obj>foo</obj>.
+</p>
+
+<p>Also, if you redefine <obj>foo</obj>, or trace or advise it, the new
+definition gets the same renaming done (<obj>bar</obj> replaced by
+<obj>#:altered-bar-within-foo</obj>).  To make this work, everyone who alters
+part of a function definition should pass the new part of the
+definition through the function <obj>si:rename-within-new-definition-maybe</obj>.
+</p>
+<definition><define key="si:rename-within-new-definition-maybe-fun" name="si:rename-within-new-definition-maybe" type="fun"><args>function-spec new-structure</args>
+</define>
+
+<description>Given <arg>new-structure</arg>, which is going to become a part of the
+definition of <arg>function-spec</arg>, perform on it the replacements
+described by the <obj>si:rename-within</obj> encapsulation in the
+definition of <arg>function-spec</arg>, if there is one.  The altered
+(copied) list structure is returned.
+
+It is not necessary to call this function yourself when you replace
+the basic definition because <obj>fdefine</obj> with <arg>carefully</arg>
+supplied as <obj>t</obj> does it for you.  <obj>si:encapsulate</obj> does this
+to the body of the new encapsulation.  So you only need to call 
+<obj>si:rename-within-new-definition-maybe</obj> yourself if you are rplac'ing
+part of the definition.
+
+For proper results, <arg>function-spec</arg> must be the outer-level function
+spec.  That is, the value returned by <obj>si:unencapsulate-function-spec</obj>
+is <arg>not</arg> the right thing to use.  It will have had one or more
+encapsulations stripped off, including the <obj>si:rename-within</obj>
+encapsulation if any, and so no renamings will be done.
+</description></definition></subsection></section></chapter>
+</document-part>

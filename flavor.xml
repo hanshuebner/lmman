@@ -1,0 +1,2888 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="flavor-chapter"></a>
+<chapter name="flavor-chapter" number="22" title="Objects, Message Passing, and Flavors"><index-entry index="concepts" title="flavor"></index-entry>
+
+<index-entry index="concepts" title="message"></index-entry>
+
+<index-entry index="concepts" title="method"></index-entry>
+
+<index-entry index="concepts" title="object"></index-entry>
+
+<index-entry index="concepts" title="instance"></index-entry>
+
+<p>The object-oriented programming style used in the Smalltalk and
+Actor families of languages is available in Zetalisp and used
+by the Lisp Machine software system.  Its purpose is to perform
+<arg>generic operations</arg> on objects.  Part of its implementation is
+simply a convention in procedure-calling style; part is a powerful
+language feature, called Flavors, for defining abstract objects.
+This chapter attempts to explain what programming with objects and with
+message passing means, the various means of implementing these in
+Zetalisp, and when you should use them.  It assumes no prior
+knowledge of any other languages.
+</p>
+<a name="Objects"></a>
+
+
+<section chapter-number="22" name="Objects" number="1" title="Objects"><p>When writing a program, it is often convenient to model what the program
+does in terms of <arg>objects</arg>, conceptual entities that can be likened to
+real-world things.  Choosing what objects to provide in a program is
+very important to the proper organization of the program.  In an
+object-oriented design, specifying what objects exist is the first
+task in designing the system.  In a text editor, the objects might be
+``pieces of text'', ``pointers into text'', and ``display windows''.  In an
+electrical design system, the objects might be ``resistors'',
+``capacitors'', ``transistors'', ``wires'', and ``display windows''.  After
+specifying what objects there are, the next task of the design is to
+figure out what operations can be performed on each object.  In the text
+editor example, operations on ``pieces of text'' might include inserting
+text and deleting text; operations on ``pointers into text'' might include
+moving forward and backward; and operations on ``display windows'' might
+include redisplaying the window and changing which ``piece of text'' the
+window is associated with.
+</p>
+
+<p>In this model, we think of the program as being built around a set of
+objects, each of which has a set of operations that can be performed on
+it.  More rigorously, the program defines several <arg>types</arg> of object
+(the editor above has three types), and it can create many <arg>instances</arg>
+of each type (that is, there can be many pieces of text, many pointers
+into text, and many windows).  The program defines a set of types of
+object and, for each type, a set of operations that can be performed on
+any object of the type.
+</p>
+
+<p>The new types may exist only in the programmer's mind.  For example, it
+is possible to think of a disembodied property list as an abstract data
+type on which certain operations such as <obj>get</obj> and <obj>putprop</obj> are
+defined.  This type can be instantiated with <obj>(cons nil nil)</obj> (that
+is, by evaluating this form you can create a new disembodied property
+list); the operations are invoked through functions defined just for
+that purpose.  The fact that disembodied property lists are really
+implemented as lists, indistinguishable from any other lists, does not
+invalidate this point of view.  However, such conceptual data types
+cannot be distinguished automatically by the system; one cannot ask ``is
+this object a disembodied property list, as opposed to an ordinary
+list''.
+</p>
+
+<p>The <obj>defstruct</obj> for <obj>ship</obj> early in chapter <ref chapter="21" definition-in-file="defstr" key="defstruct-chapter" title="Defstruct" type="chapter"></ref>
+defines another conceptual type.  <obj>defstruct</obj> automatically defines some
+operations on this object, the operations to access its elements.  We
+could define other functions that did useful things with <obj>ship</obj>'s,
+such as computing their speed, angle of travel, momentum, or velocity,
+stopping them, moving them elsewhere, and so on.
+</p>
+
+<p>In both cases, we represent our conceptual object by one Lisp object.
+The Lisp object we use for the representation has <arg>structure</arg> and
+refers to other Lisp objects.  In the disembodied property list case,
+the Lisp object is a list of pairs; in the <obj>ship</obj> case, the Lisp
+object is an array whose details are taken care of by <obj>defstruct</obj>.  In
+both cases, we can say that the object keeps track of an <arg>internal
+state</arg>, which can be <arg>examined</arg> and <arg>altered</arg> by the operations
+available for that type of object.  <obj>get</obj> examines the state of a
+property list, and <obj>putprop</obj> alters it; <obj>ship-x-position</obj> examines
+the state of a ship, and <obj>(setf (ship-x-position <arg>ship</arg>) 5.0)</obj>
+alters it.
+</p>
+
+<p>We have now seen the essence of object-oriented programming.  A
+conceptual object is modeled by a single Lisp object, which bundles up
+some state information.  For every type of object, there is a set of
+operations that can be performed to examine or alter the state of the
+object.
+</p>
+</section><a name="Modularity"></a>
+
+
+<section chapter-number="22" name="Modularity" number="2" title="Modularity"><p>An important benefit of the object-oriented style is that it lends
+itself to a particularly simple and lucid kind of modularity.
+If you have modular programming constructs and techniques available,
+they help and encourage you to write
+programs that are easy to read and understand, and so are more
+reliable and maintainable.  Object-oriented programming lets a
+programmer implement a useful facility that presents the caller with a set
+of external interfaces, without requiring the caller to understand how
+the internal details of the implementation work.  In other words, a program
+that calls this facility can treat the facility as a black box; the
+program knows what the facility's external interfaces guarantee to do,
+and that is all it knows.
+</p>
+
+<p>For example, a program that uses disembodied property lists never needs
+to know that the property list is being maintained as a list of
+alternating indicators and values; the program simply performs the
+operations, passing them inputs and getting back outputs.  The program
+only depends on the external definition of these operations: it knows
+that if it <obj>putprop</obj>'s a property, and doesn't <obj>remprop</obj> it (or
+<obj>putprop</obj> over it), then it can do <obj>get</obj> and be sure of getting back
+the same thing it put in.  The important thing about this hiding of
+the details of the implementation is that someone reading a program that uses disembodied
+property lists need not concern himself with how they are implemented;
+he need only understand what they undertake to do.  This saves the
+programmer a lot of time and lets him concentrate his energies on
+understanding the program he is working on.  Another good thing about
+this hiding is that the representation of property lists could be
+changed and the program would continue to work.  For example, instead
+of a list of alternating elements, the property list could be
+implemented as an association list or a hash table.  Nothing in the
+calling program would change at all.
+</p>
+
+<p>The same is true of the <obj>ship</obj> example.  The caller is presented with
+a collection of operations, such as <obj>ship-x-position</obj>,
+<obj>ship-y-position</obj>, <obj>ship-speed</obj>, and <obj>ship-direction</obj>; it simply
+calls these and looks at their answers, without caring how they did what
+they did.  In our example above, <obj>ship-x-position</obj> and
+<obj>ship-y-position</obj> would be accessor functions, defined automatically
+by <obj>defstruct</obj>, while <obj>ship-speed</obj> and <obj>ship-direction</obj> would be
+functions defined by the implementor of the <obj>ship</obj> type.  The code
+might look like this:
+</p>
+
+<lisp>(defstruct (ship :conc-name)
+  x-position
+  y-position
+  x-velocity
+  y-velocity
+  mass)
+
+(defun ship-speed (ship)
+  (sqrt (+ (^ (ship-x-velocity ship) 2)
+           (^ (ship-y-velocity ship) 2))))
+
+(defun ship-direction (ship)
+  (atan2 (ship-y-velocity ship)
+         (ship-x-velocity ship)))
+</lisp>
+<p>The caller need not know that the first two functions were structure accessors
+and that the second two were written by hand and do arithmetic.  Those
+facts would not be considered part of the black box characteristics of
+the implementation of the <obj>ship</obj> type.  The <obj>ship</obj> type does not
+guarantee which functions will be implemented in which ways; such aspects
+are not part of the contract between <obj>ship</obj> and its callers.  In fact,
+<obj>ship</obj> could have been written this way instead:
+</p>
+
+<lisp>(defstruct (ship :conc-name)
+  x-position
+  y-position
+  speed
+  direction
+  mass)
+
+(defun ship-x-velocity (ship)
+  (* (ship-speed ship) (cos (ship-direction ship))))
+
+(defun ship-y-velocity (ship)
+  (* (ship-speed ship) (sin (ship-direction ship))))
+</lisp>
+<p>In this second implementation of the <obj>ship</obj> type, we have decided to
+store the velocity in polar coordinates instead of rectangular
+coordinates.  This is purely an implementation decision.  The caller has
+no idea which of the two ways the implementation uses; he just
+performs the operations on the object by calling the appropriate
+functions.
+</p>
+
+<p>We have now created our own types of objects, whose implementations are
+hidden from the programs that use them.  Such types are usually referred to as
+<arg>abstract types</arg>.  The object-oriented style of programming can be
+used to create abstract types by hiding the implementation of the
+operations and simply documenting what the operations are defined to do.
+</p>
+
+<p>Some more terminology: the quantities being held by the elements of the
+<obj>ship</obj> structure are referred to as <arg>instance variables</arg>.  Each
+instance of a type has the same operations defined on it; what
+distinguishes one instance from another (besides <obj>eq</obj>-ness)
+is the values that reside in its instance variables.  The example above
+illustrates that a caller of operations does not know what the instance
+variables are; our two ways of writing the <obj>ship</obj> operations have
+different instance variables, but from the outside they have exactly the
+same operations.
+</p>
+
+<p>One might ask: ``But what if the caller evaluates <obj>(aref ship 2)</obj> and
+notices that he gets back the <arg>x</arg> velocity rather than the speed?  Then he
+can tell which of the two implementations were used.''  This is true; if
+the caller were to do that, he could tell.  However, when a facility is
+implemented in the object-oriented style, only certain functions are
+documented and advertised, the functions that are considered to be
+operations on the type of object.  The contract from <obj>ship</obj> to its
+callers only speaks about what happens if the caller calls these
+functions.  The contract makes no guarantees at all about what would
+happen if the caller were to start poking around on his own using
+<obj>aref</obj>.  A caller who does so <arg>is in error</arg>; he is depending on
+something that is not specified in the contract.  No guarantees were
+ever made about the results of such action, and so anything may happen;
+indeed, <obj>ship</obj> may get reimplemented overnight, and the code that does
+the <obj>aref</obj> will have a different effect entirely and probably stop
+working.  This example shows why the concept of a contract between a callee and
+a caller is important: the contract specifies the interface
+between the two modules.
+</p>
+
+<p>Unlike some other languages that provide abstract types, Zetalisp
+makes no attempt to have the language automatically forbid
+constructs that circumvent the contract.  This is intentional.  One
+reason for this is that the Lisp Machine is an interactive system, and
+so it is important to be able to examine and alter internal state
+interactively (usually from a debugger).  Furthermore, there is no
+strong distinction between the ``system'' programs and the ``user'' programs
+on the Lisp Machine; users are allowed to get into any part of the
+language system and change what they want to change.  Another reason is
+the traditional MIT AI Lab philosophy that opposes ``fascist'' restrictions
+which impose on the user ``for his own good''.  The user himself should
+decide what is good for him.
+</p>
+
+<p>In summary: by defining a set of operations and making only a
+specific set of external entrypoints available to the caller, the
+programmer can create his own abstract types.  These types can be useful
+facilities for other programs and programmers.  Since the implementation
+of the type is hidden from the callers, modularity is maintained and
+the implementation can be changed easily.
+</p>
+
+<p>We have hidden the implementation of an abstract type by making its
+operations into functions which the user may call.  The important thing
+is not that they are functions--in Lisp everything is done with functions.
+The important thing is that we have defined a new conceptual operation
+and given it a name, rather than requiring anyone who wants to do the
+operation to write it out step-by-step.  Thus we say <obj>(ship-x-velocity s)</obj>
+rather than <obj>(aref s 2)</obj>.
+</p>
+
+<p>Often a few abstract operation functions are simple enough that
+it is desirable
+to compile special code for them rather than really calling the function.
+(Compiling special code like this is often called <arg>open-coding</arg>.)
+The compiler is directed to do this through use of macros, substs, or
+optimizers.  <obj>defstruct</obj> arranges for this kind of special compilation
+for the functions that get the instance variables of a structure.
+</p>
+
+<p>When we use this optimization, the implementation of the abstract type
+is only hidden in a certain sense.  It does not appear in the Lisp code
+written by the user, but does appear in the compiled code.  The reason
+is that there may be some compiled functions that use the macros (or whatever);
+even if you change the definition of the macro, the existing compiled
+code will continue to use the old definition.  Thus, if
+the implementation of a module is changed programs that use it may need to be
+recompiled.  This is something we sometimes accept for the sake of
+efficiency.
+</p>
+
+<p>In the present implementation of flavors, which is discussed below,
+there is no such compiler incorporation of nonmodular knowledge into a
+program, except when the <obj>:ordered-instance-variables</obj> feature is
+used; see <ref definition-in-file="flavor" key="ordered-instance-variables-option" type="page"></ref>, where this problem is
+explained further.  If you don't use the
+<obj>:ordered-instance-variables</obj> feature, you don't have to worry about
+this.
+</p>
+</section><a name="Generic Operations"></a>
+
+
+<section chapter-number="22" name="Generic Operations" number="3" title="Generic Operations"><p>Suppose we think about the rest of the program that uses the
+<obj>ship</obj> abstraction.  It may want to deal with other objects that are
+like <obj>ship</obj>'s in that they are movable objects with mass, but unlike
+<obj>ship</obj>s in other ways.  A more advanced model of a ship might include
+the concept of the ship's engine power, the number of passengers on
+board, and its name.  An object representing a meteor probably would
+not have any of these, but might have another attribute such as how
+much iron is in it.
+</p>
+
+<p>However, all kinds of movable objects have positions, velocities, and
+masses, and the system will contain some programs that deal with these
+quantities in a uniform way, regardless of what kind of object the
+attributes apply to.  For example, a piece of the system that calculates
+every object's orbit in space need not worry about the other, more
+peripheral attributes of various types of objects; it works the same way
+for all objects.  Unfortunately, a program that tries to calculate the
+orbit of a ship needs to know the ship's attributes, and must therefore
+call <obj>ship-x-position</obj> and <obj>ship-y-velocity</obj> and so on.  The problem is
+that these functions won't work for meteors.  There would have to be a
+second program to calculate orbits for meteors that would be exactly the
+same, except that where the first one calls <obj>ship-x-position</obj>, the
+second one would call <obj>meteor-x-position</obj>, and so on.  This would be
+very bad; a great deal of code would have to exist in multiple copies,
+all of it would have to be maintained in parallel, and it would take up
+space for no good reason.
+</p>
+
+<p>What is needed is an operation that can be performed on objects of
+several different types.  For each type, it should do the thing
+appropriate for that type.  Such operations are called <arg>generic</arg>
+operations.  The classic example of generic operations is the arithmetic
+functions in most programming languages, including Zetalisp.  The <obj>+</obj>
+(or <obj>plus</obj>) function accepts integers, floats, ratios and complex
+numbers, and perform an appropriate kind of addition, based on the data
+types of the objects being manipulated.  In our example, we need a
+generic <obj>x-position</obj> operation that can be performed on either
+<obj>ship</obj>'s, <obj>meteor</obj>'s, or any other kind of mobile object represented
+in the system.  This way, we can write a single program to calculate
+orbits.  When it wants to know the <arg>x</arg> position of the object it is
+dealing with, it simply invokes the generic <obj>x-position</obj> operation on
+the object, and whatever type of object it has, the correct operation is
+performed, and the <arg>x</arg> position is returned.
+</p>
+
+<p>Another terminology for the use of such generic operations has emerged
+from the Smalltalk language: performing a generic operation
+is called <arg>sending a message</arg>.  The message consists of an operation
+name (a symbol) and arguments.  The objects in the program are thought
+of as little people, who get sent messages and respond with answers
+(returned values).  In the example above, the objects are sent
+<obj>x-position</obj> messages, to which they respond with their <arg>x</arg>
+position.
+</p>
+
+<p>Sending a message is a way of invoking a function without specifying
+which function is to be called.  Instead, the data determines the
+function to use.  The caller specifies an operation name and an object;
+that is, it said what operation to perform, and what object to perform
+it on.  The function to invoke is found from this information.
+</p>
+
+<p>The two data used to figure out which function
+to call are the <arg>type</arg> of the object, and the <arg>name</arg> of the operation.
+The same set of functions are used for all instances of a given type, so
+the type is the only attribute of the object used to figure out which
+function to call.  The rest of the message besides the operation is data
+which are passed as arguments to the function, so the operation is the only
+part of the message used to find the function.  Such a function is
+called a <arg>method</arg>.  For example, if we send an <obj>x-position</obj> message
+to an object of type <obj>ship</obj>, then the function we find is ``the
+<obj>ship</obj> type's <obj>x-position</obj> method''.  A method is a function that
+handles a specific operation on a specific kind of object; this
+method handles messages named <obj>x-position</obj> to objects of type
+<obj>ship</obj>.
+</p>
+
+<p>In our new terminology: the orbit-calculating program finds the <arg>x</arg>
+position of the object it is working on by sending that object a message
+consisting of the operation <obj>x-position</obj> and no arguments.  The
+returned value of the message is the <arg>x</arg> position of the object.  If
+the object was of type <obj>ship</obj>, then the <obj>ship</obj> type's <obj>x-position</obj>
+method was invoked; if it was of type <obj>meteor</obj>, then the <obj>meteor</obj>
+type's <obj>x-position</obj> method was invoked.  The orbit-calculating program
+just sends the message, and the right function is invoked based on the
+type of the object.  We now have true generic functions, in the form of
+message passing: the same operation can mean different things depending
+on the type of the object.
+</p>
+</section><a name="Generic Operations in Lisp"></a>
+
+
+<section chapter-number="22" name="Generic Operations in Lisp" number="4" title="Generic Operations in Lisp"><p>How do we implement message passing in Lisp?  Our convention is that objects
+that receive messages are always <arg>functional</arg> objects (that is, you
+can apply them to arguments).  A message is sent to an object by
+calling that object as a function, passing the operation name as
+the first argument and the arguments of the message as the rest of the
+arguments.  Operation names are represented by symbols; normally these
+symbols are in the keyword package (see <ref chapter="28" definition-in-file="packd" key="package" section="0" title="Packages" type="section"></ref>), since messages are
+a protocol for communication between different programs, which may
+reside in different packages.  So if we have a variable <obj>my-ship</obj>
+whose value is an object of type <obj>ship</obj>, and we want to know its
+<arg>x</arg> position, we send it a message as follows:
+</p>
+
+<lisp>(send my-ship :x-position)
+</lisp>
+<p>To set the
+ship's <arg>x</arg> position to <obj>3.0</obj>, we send it a message like this:
+</p>
+
+<lisp>(send my-ship :set :x-position 3.0)
+</lisp>
+<p>It should be stressed that no new features are added to Lisp for message
+sending; we simply define a convention on the way objects take
+arguments.  The convention says that an object accepts messages by
+always interpreting its first argument as an operation name.  The object
+must consider this operation name, find the function which is the method
+for that operation, and invoke that function.
+</p>
+<definition><define key="send-fun" name="send" type="fun"><args>object operation <standard>&amp;rest</standard> arguments</args>
+</define>
+
+<description>Sends <arg>object</arg> a message with operation and arguments as specified.
+Currently <obj>send</obj> is identical to <obj>funcall</obj>, but preferable when
+a message is being sent, just for clarity.
+
+There are vague ideas of making <arg>send</arg> different from <arg>funcall</arg>
+if <arg>object</arg> is a symbol, list, number, or other object that does not
+normally handle messages when funcalled, but the meaning of this is
+not completely clear.
+</description></definition><definition><define key="lexpr-send-fun" name="lexpr-send" type="fun"><args>object operation <standard>&amp;rest</standard> arguments</args>
+</define>
+
+<description>Currently <obj>lexpr-send</obj> is the same as <arg>apply</arg>.
+</description></definition>
+<p>This raises the question of how message receiving works.  The object
+must somehow find the right method for the message it is sent.
+Furthermore, the object now has to be callable as a function.  But an
+ordinary function will not do.  We need something that can store the
+instance variables (the internal state) of the object.  We need a
+function with internal state; that is, we need a coroutine.
+</p>
+
+<p>Of the Zetalisp features presented so far, the most appropriate
+is the closure (see <ref chapter="13" definition-in-file="fd-clo" key="closure" section="0" title="Closures" type="section"></ref>).  A message-receiving object could be
+implemented as a closure over a set of instance variables.  The function
+inside the closure would have a big <obj>selectq</obj> form to dispatch on its
+first argument.  (Actually, rather than using closures and a <obj>selectq</obj>,
+you would probably use entities (<ref chapter="13" definition-in-file="fd-clo" key="entity" section="4" title="Entities" type="section"></ref>) and <obj>defselect</obj> (<ref definition-in-file="fd-fun" key="defselect-fun" title="Special Form defselect" type="spec"></ref>).)
+</p>
+
+<p>While using closures (or entities) does work, it has several serious
+problems.  The main problem is that in order to add a new operation to a
+system, it is necessary to modify a lot of code; you have to find all
+the types that understand that operation, and add a new clause to the
+<obj>selectq</obj>.  The problem with this is that you cannot textually
+separate the implementation of your new operation from the rest of the
+system; the methods must be interleaved with the other operations for
+the type.  Adding a new operation should only require <arg>adding</arg> Lisp code;
+it should not require <arg>modifying</arg> Lisp code.
+</p>
+
+<p>The conventional way of making generic operations is to have a procedure
+for each operation, which has a big <obj>selectq</obj> for all the types; this
+means you have to modify code to add a type.  The way described above is
+to have a procedure for each type, which has a big <obj>selectq</obj> for all
+the operations; this means you have to modify code to add an operation.
+Neither of these has the desired property that extending the system
+should only require adding code, rather than modifying code.
+</p>
+
+<p>Closures (and entities) are also somewhat clumsy and crude.  A far more
+streamlined, convenient, and powerful system for creating
+message-receiving objects exists; it is called the <arg>flavor</arg> mechanism.
+With flavors, you can add a new method simply by adding code, without
+modifying anything.  Furthermore, many common and useful things
+are very easy to do with flavors.  The rest of this chapter describes
+flavors.
+</p>
+</section><a name="Simple Use of Flavors"></a>
+
+
+<section chapter-number="22" name="Simple Use of Flavors" number="5" title="Simple Use of Flavors"><p>A <arg>flavor</arg>, in its simplest form, is a definition of an abstract type.
+New flavors are created with the <obj>defflavor</obj> special form, and
+methods of the flavor are created with the <obj>defmethod</obj> special form.
+New instances of a flavor are created with the <obj>make-instance</obj>
+function.  This section explains simple uses of these forms.
+</p>
+
+<p>For an example of a simple use of flavors, here is how the <obj>ship</obj>
+example above would be implemented.
+</p>
+
+<lisp>(defflavor ship (x-position y-position 
+                 x-velocity y-velocity mass)
+                ()
+  :gettable-instance-variables)
+
+(defmethod (ship :speed) ()
+  (sqrt (+ (^ x-velocity 2)
+           (^ y-velocity 2))))
+
+(defmethod (ship :direction) ()
+  (atan2 y-velocity x-velocity))
+</lisp>
+<p>The code above creates a new flavor.  The first subform of the
+<obj>defflavor</obj> is <obj>ship</obj>, which is the name of the new flavor.  Next
+is the list of instance variables; they are the five that should be
+familiar by now.  The next subform is something we will get to later.
+The rest of the subforms are the body of the <obj>defflavor</obj>, and each
+one specifies an option about this flavor.  In our example, there is
+only one option, namely <obj>:gettable-instance-variables</obj>.  This means
+that for each instance variable, a method should automatically be
+generated to return the value of that instance variable.  The name of
+the operation is a symbol with the same name as the instance variable, but
+interned on the keyword package.  Thus, methods are created to handle
+the operations <obj>:x-position</obj>, <obj>:y-position</obj>, and so on.
+</p>
+
+<p>Each of the two <obj>defmethod</obj> forms adds a method to the flavor.  The
+first one adds a handler to the flavor <obj>ship</obj> for the operation
+<obj>:speed</obj>.  The second subform is the lambda-list, and the rest is the
+body of the function that handles the <obj>:speed</obj> operation.  The body can
+refer to or set any instance variables of the flavor, just like variables
+bound by a containing <obj>let</obj>.  When any instance of the
+<obj>ship</obj> flavor is invoked with a first argument of <obj>:direction</obj>, the
+body of the second <obj>defmethod</obj> is evaluated in an environment in
+which the instance variables of <obj>ship</obj> refer to the instance variables
+of this instance (the one to which the message was sent).  So the arguments
+passed to <obj>cli:atan</obj> are the the velocity components of this particular ship.
+The result of <obj>cli:atan</obj> becomes the value returned by the <obj>:direction</obj>
+operation.
+</p>
+
+<p>Now we have seen how to create a new abstract type: a new flavor.  Every
+instance of this flavor has the five instance variables named in
+the <obj>defflavor</obj> form, and the seven methods we have seen (five that
+were automatically generated because of the
+<obj>:gettable-instance-variables</obj> option, and two that we wrote
+ourselves).  The way to create an instance of our new flavor is with the
+<obj>make-instance</obj> function.  Here is how it could be used:
+</p>
+
+<lisp>(setq my-ship (make-instance 'ship))
+</lisp>
+<p>This returns an object whose printed representation is
+<obj>#&lt;SHIP 13731210&gt;</obj>.
+(Of course, the value of the magic number will vary; it is just
+the object address in octal.)  The argument to <obj>make-instance</obj> is
+the name of the flavor to be instantiated.  Additional
+arguments, not used here, are <arg>init options</arg>, that is, commands
+to the flavor of which we are making an instance, selecting optional
+features.  This will be discussed more in a moment.
+</p>
+
+<p>Examination of the flavor we have defined shows that it is quite useless
+as it stands, since there is no way to set any of the parameters.  We
+can fix this up easily by putting the <obj>:settable-instance-variables</obj>
+option into the <obj>defflavor</obj> form.  This option tells <obj>defflavor</obj> to
+generate methods for operation <obj>:set</obj> for first argument
+<obj>:x-position</obj>, <obj>:y-position</obj>, and so on; each such method takes one
+additional argument and sets the corresponding instance variable to that value.
+It also generates methods for the operations <obj>:set-x-position</obj>,
+<obj>:set-y-position</obj> and so on; each of these takes one argument
+and sets the corresponding variable.
+</p>
+
+<p>Another option we can add to the <obj>defflavor</obj> is
+<obj>:inittable-instance-variables</obj>, which allows us to initialize the values
+of the instance variables when an instance is first created.
+<obj>:inittable-instance-variables</obj> does not create any methods; instead,
+it makes <arg>initialization keywords</arg> named <obj>:x-position</obj>,
+<obj>:y-position</obj>, etc., that can be used as init-option arguments to
+<obj>make-instance</obj> to initialize the corresponding instance variables.
+The list of init options is sometimes called the <arg>init-plist</arg> because
+it is like a property list.
+</p>
+
+<p>Here is the improved <obj>defflavor</obj>:
+
+<lisp>(defflavor ship (x-position y-position
+                 x-velocity y-velocity mass) 
+                ()
+  :gettable-instance-variables
+  :settable-instance-variables
+  :inittable-instance-variables)
+</lisp></p>
+
+<p>All we have to do is evaluate this new <obj>defflavor</obj>, and the existing
+flavor definition is updated and now includes the new methods and
+initialization options.  In fact, the instance we generated a while ago
+now accepts the new operations!  We can set the mass of
+the ship we created by evaluating
+
+<lisp>(send my-ship :set-mass 3.0)
+<exdent amount="96"><caption>or </caption>(send my-ship :set :mass 3.0)
+</exdent></lisp>and the <obj>mass</obj> instance variable of <obj>my-ship</obj> is properly set to
+<obj>3.0</obj>.  Whether you use <obj>:set-mass</obj> or the general operation
+<obj>:set</obj> is a matter of style; <obj>:set</obj> is used by the expansion of
+<obj>(setf (send my-ship :mass) 3.0)</obj>.
+</p>
+
+<p>If you want to play around with flavors, it is useful
+to know that <obj>describe</obj> of an instance tells you the flavor of the
+instance and the values of its instance variables.  If we were to evaluate
+<obj>(describe my-ship)</obj> at this point, the following would be printed:
+</p>
+
+<lisp>#&lt;SHIP 13731210&gt;, an object of flavor SHIP,
+ has instance variable values:
+        X-POSITION:         void
+        Y-POSITION:         void
+        X-VELOCITY:         void
+        Y-VELOCITY:         void
+        MASS:               3.0
+</lisp>
+<p>Now that the instance variables are <arg>inittable</arg>, we can create another
+ship and initialize some of the instance variables using the init-plist.
+Let's do that and <obj>describe</obj> the result:
+</p>
+
+<lisp>(setq her-ship (make-instance 'ship :x-position 0.0
+                                    :y-position 2.0
+                                    :mass 3.5))
+                =&gt; #&lt;SHIP 13756521&gt;
+
+
+(describe her-ship)
+#&lt;SHIP 13756521&gt;, an object of flavor SHIP,
+ has instance variable values:
+        X-POSITION:         0.0
+        Y-POSITION:         2.0
+        X-VELOCITY:         void
+        Y-VELOCITY:         void
+        MASS:               3.5
+</lisp>
+<p>A flavor can also establish default initial values for instance
+variables.  These default values are used when a new instance is created
+if the values are not initialized any other way.  The syntax for
+specifying a default initial value is to replace the name of the
+instance variable by a list, whose first element is the name and whose
+second is a form to evaluate to produce the default initial value.  For
+example:
+</p>
+
+<lisp>(defvar *default-x-velocity* 2.0)
+(defvar *default-y-velocity* 3.0)
+
+(defflavor ship ((x-position 0.0)
+                 (y-position 0.0)
+                 (x-velocity *default-x-velocity*)
+                 (y-velocity *default-y-velocity*)
+                 mass) 
+                ()
+  :gettable-instance-variables
+  :settable-instance-variables
+  :inittable-instance-variables)
+
+(setq another-ship (make-instance 'ship :x-position 3.4))
+ =&gt; #&lt;SHIP 14563643&gt;
+
+(describe another-ship)
+#&lt;SHIP 14563643&gt;, an object of flavor SHIP,
+ has instance variable values:
+        X-POSITION:         3.4
+        Y-POSITION:         0.0
+        X-VELOCITY:         2.0
+        Y-VELOCITY:         3.0
+        MASS:               void
+</lisp>
+<p><obj>x-position</obj> was initialized explicitly, so the default was ignored.
+<obj>y-position</obj> was initialized from the default value, which was
+<obj>0.0</obj>.  The two velocity instance variables were initialized from
+their default values, which came from two global variables.  <obj>mass</obj>
+was not explicitly initialized and did not have a default
+initialization, so it was left void.
+</p>
+
+<p>There are many other options that can be used in <obj>defflavor</obj>, and the
+init options can be used more flexibly than just to initialize instance
+variables; full details are given later in this chapter.  But even with
+the small set of features we have seen so far, it is easy to write
+object-oriented programs.
+</p>
+</section><a name="Mixing Flavors"></a>
+
+
+<section chapter-number="22" name="Mixing Flavors" number="6" title="Mixing Flavors"><p>Now we have a system for defining message-receiving objects so that we
+can have generic operations.  If we want to create a new type called
+<obj>meteor</obj> that would accept the same generic operations as <obj>ship</obj>, we
+could simply write another <obj>defflavor</obj> and two more <obj>defmethod</obj>'s
+that looked just like those of <obj>ship</obj>, and then meteors and ships
+would both accept the same operations.  <obj>ship</obj> would have some
+more instance variables for holding attributes specific to ships
+and some more methods for operations that are not generic, but
+are only defined for ships; the same would be true of <obj>meteor</obj>.
+</p>
+
+<p>However, this would be a a wasteful thing to do.  The same code has to
+be repeated in several places, and several instance variables have to be
+repeated.  The code now needs to be maintained in many places, which is
+always undesirable.  The power of flavors (and the name ``flavors'') comes
+from the ability to mix several flavors and get a new flavor.  Since the
+functionality of <obj>ship</obj> and <obj>meteor</obj> partially overlap, we can take
+the common functionality and move it into its own flavor, which might be
+called <obj>moving-object</obj>.  We would define <obj>moving-object</obj> the same
+way as we defined <obj>ship</obj> in the previous section.  Then, <obj>ship</obj> and
+<obj>meteor</obj> could be defined like this:
+</p>
+
+<lisp>(defflavor ship (engine-power number-of-passengers name) 
+                (moving-object)
+   :gettable-instance-variables)
+
+(defflavor meteor (percent-iron)
+                  (moving-object)
+   :inittable-instance-variables)
+</lisp>
+<p>These <obj>defflavor</obj> forms use the second subform, which we ignored
+previously.  The second subform is a list of flavors to be combined to
+form the new flavor; such flavors are called <arg>components</arg>.
+Concentrating on <obj>ship</obj> for a moment (analogous things are true of
+<obj>meteor</obj>), we see that it has exactly one component flavor:
+<obj>moving-object</obj>.  It also has a list of instance variables, which
+includes only the ship-specific instance variables and not the ones that
+it shares with <obj>meteor</obj>.  By incorporating <obj>moving-object</obj>, the <obj>ship</obj>
+flavor acquires all of its instance variables, and so need not name them
+again.  It also acquires all of <obj>moving-object</obj>'s methods, too.  So
+with the new definition, <obj>ship</obj> instances still implement the
+<obj>:x-velocity</obj> and <obj>:speed</obj> operations, with the same meaning as before.
+However, the <obj>:engine-power</obj> operation is also understood (and
+returns the value of the <obj>engine-power</obj> instance variable).
+</p>
+
+<p>What we have done here is to take an abstract type, <obj>moving-object</obj>,
+and build two more specialized and powerful abstract types on top of it.
+Any ship or meteor can do anything a moving object can do, and each also
+has its own specific abilities.  This kind of building can continue; we
+could define a flavor called <obj>ship-with-passenger</obj> that was built on
+top of <obj>ship</obj>, and it would inherit all of <obj>moving-object</obj>'s
+instance variables and methods as well as <obj>ship</obj>'s instance variables
+and methods.  Furthermore, the second subform of <obj>defflavor</obj> can be a
+list of several components, meaning that the new flavor should combine
+all the instance variables and methods of all the flavors in the list,
+as well as the ones <arg>those</arg> flavors are built on, and so on.  All the
+components taken together form a big tree of flavors.  A flavor is built
+from its components, its components' components, and so on.  We
+sometimes use the term ``components'' to mean the immediate components
+(the ones listed in the <obj>defflavor</obj>), and sometimes to mean all the
+components (including the components of the immediate components and so
+on).  (Actually, it is not strictly a tree, since some flavors might be
+components through more than one path.  It is really a directed graph;
+it can even be cyclic.)
+</p>
+
+<p>The order in which the components are combined to form a flavor is
+important.  The tree of flavors is turned into an ordered list by
+performing a <arg>top-down, depth-first</arg> walk of the tree, including
+non-terminal nodes <arg>before</arg> the subtrees they head, ignoring any
+flavor that has been encountered previously somewhere else in the tree.
+For example, if <obj>flavor-1</obj>'s immediate components are <obj>flavor-2</obj> and
+<obj>flavor-3</obj>, and <obj>flavor-2</obj>'s components are <obj>flavor-4</obj> and
+<obj>flavor-5</obj>, and <obj>flavor-3</obj>'s component was <obj>flavor-4</obj>, then the
+complete list of components of <obj>flavor-1</obj> would be:
+
+<lisp>flavor-1, flavor-2, flavor-4, flavor-5, flavor-3
+</lisp>The flavors earlier in this list are the more specific, less basic ones;
+in our example, <obj>ship-with-passengers</obj> would be first in the list,
+followed by <obj>ship</obj>, followed by <obj>moving-object</obj>.  A flavor is always
+the first in the list of its own components.  Notice that <obj>flavor-4</obj>
+does not appear twice in this list.  Only the first occurrence of a
+flavor appears; duplicates are removed.  (The elimination of duplicates
+is done during the walk; if there is a cycle in the directed graph, it
+does not cause a non-terminating computation.)
+</p>
+
+<p>The set of instance variables for the new flavor is the union of all the
+sets of instance variables in all the component flavors.  If both
+<obj>flavor-2</obj> and <obj>flavor-3</obj> have instance variables named <obj>foo</obj>,
+then <obj>flavor-1</obj> has an instance variable named <obj>foo</obj>, and any
+methods that refer to <obj>foo</obj> refer to this same instance variable.
+Thus different components of a flavor can communicate with one another
+using shared instance variables.  (Typically, only one component ever
+sets the variable; the others only look at it.)  The default initial
+value for an instance variable comes from the first component flavor to
+specify one.
+</p>
+
+<index-entry index="concepts" title="combined method"></index-entry>
+
+<p>The way the methods of the components are combined is the heart of the
+flavor system.  When a flavor is defined, a single function, called a
+<arg>combined method</arg>, is constructed for each operation supported by the
+flavor.  This function is constructed out of all the methods for that
+operation from all the components of the flavor.  There are many different
+ways that methods can be combined; these can be selected by the user
+when a flavor is defined.  The user can also create new forms of
+combination.
+</p>
+
+<p>There are several kinds of methods, but
+so far, the only kinds of methods we have seen are <arg>primary</arg> methods.
+The default way primary methods are combined is that all but the
+earliest one provided are ignored.  In other words, the combined method
+is simply the primary method of the first flavor to provide a primary
+method.  What this means is that if you are starting with a flavor
+<obj>foo</obj> and building a flavor <obj>bar</obj> on top of it, then you can
+override <obj>foo</obj>'s method for an operation by providing your own method.
+Your method will be called, and <obj>foo</obj>'s will never be called.
+</p>
+
+<p>Simple overriding is often useful; for example, if you want to make a
+new flavor <obj>bar</obj> that is just like <obj>foo</obj> except that it reacts
+completely differently to a few operations.  However, often you don't
+want to completely override the base flavor's (<obj>foo</obj>'s) method;
+sometimes you want to add some extra things to be done.  This is where
+combination of methods is used.
+</p>
+
+<p>The usual way methods are combined is that one flavor provides a primary
+method, and other flavors provide <arg>daemon methods</arg>.  The idea
+is that the primary method is ``in charge'' of the main business of
+handling the operation, but other flavors just want to keep informed
+that the message was sent, or just want to do the part of the operation
+associated with their own area of responsibility.
+</p>
+
+<index-entry index="concepts" title="daemon methods"></index-entry>
+
+<p><arg>daemon</arg> methods come in two kinds, <arg>before</arg> and <arg>after</arg>.  There is
+a special syntax in <obj>defmethod</obj> for defining such methods.  Here is an example
+of the syntax.  To give the <obj>ship</obj> flavor an after-daemon method for the
+<obj>:speed</obj> operation, the following syntax would be used:
+
+<lisp>(defmethod (ship :after :speed) () <arg>body</arg>)
+</lisp></p>
+
+<p>Now, when a message is sent, it is handled by a new function called the
+<arg>combined</arg> method.  The combined method first calls all of the before daemons,
+then the primary method, then all the after daemons.  Each method is passed the
+same arguments that the combined method was given.  The returned values from the
+combined method are the values returned by the primary method; any values
+returned from the daemons are ignored.  Before-daemons are called in the order
+that flavors are combined, while after-daemons are called in the reverse order.
+In other words, if you build <obj>bar</obj> on top of <obj>foo</obj>, then <obj>bar</obj>'s
+before-daemons run before any of those in <obj>foo</obj>, and <obj>bar</obj>'s
+after-daemons run after any of those in <obj>foo</obj>.
+</p>
+
+<p>The reason for this order is to keep the modularity order correct.  If
+we create <obj>flavor-1</obj> built on <obj>flavor-2</obj>, then it should not matter
+what <obj>flavor-2</obj> is built out of.  Our new before-daemons go before all
+methods of <obj>flavor-2</obj>, and our new after-daemons go after all methods of
+<obj>flavor-2</obj>.  Note that if you have no daemons, this reduces to the
+form of combination described above.  The most recently added component
+flavor is the highest level of abstraction; you build a higher-level
+object on top of a lower-level object by adding new components to the
+front.  The syntax for defining daemon methods can be found in the
+description of <obj>defmethod</obj> below.
+</p>
+
+<p>To make this a bit more clear, let's consider a simple example that is
+easy to play with: the <obj>:print-self</obj> method.  The Lisp printer
+(i.e. the <obj>print</obj> function; see <ref chapter="24" definition-in-file="rdprt" key="printer" section="1" title="What the Printer Produces" type="section"></ref>) prints instances of flavors by sending
+them <obj>:print-self</obj> messages.  The first argument to the
+<obj>:print-self</obj> operation is a stream (we can ignore the others for now),
+and the receiver of the message is supposed to print its printed
+representation on the stream.  In the <obj>ship</obj> example above, the reason
+that instances of the <obj>ship</obj> flavor printed the way they did is
+because the <obj>ship</obj> flavor was actually built on top of a very basic
+flavor called <obj>vanilla-flavor</obj>; this component is provided
+automatically by <obj>defflavor</obj>.  It was <obj>vanilla-flavor</obj>'s
+<obj>:print-self</obj> method that was doing the printing.  Now, if we give
+<obj>ship</obj> its own primary method for the <obj>:print-self</obj> operation, then
+that method completely takes over the job of printing;
+<obj>vanilla-flavor</obj>'s method will not be called at all.  However, if we
+give <obj>ship</obj> a before-daemon method for the <obj>:print-self</obj> operation,
+then it will get invoked before the <obj>vanilla-flavor</obj> method, and so
+whatever it prints will appear before what <obj>vanilla-flavor</obj> prints.
+So we can use before-daemons to add prefixes to a printed
+representation; similarly, after-daemons can add suffixes.
+</p>
+
+<p>There are other ways to combine methods besides daemons, but this way is the
+most common.  The more advanced ways of combining methods are explained
+in a later section; see <ref chapter="22" definition-in-file="flavor" key="method-combination" section="11" title="Method Combination" type="section"></ref>.  <obj>vanilla-flavor</obj> and what it does for
+you are also explained later; see <ref chapter="22" definition-in-file="flavor" key="vanilla-flavor" section="10" title="Vanilla Flavor" type="section"></ref>.
+</p>
+</section><a name="Flavor Functions"></a>
+
+<section chapter-number="22" name="Flavor Functions" number="7" title="Flavor Functions"><definition>
+<define key="defflavor-fun" name="defflavor" type="mac"></define>
+
+<description>A flavor is defined by a form
+
+<lisp>(defflavor <arg>flavor-name</arg> (<arg>var1</arg> <arg>var2</arg>...) (<arg>flav1</arg> <arg>flav2</arg>...)
+        <arg>opt1</arg> <arg>opt2</arg>...)
+</lisp><arg>flavor-name</arg> is a symbol which serves to name this flavor.  It is given an <obj>si:flavor</obj>
+property which is the internal data-structure containing the details of the flavor.
+
+<obj>(type-of <arg>obj</arg>)</obj>, where <arg>obj</arg> is an instance of the flavor named
+<arg>flavor-name</arg>, returns the symbol <arg>flavor-name</arg>.
+<obj>(typep <arg>obj</arg> <arg>flavor-name</arg>)</obj> is <obj>t</obj> if <arg>obj</arg> is an instance of a
+flavor, one of whose components (possibly itself) is <arg>flavor-name</arg>.
+
+<arg>var1</arg>, <arg>var2</arg>, etc. are the names of the instance-variables
+containing the local state for this flavor.  A list of the name of an
+instance-variable and a default initialization form is also acceptable;
+the initialization form is evaluated when an instance of
+the flavor is created if no other initial value for
+the variable is obtained.  If no initialization is specified, the variable
+remains void.
+
+<arg>flav1</arg>, <arg>flav2</arg>, etc. are the names of the component flavors out of
+which this flavor is built.  The features of those flavors are inherited
+as described previously.
+
+<arg>opt1</arg>, <arg>opt2</arg>, etc. are options; each option may be either a
+keyword symbol or a list of a keyword symbol and arguments.  The options
+to <obj>defflavor</obj> are described in <ref chapter="22" definition-in-file="flavor" key="defflavor-options" section="8" title="Defflavor Options" type="section"></ref>.
+</description></definition><definition>
+<define key="*all-flavor-names*-var" name="*all-flavor-names*" type="var"></define>
+
+<description>A list of the names of all the flavors that have ever been <obj>defflavor</obj>'ed.
+</description></definition><definition>
+<define key="defmethod-fun" name="defmethod" type="mac"></define>
+
+<description>A method, that is, a function to handle a particular operation for instances
+of a particular flavor, is defined by a form such as
+
+<lisp>(defmethod (<arg>flavor-name</arg> <arg>method-type</arg> <arg>operation</arg>) <arg>lambda-list</arg>
+  <arg>form1</arg> <arg>form2</arg>...)
+</lisp><arg>flavor-name</arg> is a symbol which is the name of the flavor which is to
+receive the method.
+<arg>operation</arg> is a keyword symbol which names the operation
+to be handled.  <arg>method-type</arg> is a keyword symbol for the type of method;
+it is omitted when you are defining a primary method.  For some method-types,
+additional information is expected.  It comes after <arg>operation</arg>.
+
+The meaning of <arg>method-type</arg> depends on what style of
+method combination is declared for this operation.  For instance, if
+<obj>:daemon</obj> combination (the default style) is in use,
+method types <obj>:before</obj> and <obj>:after</obj> are allowed.  See
+<ref chapter="22" definition-in-file="flavor" key="method-combination" section="11" title="Method Combination" type="section"></ref> for a complete description of method types and
+the way methods are combined.
+
+<arg>lambda-list</arg> describes the arguments and aux variables of the
+function; the first argument to the method, which is the operation
+name itself, is automatically handled and so is not included in the
+lambda-list.  Note that methods may not have unevaluated (<obj>&amp;quote</obj>) arguments;
+that is, they must be functions, not special forms.  <arg>form1</arg>,
+<arg>form2</arg>, etc. are the function body; the value of the last form
+is returned.
+
+The variant form
+
+<lisp>(defmethod (<arg>flavor-name</arg> <arg>operation</arg>) <arg>function</arg>)
+</lisp>where <arg>function</arg> is a symbol, says that <arg>flavor-name</arg>'s method for
+<arg>operation</arg> is <arg>function</arg>, a symbol which names a function.  That
+function must take appropriate arguments; the first argument is the
+operation.  When the function is called, <obj>self</obj> will be bound.
+
+If you redefine a method that is already defined, the old definition is
+replaced by the new one.  Given a flavor, an operation name, and a
+method type, there can only be one function (with the exception of
+<obj>:case</obj> methods; see <ref definition-in-file="flavor" key="case-method-combination" type="page"></ref>), so if you define a <obj>:before</obj> daemon method for the
+<obj>foo</obj> flavor to handle the <obj>:bar</obj> operation, then you replace the
+previous before-daemon; however, you do not affect the primary method or
+methods of any other type, operation or flavor.
+
+The function spec for a method (see <ref chapter="12" definition-in-file="fd-fun" key="method-function-spec" section="2" title="Function Specs" type="section"></ref>) looks like:
+
+<lisp>(:method <arg>flavor-name</arg> <arg>operation</arg>)  <standard>or</standard>
+(:method <arg>flavor-name</arg> <arg>method-type</arg> <arg>operation</arg>)  <standard>or</standard>
+(:method <arg>flavor-name</arg> <arg>method-type</arg> <arg>operation</arg> <arg>suboperation</arg>)
+</lisp>This is useful to know if you want to trace (<ref definition-in-file="db-aid" key="trace-fun" title="Special Form trace" type="spec"></ref>), breakon
+(<ref definition-in-file="db-aid" key="breakon-fun" title="Function breakon" type="fun"></ref>) or advise (<ref definition-in-file="db-aid" key="advise-fun" title="Macro advise" type="mac"></ref>) a method, or if you want to
+poke around at the method function itself, e.g.  disassemble it
+(see <ref definition-in-file="fd-hac" key="disassemble-fun" title="Function disassemble" type="fun"></ref>).
+</description></definition><definition><define key="make-instance-fun" name="make-instance" type="fun"><args>flavor-name init-option1 value1 init-option2 value2... </args>
+</define>
+
+<description>Creates and returns an instance of the specified flavor.  Arguments
+after the first are alternating init-option keywords and arguments to
+those keywords.  These options are used to initialize instance variables
+and to select arbitrary options, as described above.  An <obj>:init</obj>
+message is sent to the newly-created object with one argument, the
+init-plist.  This is a disembodied property-list containing the
+init-options specified and those defaulted from the flavor's
+<obj>:default-init-plist</obj> (however, init keywords that simply initialize instance
+variables, and the corresponding values, may be absent when the
+<obj>:init</obj> methods are called).  <obj>make-instance</obj> is an easy-to-call
+interface to <obj>instantiate-flavor</obj>, below.
+
+If <obj>:allow-other-keys</obj> is used as an init keyword
+with a non-<obj>nil</obj> value, this error check is suppressed.
+Then unrecognized keywords are simply ignored.  Example:
+
+<lisp>(make-instance 'foo :lose 5 :allow-other-keys t)
+</lisp>specifies the init keyword <obj>:lose</obj>, but prevents an error
+should the keyword not be handled.
+</description></definition><definition><define key="instantiate-flavor-fun" name="instantiate-flavor" type="fun"><args>flavor-name init-plist <standard>&amp;optional</standard> send-init-message-p return-unhandled-keywords area</args>
+</define>
+
+<description>This is an extended version of <obj>make-instance</obj>, giving you more features.
+Note that it takes the <arg>init-plist</arg> as an individual argument, rather than taking a rest
+argument of init options and values.
+
+The <arg>init-plist</arg> argument must be a disembodied property list;
+<obj>locf</obj> of a rest argument is satisfactory.  Beware!  This property list
+can be modified; the properties from the default init plist are
+<obj>putprop</obj>'ed on if not already present, and some <obj>:init</obj> methods
+do explicit <obj>putprop</obj>'s onto the <arg>init-plist</arg>.
+
+In the event that <obj>:init</obj> methods <obj>remprop</obj> properties already on
+the <arg>init-plist</arg> (as opposed to simply doing <obj>get</obj> and <obj>putprop</obj>),
+then the <arg>init-plist</arg> is <obj>rplacd</obj>'ed.  This means that the actual
+supplied list of options is modified.  It also means that <obj>locf</obj> of a
+rest argument does not work; the caller of <obj>instantiate-flavor</obj>
+must copy its rest argument (e.g. with <obj>copylist</obj>); this is because
+<obj>rplacd</obj> is not allowed on stack lists.
+
+Do not use <obj>nil</obj> as the <arg>init-plist</arg> argument.  This would mean
+to use the properties of the symbol <obj>nil</obj> as the init options.
+If your goal is to have no init options, you must provide a property list
+containing no properties, such as the list <obj>(nil)</obj>.
+
+Here is the sequence of actions by which <obj>instantiate-flavor</obj> creates
+a new instance:
+
+First, the specified flavor's instantiation flavor function
+(<ref definition-in-file="flavor" key="instantiation-flavor-function" type="page"></ref>), if it exists, is called to determine
+which flavor should actually be instantiated.  If there is no instantiation
+flavor function, the specified flavor is instantiated.
+
+If the flavor's method hash-table and other internal information have
+not been computed or are not up to date, they are computed.  This may
+take a substantial amount of time or even invoke the compiler, but
+it happens only once for each time you define or redefine a particular flavor.
+
+Next, the instance itself is created.  If the <arg>area</arg> argument is
+specified, it is the number of an area in which to cons the instance;
+otherwise the flavor's instance area function is called to choose an area
+if there is one; otherwise, <obj>default-cons-area</obj> is used.  See
+<ref definition-in-file="flavor" key="instance-area-function" type="page"></ref>.
+
+Then the initial values of the instance variables are computed.  If an
+instance variable is declared inittable, and a keyword with the same
+spelling as its name appears in <arg>init-plist</arg>, the property for that
+keyword is used as the initial value.
+
+Otherwise, if the default init plist specifies such a property, it is
+evaluated and the value is used.  Otherwise, if the flavor definition
+specifies a default initialization form, it is evaluated and the value
+is used.  The initialization form may not refer to any instance
+variables.  It can find the new instance in <obj>self</obj> but should not
+invoke any operations on it and should not refer directly to any
+instance variables.  It can get at instance variables using accessor
+macros created by the <obj>:outside-accessible-instance-variables</obj> option
+(<ref definition-in-file="flavor" key="outside-accessible-instance-variables-option" type="page"></ref>) or the function
+<obj>symeval-in-instance</obj> (<ref definition-in-file="flavor" key="symeval-in-instance-fun" title="Function symeval-in-instance" type="fun"></ref>).
+
+If an instance variable does not get initialized either of these ways it
+is left void; an <obj>:init</obj> method may initialize it (see below).
+
+All remaining keywords and values specified in the
+<obj>:default-init-plist</obj> option to <obj>defflavor</obj>, that do not initialize
+instance variables and are not overridden by anything explicitly specified
+in <arg>init-plist</arg> are then merged into <arg>init-plist</arg> using <obj>putprop</obj>.
+The default init plist of the instantiated flavor is considered first,
+followed by those of all the component flavors in the standard order.
+See <ref definition-in-file="flavor" key="default-init-plist-option" type="page"></ref>.
+
+Then keywords appearing in the <arg>init-plist</arg> but not defined with the
+<obj>:init-keywords</obj> option or the <obj>:inittable-instance-variables</obj>
+option for some component flavor are collected.  If the
+<obj>:allow-other-keys</obj> option is specified with a non-<obj>nil</obj> value
+(either in the original <arg>init-plist</arg> argument or by some default init
+plist) then these <arg>unhandled</arg> keywords are ignored.  If the
+<arg>return-unhandled-keywords</arg> argument is non-<obj>nil</obj>, a list of these
+keywords is returned as the second value of <obj>instantiate-flavor</obj>.
+Otherwise, an error is signaled if any unrecognized init keywords are
+present.
+
+If the <arg>send-init-message-p</arg> argument is supplied and non-<obj>nil</obj>, an
+<obj>:init</obj> message is sent to the newly-created instance, with one
+argument, the <arg>init-plist</arg>.  <obj>get</obj> can be used to extract options
+from this property-list.  Each flavor that needs initialization can
+contribute an <obj>:init</obj> method by defining a daemon.
+
+The <obj>:init</obj> methods should not look on the <arg>init-plist</arg> for keywords
+that simply initialize instance variables (that is, keywords defined
+with <obj>:inittable-instance-variables</obj> rather than <obj>:init-keywords</obj>).
+The corresponding instance variables are already set up when the
+<obj>:init</obj> methods are called, and sometimes the keywords and their
+values may actually be missing from the <arg>init-plist</arg> if it is more
+efficient not to put them on.  To avoid problems, always refer to the
+instance variables themselves rather than looking for the init keywords
+that initialize them.
+</description></definition><definition><define key="&quot;all-method" name="&quot;all" type="metamethod"><args>flavor instances&quot; :init init-plist</args>
+</define>
+
+<description>This operation is implemented on all flavor instances.  Its purpose is to
+examine the init keywords and perform whatever initializations are
+appropriate.  <arg>init-plist</arg> is the argument that was given to
+<obj>instantiate-flavor</obj>, and may be passed directly to <obj>get</obj>
+to examine the value of any particular init option.
+
+The default definition of this operation does nothing.  However,
+many flavors add <obj>:before</obj> and <obj>:after</obj> daemons to it.
+</description></definition><definition><define key="instancep-fun" name="instancep" type="fun"><args>object</args>
+</define>
+
+<description>Returns <obj>t</obj> if <obj>object</obj> is an instance.
+This is equivalent to <obj>(typep <arg>object</arg> 'instance)</obj>.
+</description></definition><definition>
+<define key="defwrapper-fun" name="defwrapper" type="mac"></define>
+
+<description>This is hairy and if you don't understand it you should skip it.
+
+Sometimes the way the flavor system combines the methods of different
+flavors (the daemon system) is not powerful enough.  In that case <obj>defwrapper</obj>
+can be used to define a macro that expands into code that is wrapped around
+the invocation of the methods.  This is best explained by an example;
+suppose you needed a lock locked during the processing of the
+<obj>:foo</obj> operation on flavor <obj>bar</obj>, which takes two arguments,
+and you have a <obj>lock-frobboz</obj> special-form that knows how to lock the lock
+(presumably it generates an <obj>unwind-protect</obj>).  <obj>lock-frobboz</obj> needs to see
+the first argument to the operation; perhaps that tells it what sort of operation
+is going to be performed (read or write).
+
+<lisp>(defwrapper (bar :foo) ((arg1 arg2) . body)
+  `(lock-frobboz (self arg1)
+     . ,body))
+</lisp>The use of the <obj>body</obj> macro-argument prevents the macro defined by
+<obj>defwrapper</obj> from knowing the exact implementation and allows
+several <obj>defwrapper</obj>'s from different flavors to be combined
+properly.
+
+Note well that the argument variables, <obj>arg1</obj> and <obj>arg2</obj>, are not referenced
+with commas before them.  These may look like <obj>defmacro</obj> ``argument'' variables,
+but they are not.  Those variables are not bound at the time the <obj>defwrapper</obj>-defined
+macro is expanded and the back-quoting is done; rather the result of that
+macro-expansion and back-quoting is code which, when a message is sent, will
+bind those variables to the arguments in the message as local variables of
+the combined method.
+
+Consider another example.  Suppose you thought you wanted a <obj>:before</obj> daemon,
+but found that if the argument was <obj>nil</obj> you needed to return from processing
+the message immediately, without executing the primary method.  You could write
+a wrapper such as
+
+<lisp>(defwrapper (bar :foo) ((arg1) . body)
+  `(cond ((null arg1))
+         (t (print &quot;About to do :FOO&quot;)
+            . ,body)))
+</lisp>
+Suppose you need a variable for communication among the daemons for a particular
+operation; perhaps the <obj>:after</obj> daemons need to know what the primary method did,
+and it is something that cannot be easily deduced from just the arguments.  You
+might use an instance variable for this, or you might create a special variable
+which is bound during the processing of the operation and used free by the methods.
+
+<lisp>(defvar *communication*)
+(defwrapper (bar :foo) (ignore . body)
+  `(let ((*communication* nil))
+     . ,body))
+</lisp>
+Similarly you might want a wrapper that puts a <obj>catch</obj> around the processing
+of an operation so that any one of the methods could throw out in the event of
+an unexpected condition.
+
+Like daemon methods, wrappers work in outside-in order; when you add a
+<obj>defwrapper</obj> to a flavor built on other flavors, the new wrapper
+is placed outside any wrappers of the component flavors.  However,
+<arg>all</arg> wrappers happen before <arg>any</arg> daemons happen.  When the combined
+method is built, the calls to the before-daemon methods, primary methods,
+and after-daemon methods are all placed together, and then the wrappers
+are wrapped around them.  Thus, if a component flavor defines a wrapper,
+methods added by new flavors execute within that wrapper's context.
+
+<obj>:around</obj> methods can do some of the same things that wrappers can.  See
+<ref definition-in-file="flavor" key="around-method-type" type="page"></ref>.  If one flavor defines both a wrapper and an
+<obj>:around</obj> method for the same operation, the <obj>:around</obj> method is
+executed inside the wrapper.
+
+By careful about inserting the body into an internal lambda-expression
+within the wrapper's code.  Doing so interacts with the internals of the
+flavor system and requires knowledge of things not documented in the
+manual in order to work properly.  It is much simpler to use an
+<obj>:around</obj> method instead.
+</description></definition><definition><define key="undefmethod-fun" name="undefmethod" type="mac"><args>(flavor [type] operation [suboperation])</args>
+</define>
+
+
+<description><lisp>(undefmethod (flavor :before :operation))
+<exdent amount="96"><caption>removes the method created by </caption>(defmethod (flavor :before :operation) (<arg>args</arg>) ...)
+</exdent></lisp>
+To remove a wrapper, use <obj>undefmethod</obj> with <obj>:wrapper</obj> as the method type.
+
+<obj>undefmethod</obj> is simply an interface to <obj>fundefine</obj>
+(see <ref definition-in-file="fd-fun" key="fundefine-fun" title="Function fundefine" type="fun"></ref>) that accepts the same syntax as
+<obj>defmethod</obj>.
+
+If a file that used to contain a method definition is reloaded
+and if that method no longer seems to have a definition in the file,
+the user is asked whether to <obj>undefmethod</obj> that method.  This may be
+important to enable the modified program to inherit the methods it is
+supposed to inherit.  If the method in question has been redefined by some
+other file, this is not done, the assumption being that the definition was
+merely moved.
+</description></definition><definition><define key="undefflavor-fun" name="undefflavor" type="fun"><args>flavor</args>
+</define>
+
+<description>Undefines flavor <arg>flavor</arg>.  All methods of the flavor are lost.
+<arg>flavor</arg> and all flavors that depend on it are no longer valid to
+instantiate.
+
+If instances of the discarded definition exist, they continue to
+use that definition.
+</description></definition><definition>
+<define key="self-var" name="self" type="var"></define>
+
+<description>When a message is sent to an object, the variable <obj>self</obj> is automatically
+bound to that object, for the benefit of methods which want to manipulate
+the object itself (as opposed to its instance variables).
+</description></definition><definition><define key="funcall-self-fun" name="funcall-self" type="fun"><args>operation arguments...</args>
+</define><define key="lexpr-funcall-self-fun" name="lexpr-funcall-self" type="fun"><args>operation arguments... list-of-arguments</args>
+</define>
+
+<description><obj>funcall-self</obj> is nearly equivalent to <obj>funcall</obj> with <obj>self</obj> as
+the first argument.  <obj>funcall-self</obj> used to be faster, but now
+<obj>funcall</obj> of <obj>self</obj> is just as fast.  Therefore, <obj>funcall-self</obj>
+is obsolete.  It should be replaced with <obj>funcall</obj> or <obj>send</obj> of <obj>self</obj>.
+
+Likewise, <obj>lexpr-funcall-self</obj> should be replaced with use of
+<obj>lexpr-send</obj> to <obj>self</obj>.
+</description></definition><definition><define key="funcall-with-mapping-table-fun" name="funcall-with-mapping-table" type="fun"><args>function mapping-table <standard>&amp;rest</standard> arguments</args>
+</define>
+
+<description>Applies <arg>function</arg> to <arg>arguments</arg> with <obj>sys:self-mapping-table</obj>
+bound to <arg>mapping-table</arg>.  This is faster than binding the variable
+yourself and doing an ordinary <obj>funcall</obj>, because the system assumes
+that the mapping table you specify is the correct one for <arg>function</arg>
+to be run with.  However, if you pass the wrong mapping table, incorrect
+execution will take place.
+
+This function is used in the code for combined methods and is also useful
+for the user in <obj>:around</obj> methods (see <ref definition-in-file="flavor" key="around-method-type" type="page"></ref>).
+</description></definition><definition><define key="lexpr-funcall-with-mapping-table-fun" name="lexpr-funcall-with-mapping-table" type="fun"><args>function mapping-table <standard>&amp;rest</standard> arguments</args>
+</define>
+
+<description>Applies <arg>function</arg> to <arg>arguments</arg> using <obj>lexpr-funcall</obj>, with
+<obj>sys:self-mapping-table</obj> bound to <arg>mapping-table</arg>.
+</description></definition><definition><define key="declare-flavor-instance-variables-fun" name="declare-flavor-instance-variables" type="mac"><args>(flavor) body...</args>
+</define>
+
+<description>Sometimes it is useful to have a function which is not itself a method, but
+which is to be called by methods and wants to be able to access the
+instance variables of the object <obj>self</obj>.  The form
+
+<lisp>(declare-flavor-instance-variables (<arg>flavor-name</arg>)
+  (defun <arg>function</arg> <arg>args</arg> <arg>body</arg>...))
+</lisp>surrounds the function definition with a peculiar kind of declaration 
+which makes the instance variables of flavor <arg>flavor-name</arg>
+accessible by name.  Any kind of function definition is allowed;
+it does not have to use <obj>defun</obj> per se.
+
+If you call such a function when <obj>self</obj>'s value is an instance whose
+flavor does not include <arg>flavor-name</arg> as a component, it is an error.
+
+Cleaner than using <obj>declare-flavor-instance-variables</obj>, because it
+does not involve putting anything around the function definition, is using
+a local declaration.  Put <obj>(declare (:self-flavor <arg>flavorname</arg>))</obj> as
+the first expression in the body of the function.  For example:
+
+<lisp>(defun foo (a b)
+  (declare (:self-flavor myobject))
+  (+ a (* b speed)))
+</lisp>(where <obj>speed</obj> is an instance variable of the flavor <obj>myobject</obj>)
+is equivalent to
+
+<lisp>(declare-flavor-instance-variables (myobject)
+(defun foo (a b)
+  (+ a (* b speed))))
+</lisp></description></definition><definition><define key="with-self-variables-bound-fun" name="with-self-variables-bound" type="spec"><args>body...</args>
+</define>
+
+<description>Within the body of this special form, all of <obj>self</obj>'s instance
+variables are bound as specials to the values inside <obj>self</obj>.
+(Normally this is true only of those instance variables that are
+specified in <obj>:special-instance-variables</obj> when <obj>self</obj>'s flavor was
+defined.)  As a result, inside the body you can use <obj>set</obj>, <obj>boundp</obj>
+and <obj>symeval</obj>, etc., freely on the instance variables of <obj>self</obj>.
+</description></definition><definition><define key="recompile-flavor-fun" name="recompile-flavor" type="fun"><args>flavor-name <standard>&amp;optional</standard> single-operation (use-old-combined-methods <obj>t</obj>) (do-dependents <obj>t</obj>)</args>
+</define>
+
+<description>Updates the internal data of the flavor and any flavors that depend on it.
+If <arg>single-operation</arg> is supplied non-<obj>nil</obj>, only the methods for that
+operation are changed.  The system does this when you define a new method that
+did not previously exist.
+If <arg>use-old-combined-methods</arg> is <obj>t</obj>, then the existing combined
+method functions are used if possible.  New ones are generated only
+if the set of methods to be called has changed.  This
+is the default.
+If <arg>use-old-combined-methods</arg> is <obj>nil</obj>, automatically-generated functions
+to call multiple methods or to contain code generated by wrappers are regenerated
+unconditionally.
+If <arg>do-dependents</arg> is <obj>nil</obj>, only the specific flavor you specified
+is recompiled.  Normally all flavors that depend on it are also recompiled.
+
+<obj>recompile-flavor</obj> affects only flavors that have already been compiled.
+Typically this means it affects flavors that have been instantiated,
+but does not bother with mixins (see <ref definition-in-file="flavor" key="mixin-flavor" type="page"></ref>).
+</description></definition><definition>
+<define key="si:*dont-recompile-flavors*-var" name="si:*dont-recompile-flavors*" type="var"></define>
+
+<description>If this variable is non-<obj>nil</obj>, automatic recompilation of combined methods
+is turned off.
+
+If you wish to make several changes each of which will cause recompilation
+of the same combined methods, you can use this variable to speed things up by
+making the recompilations happen only once.  Set the variable to <obj>t</obj>,
+make your changes, and then set the variable back to <obj>nil</obj>.
+Then use <obj>recompile-flavor</obj> to recompile whichever combined methods
+need it.  For example:
+
+<lisp>(setq si:*dont-recompile-flavors* t)
+(undefmethod (tv:sheet :after :bar))
+(defmethod (tv:sheet :before :bar) ...)
+(setq si:*dont-recompile-flavors* nil)
+(recompile-flavor 'tv:sheet :bar)
+</lisp><obj>tv:sheet</obj> has very many dependents; <obj>recompile-flavor</obj> even once
+takes painfully long.  It's nice to avoid spending the time twice.
+</description></definition><definition><define key="compile-flavor-methods-fun" name="compile-flavor-methods" type="mac"><args>flavor...</args>
+</define>
+
+<description>The form <obj>(compile-flavor-methods <arg>flavor-name-1</arg>
+<arg>flavor-name-2</arg>...)</obj>, placed in a file to be compiled, directs the
+compiler to include the automatically-generated combined methods for the
+named flavors in the resulting QFASL file, provided all of the necessary
+flavor definitions have been made.  Furthermore, all internal data
+structures needed to instantiate the flavor will be computed when the
+QFASL file is loaded rather than waiting until the first attempt to
+instantiate it.
+
+This means that the combined methods get compiled at compile time and
+the data structures get generated at load time, rather than both things
+happening at run time.  This is a very good thing, since if the
+the compiler must be invoked at run time, the program will be
+slow the first time it is run.  (The compiler must be called in any case if
+incompatible changes have been made, such as addition or deletion of
+methods that must be called by a combined method.)
+
+You should only use <obj>compile-flavor-methods</obj> for flavors that are
+going to be instantiated.  For a flavor that is never to be instantiated
+(that is, a flavor that only serves to be a component of other flavors
+that actually do get instantiated), it is a complete waste of time,
+except in the unusual case where those other flavors can all inherit
+the combined methods of this flavor instead of each one having its
+own copy of a combined method which happens to be identical to the
+others.  In this unusual case, you should use the <obj>:abstract-flavor</obj>
+option in <obj>defflavor</obj> (<ref definition-in-file="flavor" key="abstract-flavor-option" type="page"></ref>).
+
+The <obj>compile-flavor-methods</obj> forms should be compiled after all of
+the information needed to create the combined methods is available.  You
+should put these forms after all of the definitions of all relevant
+flavors, wrappers, and methods of all components of the flavors mentioned.
+
+The methods used by <obj>compile-flavor-methods</obj> to form the combined
+methods that go in the QFASL file are all those present in the file
+being compiled and all those defined in the Lisp world.
+
+When a <obj>compile-flavor-methods</obj> form is seen by the interpreter,
+the combined methods are compiled and the internal data structures
+are generated.
+</description></definition><definition><define key="get-handler-for-fun" name="get-handler-for" type="fun"><args>object operation</args>
+</define>
+
+<description>Given an object and an operation, this returns the object's method for that
+operation, or <obj>nil</obj> if it has none.  When <arg>object</arg> is an instance of
+a flavor, this function can be useful to find which of that flavor's
+components supplies the method.  If you get back a combined method,
+you can use the <obj>Meta-X List Combined Methods</obj> editor command (<ref definition-in-file="flavor" key="list-combined-methods" type="page"></ref>)
+to find out what it does.
+
+This is related to the <obj>:handler</obj> function spec
+(see <ref chapter="12" definition-in-file="fd-fun" key="function-spec" section="2" title="Function Specs" type="section"></ref>).
+
+It is preferable to use the generic operation <obj>:get-handler-for</obj>.
+</description></definition><definition><define key="flavor-allows-init-keyword-p-fun" name="flavor-allows-init-keyword-p" type="fun"><args>flavor-name keyword</args>
+</define>
+
+<description>Returns non-<obj>nil</obj> if the flavor named <arg>flavor-name</arg> allows <arg>keyword</arg>
+in the init options when it is instantiated, or <obj>nil</obj> if it does not.
+The non-<obj>nil</obj> value is the name of the component flavor that contributes
+the support of that keyword.
+</description></definition><definition><define key="si:flavor-all-allowed-init-keywords-fun" name="si:flavor-all-allowed-init-keywords" type="fun"><args>flavor-name</args>
+</define>
+
+<description>Returns a list of all the init keywords that may be used
+in instantiating <arg>flavor-name</arg>.
+</description></definition><definition><define key="symeval-in-instance-fun" name="symeval-in-instance" type="fun"><args>instance symbol <standard>&amp;optional</standard> no-error-p</args>
+</define>
+
+<description>Returns the value of the instance variable <arg>symbol</arg> inside
+<arg>instance</arg>.  If there is no such instance variable, an error is
+signaled, unless <arg>no-error-p</arg> is non-<obj>nil</obj> in which case <obj>nil</obj>
+is returned.
+</description></definition><definition><define key="set-in-instance-fun" name="set-in-instance" type="fun"><args>instance symbol value</args>
+</define>
+
+<description>Sets the value of the instance variable <arg>symbol</arg> inside <arg>instance</arg>
+to <arg>value</arg>.  If there is no such instance variable, an error is
+signaled.
+</description></definition><definition><define key="locate-in-instance-fun" name="locate-in-instance" type="fun"><args>instance symbol</args>
+</define>
+
+<description>Returns a locative pointer to the cell inside <arg>instance</arg> which holds the
+value of the instance variable named <arg>symbol</arg>.
+</description></definition><definition><define key="describe-flavor-fun" name="describe-flavor" type="fun"><args>flavor-name</args>
+</define>
+
+<description>Prints descriptive information about a flavor; it is self-explanatory.
+An important thing it tells you that can be hard to figure out
+yourself is the combined list of component flavors; this list is what
+is printed after the phrase `and directly or indirectly depends on'.
+</description></definition><definition>
+<define key="si:*flavor-compilations*-var" name="si:*flavor-compilations*" type="var"></define>
+
+<description>Contains a history of when the flavor mechanism invoked
+the compiler.  It is a list; elements toward the front of the list
+represent more recent compilations.  Elements are typically of the
+form
+
+<lisp>(<arg>function-spec</arg> <arg>pathname</arg>)
+</lisp>where the function spec starts with <obj>:method</obj> and has a method type of
+<obj>:combined</obj>.
+
+You may <obj>setq</obj> this variable to <obj>nil</obj> at any time; for instance before
+loading some files that you suspect may have missing or obsolete
+<obj>compile-flavor-methods</obj> in them.
+</description></definition><definition><define key="sys:unclaimed-message-condition" name="sys:unclaimed-message" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This condition is signaled whenever a flavor instance is sent a message whose
+operation it does not handle.  The condition instance supports these operations:
+
+<table><tbody><tr><td><obj>:object</obj></td><td>The flavor instance that received the message.
+</td></tr><tr><td><obj>:operation</obj></td><td>The operation that was not handled.
+</td></tr><tr><td><obj>:arguments</obj></td><td>The list of arguments to that operation
+</td></tr></tbody></table></description></definition></section><a name="defflavor-options"></a>
+
+
+<section chapter-number="22" name="defflavor-options" number="8" title="Defflavor Options"><p>There are quite a few options to <obj>defflavor</obj>.  They are all described here,
+although some are for very specialized purposes and not of interest to most users.
+Each option can be written in two forms; either the keyword by itself, or a list
+of the keyword and arguments to that keyword.
+</p>
+
+<p>Several of these options declare things about instance variables.
+These options can be given with arguments which are instance variables,
+or without any arguments in which case they refer to all of the
+instance variables listed at the top of the <obj>defflavor</obj>.  This is
+<arg>not</arg> necessarily all the instance variables of the component
+flavors, just the ones mentioned in this flavor's <obj>defflavor</obj>.  When
+arguments are given, they must be instance variables that were listed
+at the top of the <obj>defflavor</obj>; otherwise they are assumed to be
+misspelled and an error is signaled.  It is legal to declare things
+about instance variables inherited from a component flavor, but to do
+so you must list these instance variables explicitly in the instance
+variable list at the top of the <obj>defflavor</obj>.
+</p>
+
+<table><tbody><tr><td><obj>:gettable-instance-variables</obj></td>
+<td><index-entry index="keywords" title=":gettable-instance-variables defflavor"></index-entry>
+Enables automatic generation of methods for getting the values of
+instance variables.  The operation name is the name of the variable, in
+the keyword package (i.e. it has a colon in front of it).
+
+Note that there is nothing special about these methods; you could easily
+define them yourself.  This option generates them automatically to save
+you the trouble of writing out a lot of very simple method definitions.
+(The same is true of methods defined by the
+<obj>:settable-instance-variables</obj> option.)  If you define a method for the
+same operation name as one of the automatically generated methods, the
+explicit definition overrides the automatic one.
+
+</td></tr><tr><td><obj>:settable-instance-variables</obj></td>
+<td><index-entry index="keywords" title=":settable-instance-variables defflavor"></index-entry>
+Enables automatic generation of methods for setting the values of
+instance variables.  The operation name is `<obj>:set-</obj>' followed by the
+name of the variable.  All settable instance
+variables are also automatically made gettable and inittable.
+(See the note in the description of the <obj>:gettable-instance-variables</obj>
+option, above.)
+
+In addition, <obj>:case</obj> methods are generated for the <obj>:set</obj> operation
+with suboperations taken from the names of the variables, so that
+<obj>:set</obj> can be used to set them.
+
+</td></tr><tr><td><obj>:inittable-instance-variables</obj></td>
+<td><index-entry index="keywords" title=":inittable-instance-variables defflavor"></index-entry>
+The instance variables listed as arguments, or all instance variables
+listed in this <obj>defflavor</obj> if the keyword is given alone, are made
+<arg>inittable</arg>.  This means that they can be initialized through use of a
+keyword (a colon followed by the name of the variable) as an init-option
+argument to <obj>make-instance</obj>.
+
+</td></tr><tr><td><obj>:special-instance-variables</obj></td>
+<td><index-entry index="keywords" title=":special-instance-variables defflavor"></index-entry>
+The instance variables listed as arguments, or all instance variables
+listed in this <obj>defflavor</obj> if the keyword is given alone, will
+be bound dynamically when handling messages.  (By default, instance
+variables are bound lexically with the scope being the method.)
+You must do this to any instance variables that you wish to be accessible
+through <obj>symeval</obj>, <obj>set</obj>, <obj>boundp</obj> and <obj>makunbound</obj>, since they
+see only dynamic bindings.
+
+This should also be done for any instance variables that are declared
+globally special.  If you omit this, the flavor system does it for
+you automatically when you instantiate the flavor, and gives you a
+warning to remind you to fix the <obj>defflavor</obj>.
+
+</td></tr><tr><td><obj>:init-keywords</obj></td>
+<td><index-entry index="keywords" title=":init-keywords defflavor"></index-entry>
+The arguments are declared to be valid keywords to use in
+<obj>instantiate-flavor</obj> when creating an instance of this flavor (or any
+flavor containing it).  The system uses this for error-checking: before
+the system sends the <obj>:init</obj> message, it makes sure that all the
+keywords in the init-plist are either inittable instance variables or
+elements of this list.  If any is not recognized, an error is signaled.
+When you write a <obj>:init</obj> method that accepts some keywords, they
+should be listed in the <obj>:init-keywords</obj> option of the flavor.
+
+If <obj>:allow-other-keys</obj> is used as an init keyword
+with a non-<obj>nil</obj> value, this error check is suppressed.
+Then unrecognized keywords are simply ignored.
+
+</td></tr><tr><td><obj>:default-init-plist</obj></td>
+<td><index-entry index="keywords" title=":default-init-plist defflavor"></index-entry>
+The arguments are alternating keywords and value forms, like a
+property list.  When the flavor is instantiated, these properties and
+values are put into the init-plist unless already present.  This allows
+one component flavor to default an option to another component flavor.
+The value forms are only evaluated when and if they are used.  For
+example,
+
+<lisp>(:default-init-plist :frob-array
+                     (make-array 100))
+</lisp>would provide a default ``frob array'' for any instance for which the
+user did not provide one explicitly.
+
+
+<lisp>(:default-init-plist :allow-other-keys t)
+</lisp>prevents errors for unhandled init keywords in all instantiation
+of this flavor and other flavors that depend on it.
+
+</td></tr><tr><td><obj>:required-init-keywords defflavor</obj></td><td>The arguments are init keywords which are to be required each time
+this flavor (or any flavor containing it) is instantiated.
+An error is signaled if any required init keyword is missing.
+
+</td></tr><tr><td><obj>:required-instance-variables</obj></td>
+<td><index-entry index="keywords" title=":required-instance-variables defflavor"></index-entry>
+Declares that any flavor incorporating this one that is instantiated
+into an object must contain the specified instance variables.
+An error occurs if there is an attempt to instantiate a flavor that
+incorporates this one if it does not have these in its set of instance
+variables.  Note that this option is not one of those that checks
+the spelling of its arguments in the way described at the start of this section
+(if it did, it would be useless).
+
+Required instance variables may be freely accessed by methods just like
+normal instance variables.  The difference between listing instance
+variables here and listing them at the front of the <obj>defflavor</obj> is
+that the latter declares that this flavor ``owns'' those variables and
+accepts responsibility for initializing them, while the former declares that this
+flavor depends on those variables but that some other flavor must be
+provided to manage them and whatever features they imply.
+
+</td></tr><tr><td><obj>:required-methods</obj></td>
+<td><index-entry index="keywords" title=":required-methods defflavor"></index-entry>
+The arguments are names of operations that any flavor incorporating this
+one must handle.  An error occurs if there is an attempt to instantiate
+such a flavor and it is lacking a method for one of these operations.
+Typically this option appears in the <obj>defflavor</obj> for a base flavor
+(see <ref definition-in-file="flavor" key="base-flavor" type="page"></ref>).  Usually this is used when a base flavor does a
+<obj>(send self ...)</obj> to send itself a message that is
+not handled by the base flavor itself; the idea is that the base flavor
+will not be instantiated alone, but only with other components (mixins)
+that do handle the message.  This keyword allows the error of having no
+handler for the message to be detected when the flavor instantiated or when
+<obj>compile-flavor-methods</obj> is done, rather than when the missing
+operation is used.
+
+</td></tr><tr><td><obj>:required-flavors</obj></td>
+<td><index-entry index="keywords" title=":required-flavors defflavor"></index-entry>
+The arguments are names of flavors that any flavor incorporating this one
+must include as components, directly or indirectly.  The difference between
+declaring flavors as required and listing them directly as components at the
+top of the <obj>defflavor</obj> is that declaring flavors to be required does not make
+any commitments about where those flavors will appear in the ordered list of
+components; that is left up to whoever does specify them as components.
+The purpose of declaring a flavor to be required is to allow
+instance variables declared by that flavor to be accessed.  It also provides
+error checking: an attempt to instantiate a flavor that does not include the
+required flavors as components signals an error.  Compare this with
+<obj>:required-methods</obj> and <obj>:required-instance-variables</obj>.
+
+For an example of the use of required flavors, consider the <obj>ship</obj>
+example given earlier, and suppose we want to define a <obj>relativity-mixin</obj>
+which increases the mass dependent on the speed.  We might write,
+
+<lisp>(defflavor relativity-mixin () (moving-object))
+(defmethod (relativity-mixin :mass) ()
+  (// mass (sqrt (- 1 (^ (// (send self :speed)
+                             *speed-of-light*)
+                         2)))))
+</lisp>but this would lose because any flavor that had <obj>relativity-mixin</obj>
+as a component would get <obj>moving-object</obj> right after it in its
+component list.  As a base flavor, <obj>moving-object</obj> should be last
+in the list of components so that other components mixed in can replace
+its methods and so that daemon methods combine in the right order.
+<obj>relativity-mixin</obj> has no business changing the order in which flavors
+are combined, which should be under the control of its caller.  For example,
+
+<lisp>(defflavor starship ()
+           (relativity-mixin long-distance-mixin ship))
+</lisp>puts <obj>moving-object</obj> last (inheriting it from <obj>ship</obj>).
+
+So instead of the definition above we write,
+
+<lisp>(defflavor relativity-mixin () ()
+        (:required-flavors moving-object))
+</lisp>which allows <obj>relativity-mixin</obj>'s methods to access <obj>moving-object</obj>
+instance variables such as <obj>mass</obj> (the rest mass), but does not
+specify any place for <obj>moving-object</obj> in the list of components.
+
+It is very common to specify the <arg>base flavor</arg> of a mixin with the
+<obj>:required-flavors</obj> option in this way.
+
+</td></tr><tr><td><obj>:included-flavors</obj></td>
+<td><index-entry index="keywords" title=":included-flavors defflavor"></index-entry>
+The arguments are names of flavors to be included in this flavor.  The difference
+between declaring flavors here and declaring them at the top of the <obj>defflavor</obj>
+is that when component flavors are combined, if an included flavor is not specified
+as a normal component, it is inserted into the list of components immediately after
+the last component to include it.  Thus included flavors act like defaults.
+The important thing is that if an included flavor <arg>is</arg> specified as a component,
+its position in the list of components is completely controlled by that specification,
+independently of where the flavor that includes it appears in the list.
+
+<obj>:included-flavors</obj> and <obj>:required-flavors</obj> are used in similar ways; it would
+have been reasonable to use <obj>:included-flavors</obj> in the <obj>relativity-mixin</obj>
+example above.  The difference is that when a flavor is required but not given
+as a normal component, an error is signaled, but when a flavor is included
+but not given as a normal component, it is automatically inserted into the list
+of components at a reasonable place.
+
+</td></tr><tr><td><obj>:no-vanilla-flavor</obj></td>
+<td><index-entry index="keywords" title=":no-vanilla-flavor defflavor"></index-entry>
+Normally when a flavor is instantiated, the special flavor
+<obj>si:vanilla-flavor</obj> is included automatically at the end of its list of
+components.  The vanilla flavor provides some default methods for the
+standard operations which all objects are supposed to understand.  These
+include <obj>:print-self</obj>, <obj>:describe</obj>, <obj>:which-operations</obj>, and several
+other operations.  See <ref chapter="22" definition-in-file="flavor" key="vanilla-flavor" section="10" title="Vanilla Flavor" type="section"></ref>.
+
+If any component of a flavor specifies the <obj>:no-vanilla-flavor</obj> option,
+then <obj>si:vanilla-flavor</obj> is not included in that flavor.  This option
+should not be used casually.
+
+</td></tr><tr><td><obj>:default-handler</obj></td>
+<td><index-entry index="keywords" title=":default-handler defflavor"></index-entry>
+The argument is the name of a function that is to be called to handle
+any operation for which there is no method.  Its arguments are
+the arguments of the <obj>send</obj> which invoked the operation,
+including the operation name as the first argument.  Whatever values
+the default handler returns are the values of the operation.
+
+Default handlers can be inherited from component flavors.  If a flavor
+has no default handler, any operation for which there is no method
+signals a <obj>sys:unclaimed-message</obj> error.
+
+</td></tr><tr><td><obj>:ordered-instance-variables</obj></td>
+<td><index-entry index="keywords" title=":ordered-instance-variables defflavor"></index-entry>
+This option is mostly for esoteric internal system uses.
+The arguments are names of instance variables which must appear first (and in this order)
+in all instances of this flavor, or any flavor depending on this flavor.
+This is used for instance variables that are specially known about by
+microcode, and also in connection with the <obj>:outside-accessible-instance-variables</obj>
+option.  If the keyword is given alone, the arguments default to the list
+of instance variables given at the top of this <obj>defflavor</obj>.
+
+Removing any of the <obj>:ordered-instance-variables</obj>, or changing their
+positions in the list, requires that you recompile all methods that use
+any of the affected instance variables.
+
+</td></tr><tr><td><obj>:outside-accessible-instance-variables</obj></td>
+<td><index-entry index="keywords" title=":outside-accessible-instance-variables defflavor"></index-entry>
+The arguments are instance variables which are to be accessible from
+outside of this flavor's methods.
+A macro (actually a subst) is defined which takes an object of
+this flavor as an argument and returns the value of the instance variable;
+<obj>setf</obj> may be used to set the value of the instance variable.  The name
+of the macro is the name of the flavor concatenated with a hyphen and the
+name of the instance variable.  These macros are similar to the accessor
+macros created by <obj>defstruct</obj> (see <ref chapter="21" definition-in-file="defstr" key="defstruct" section="0" title="Defstruct" type="section"></ref>.)
+
+This feature works in two different ways, depending on whether the instance
+variable has been declared to have a fixed slot in all instances, via the
+<obj>:ordered-instance-variables</obj> option.
+
+If the variable is not ordered, the position of its value cell in the
+instance must be computed at run time.  This takes noticeable
+time, although less than actually sending a message would take.  An
+error is signaled if the argument to the accessor macro is
+not an instance or is an instance that does not have an instance
+variable with the appropriate name.  However, there is no error check
+that the flavor of the instance is the flavor the accessor macro was
+defined for, or a flavor built upon that flavor.  This error check
+would be too expensive.
+
+If the variable is ordered, the compiler compiles a call to
+the accessor macro into a subprimitive which simply accesses that
+variable's assigned slot by number.  This subprimitive is only three
+or four times slower than <obj>car</obj>.  The only error-checking
+performed is to make sure that the argument is really an instance
+and is really big enough to contain that slot.  There is no check
+that the accessed slot really belongs to an instance variable of
+the appropriate name.
+
+</td></tr><tr><td><obj>:accessor-prefix</obj></td>
+<td><index-entry index="keywords" title=":accessor-prefix defflavor"></index-entry>
+Normally the accessor macro created by the <obj>:outside-accessible-instance-variables</obj>
+option to access the flavor <arg>f</arg>'s instance variable <arg>v</arg> is named <arg>f-v</arg>.
+Specifying <obj>(:accessor-prefix get$)</obj> causes it to be named <obj>get$<arg>v</arg></obj> instead.
+
+</td></tr><tr><td><obj>:alias-flavor</obj></td>
+<td><index-entry index="keywords" title=":alias-flavor defflavor"></index-entry>
+Marks this flavor as being an alias for another flavor.  This flavor
+should have only one component, which is the flavor it is an alias for,
+and no instance variables or other options.  No methods should be defined for it.
+
+The effect of the <obj>:alias-flavor</obj> option is that an attempt to instantiate
+this flavor actually produces an instance of the other flavor.  Without
+this option, it would make an instance of this flavor, which might behave
+identically to an instance of the other flavor.  <obj>:alias-flavor</obj> eliminates
+the need for separate mapping tables, method tables, etc. for this flavor,
+which becomes truly just another name for its component flavor.
+
+The alias flavor and its base flavor are also equivalent when used as
+an argument of <obj>subtypep</obj> or as the second argument of <obj>typep</obj>;
+however, if the alias status of a flavor is changed, you must
+recompile any code which uses it as the second argument to <obj>typep</obj>
+in order for such code to function.
+
+<obj>:alias-flavor</obj> is mainly useful for changing a flavor's name gracefully.
+
+</td></tr><tr><td><obj>:abstract-flavor</obj></td>
+<td><index-entry index="keywords" title=":abstract-flavor defflavor"></index-entry>
+This option marks the flavor as one that is not supposed to be
+instantiated (that is, is supposed to be used only as a component of other
+flavors).  An attempt to instantiate the flavor signals an error.
+
+It is sometimes useful to do <obj>compile-flavor-methods</obj> on a flavor that
+is not going to be instantiated, if the combined methods for this flavor
+will be inherited and shared by many others.  <obj>:abstract-flavor</obj> tells
+<obj>compile-flavor-methods</obj> not to complain about missing required
+flavors, methods or instance variables.  Presumably the flavors that
+depend on this one and actually are instantiated will supply what is
+lacking.
+
+</td></tr><tr><td><obj>:method-combination</obj></td>
+<td><index-entry index="keywords" title=":method-combination defflavor"></index-entry>
+Specifies the method combination style to be used for certain
+operations.
+Each argument to this option is a list <obj>(<arg>style order operation1 operation2</arg>...)</obj>.
+<arg>operation1</arg>, <arg>operation2</arg>, etc. are names of operations whose methods
+are to be combined in the declared fashion.  <arg>style</arg> is a keyword that
+specifies a style of combination; see <ref chapter="22" definition-in-file="flavor" key="method-combination" section="11" title="Method Combination" type="section"></ref>.  <arg>order</arg>
+is a keyword whose interpretation is up to <arg>style</arg>; typically it is
+either <obj>:base-flavor-first</obj> or <obj>:base-flavor-last</obj>.
+
+Any component of a flavor may specify the type of method combination to
+be used for a particular operation.  If no component specifies a style
+of method combination, then the default style is used, namely
+<obj>:daemon</obj>.  If more than one component of a flavor specifies the
+combination style for a given operation, then they must agree on the
+specification, or else an error is signaled.
+
+</td></tr><tr><td><obj>:instance-area-function defflavor</obj></td><td>The argument is the name of a function to be used when this flavor is
+instantiated, to determine which area to create the new instance in.
+Use a function name rather than an explicit lambda expression.
+
+<lisp>(:instance-area-function <arg>function-name</arg>)
+</lisp>
+When the instance area function is called, it is given the init plist as
+an argument, and should return an area number or <obj>nil</obj> to use the
+default.  Init keyword values can be accessed using <obj>get</obj> on the init
+plist.
+
+Instance area functions can be inherited from component flavors.
+If a flavor does not have or inherit an instance area function,
+its instances are created in <obj>default-cons-area</obj>.
+
+</td></tr><tr><td><obj>:instantiation-flavor-function defflavor</obj></td><td>You can define a flavor <obj>foo</obj> so that, when you try to instantiate it,
+it calls a function to decide what flavor it should really instantiate
+(not necessarily <obj>foo</obj>).  This is done by giving <obj>foo</obj> an
+instantiation flavor function:
+
+<lisp>(:instantiation-flavor-function <arg>function-name</arg>)
+</lisp>
+When <obj>(make-instance 'foo <arg>keyword-args</arg>...)</obj> is done, the
+instantiation flavor function is called with two arguments: the flavor
+name specified (<obj>foo</obj> in this case) and the init plist (the list of
+keyword args).  It should return the name of the flavor that should
+actually be instantiated.
+
+Note that the instantiation flavor function applies only to the flavor it is
+specified for.  It is not inherited by dependent flavors.
+
+</td></tr><tr><td><obj>:run-time-alternatives defflavor</obj></td><td></td></tr><tr><td><obj>:mixture defflavor</obj></td><td>A run-time-alternative flavor defines a collection of similar flavors,
+all built on the same base flavor but having various mixins as well.
+Instantiation chooses a flavor of the collection at run time based on
+the init keywords specified, using an automatically generated
+instantiation flavor function.
+
+A simple example would be
+
+<lisp>(defflavor foo () (basic-foo)
+  (:run-time-alternatives
+     (:big big-foo-mixin))
+  (:init-keywords :big))
+</lisp>
+Then <obj>(make-instance 'foo :big t)</obj> makes an instance of a flavor
+whose components are <obj>big-foo-mixin</obj> as well as <obj>foo</obj>.  But
+<obj>(make-instance 'foo)</obj> or <obj>(make-instance 'foo :big nil)</obj> makes an
+instance of <obj>foo</obj> itself.  The clause <obj>(:big big-foo-mixin)</obj> in the
+<obj>:run-time-alternatives</obj> says to incorporate <obj>big-foo-mixin</obj> if
+<obj>:big</obj>'s value is <obj>t</obj>, but not if it is <obj>nil</obj>.
+
+There may be several clauses in the <obj>:run-time-alternatives</obj>.  Each
+one is processed independently.  Thus, two keywords <obj>:big</obj> and
+<obj>:wide</obj> could independently control two mixins, giving four
+possibilities.
+
+<lisp>(defflavor foo () (basic-foo)
+  (:run-time-alternatives
+     (:big big-foo-mixin)
+     (:wide wide-foo-mixin))
+  (:init-keywords :big))
+</lisp>
+It is possible to test for values other than <obj>t</obj> and <obj>nil</obj>.  The clause
+
+<lisp>(:size (:big big-foo-mixin)
+       (:small small-foo-mixin)
+       (nil nil))
+</lisp>allows the value for the keyword <obj>:size</obj> to be <obj>:big</obj>, <obj>:small</obj> or <obj>nil</obj> (or omitted).
+If it is <obj>nil</obj> or omitted, no mixin is used (that's what the second <obj>nil</obj> means).
+If it is <obj>:big</obj> or <obj>:small</obj>, an appropriate mixin is used.  This kind of clause
+is distinguished from the simpler kind by having a list as its second element.
+The values to check for can be anything, but <obj>eq</obj> is used to compare them.
+
+The value of one keyword can control the interpretation of others
+by nesting clauses within clauses.  If an alternative has more than two elements,
+the additional elements are subclauses which are considered only if that
+alternative is selected.  For example, the clause
+
+<lisp>(:etherial (t etherial-mixin)
+           (nil nil
+                (:size (:big big-foo-mixin)
+                       (:small small-foo-mixin)
+                       (nil nil))))
+</lisp>says to consider the <obj>:size</obj> keyword only if <obj>:etherial</obj> is <obj>nil</obj>.
+
+<obj>:mixture</obj> is synonymous with <obj>:run-time-alternatives</obj>.  It exists
+for compatibility with Symbolics systems.
+
+</td></tr><tr><td><obj>:documentation</obj></td>
+<td><index-entry index="keywords" title=":documentation defflavor"></index-entry>
+Specifies the documentation string for the flavor definition, which is
+made accessible through <obj>(documentation <arg>flavorname</arg> 'flavor)</obj>.
+
+This documentation can be viewed with the <obj>describe-flavor</obj> function
+(see <ref definition-in-file="flavor" key="describe-flavor-fun" title="Function describe-flavor" type="fun"></ref>) or the editor's <obj>Meta-X Describe Flavor</obj>
+command (see <ref definition-in-file="flavor" key="describe-flavor-command" type="page"></ref>).
+
+Previously this option expected two arguments, a keyword and a string.
+The keyword was intended to classify the flavor as a base flavor,
+mixin or combination.  But no way was found for this classification
+to serve a useful purpose.  Keyword are still accepted but no longer
+recommended for use.
+
+</td></tr></tbody></table></section><a name="Flavor Families"></a>
+
+
+<section chapter-number="22" name="Flavor Families" number="9" title="Flavor Families"><index-entry index="concepts" title="base-flavor"></index-entry>
+
+<index-entry index="concepts" title="mixin"></index-entry>
+
+<p>The following organization conventions are recommended for programs that use flavors.
+</p>
+
+<p>A <arg>base flavor</arg> is a flavor that defines a whole family of related flavors,
+all of which have that base flavor as a component.
+Typically the base flavor includes things relevant to the whole family,
+such as instance variables, <obj>:required-methods</obj> and <obj>:required-instance-variables</obj>
+declarations, default methods for certain operations, <obj>:method-combination</obj>
+declarations, and documentation on the general protocols and conventions
+of the family.  Some base flavors are complete and can be instantiated, but
+most are not instantiatable and merely serve as a base upon which to build
+other flavors.  The base flavor for the <arg>foo</arg> family is often named <obj>basic-<arg>foo</arg></obj>.
+</p>
+
+<p>A <arg>mixin flavor</arg> is a flavor that defines one particular feature of an object.
+A mixin cannot be instantiated, because it is not a complete description.
+Each module or feature of a program
+is defined as a separate mixin; a usable flavor can be constructed by choosing
+the mixins for the desired characteristics and combining them, along with the
+appropriate base flavor.  By organizing your flavors this way, you keep separate
+features in separate flavors, and you can pick and choose among them.
+Sometimes the order of combining mixins does not matter,
+but often it does, because the order of flavor combination controls the order
+in which daemons are invoked and wrappers are wrapped.  Such order dependencies
+should be documented as part of the conventions of the appropriate family of flavors.
+A mixin flavor that provides the <arg>mumble</arg> feature is often named <arg>mumble<obj>-mixin</obj></arg>.
+</p>
+
+<p>If you are writing a program that uses someone else's facility to do something,
+using that facility's flavors and methods, your program may still define
+its own flavors, in a simple way.  The facility provides a base flavor and
+a set of mixins: the caller can combine these in various ways depending
+on exactly what it wants, since the facility probably does not provide all possible
+useful combinations.  Even if your private flavor has exactly the
+same components as a pre-existing flavor, it can still be useful since
+you can use its <obj>:default-init-plist</obj> (see <ref definition-in-file="flavor" key="default-init-plist-option" type="page"></ref>) to
+select options of its component flavors and you can define one or two methods
+to customize it ``just a little''.
+</p>
+</section><a name="vanilla-flavor"></a>
+
+
+<section chapter-number="22" name="vanilla-flavor" number="10" title="Vanilla Flavor"><p>The operations described in this section are a standard protocol, which all
+message-receiving objects are assumed to understand.  The standard methods
+that implement this protocol are automatically supplied by the flavor
+system unless the user specifically tells it not to do so.  These methods
+are associated with the flavor <obj>si:vanilla-flavor</obj>:
+</p>
+<definition>
+<define key="si:vanilla-flavor-flavor" name="si:vanilla-flavor" type="flavor"></define>
+
+<description>Unless you specify otherwise (with the <obj>:no-vanilla-flavor</obj> option to
+<obj>defflavor</obj>), every flavor includes the ``vanilla'' flavor, which has no
+instance variables but provides some basic useful methods.
+</description></definition><definition><define key=":print-self-message" name=":print-self" type="message"><args>stream prindepth escape-p</args>
+</define>
+
+<description>The object should output its printed-representation to a stream.  The
+printer sends this message when it encounters an instance or an entity.
+The arguments are the stream, the current depth in list-structure (for
+comparison with <obj>prinlevel</obj>), and whether escaping is enabled (a copy
+of the value of <obj>*print-escape*</obj>; see <ref definition-in-file="rdprt" key="*print-escape*-var" title="Variable *print-escape*" type="var"></ref>).
+<obj>si:vanilla-flavor</obj> ignores the last two arguments and prints something like
+<obj>#&lt;<arg>flavor-name octal-address</arg>&gt;</obj>.  The <arg>flavor-name</arg> tells you
+what type of object it is and the <arg>octal-address</arg> allows you to tell
+different objects apart (provided the garbage collector doesn't move
+them behind your back).
+</description></definition><definition>
+<define key=":describe-message" name=":describe" type="message"></define>
+
+<description>The object should describe itself, printing a description onto the
+<obj>*standard-output*</obj> stream.  The <obj>describe</obj> function sends this
+message when it encounters an instance.  <obj>si:vanilla-flavor</obj>
+outputs in a reasonable format the object, the name of its flavor, and
+the names and values of its instance-variables.
+</description></definition><definition><define key=":set-message" name=":set" type="message"><args>keyword value</args>
+</define>
+
+<description>The object should set the internal value specified by <arg>keyword</arg>
+to the new value <arg>value</arg>.  For flavor instances, the <obj>:set</obj>
+operation uses <obj>:case</obj> method combination, and a method is
+generated automatically to set each settable instance variable,
+with <arg>keyword</arg> being the variable's name as a keyword.
+</description></definition><definition>
+<define key=":which-operations-message" name=":which-operations" type="message"></define>
+
+<description>The object should return a list of the operations it can handle.
+<obj>si:vanilla-flavor</obj> generates the list once per flavor and remembers
+it, minimizing consing and compute-time.  If the set of operations
+handled is changed, this list is regenerated the next time someone asks
+for it.
+</description></definition><definition><define key=":operation-handled-p-message" name=":operation-handled-p" type="message"><args>operation</args>
+</define>
+
+<description><arg>operation</arg> is an operation name.  The object should return <obj>t</obj> if it
+has a handler for the specified operation, <obj>nil</obj> if it does not.
+</description></definition><definition><define key=":get-handler-for-message" name=":get-handler-for" type="message"><args>operation</args>
+</define>
+
+<description><arg>operation</arg> is an operation name.
+The object should return the method it uses to handle <arg>operation</arg>.
+If it has no handler for that operation, it should return <obj>nil</obj>.
+This is like the <obj>get-handler-for</obj> function (see <ref definition-in-file="flavor" key="get-handler-for-fun" title="Function get-handler-for" type="fun"></ref>),
+but, of course, you can use it only on objects known to accept messages.
+</description></definition><definition><define key=":send-if-handles-message" name=":send-if-handles" type="message"><args>operation <standard>&amp;rest</standard> arguments</args>
+</define>
+
+<description><arg>operation</arg> is an operation name and <arg>arguments</arg> is a list of
+arguments for the operation.  If the object handles the operation, it
+should send itself a message with that operation and arguments, and
+return whatever values that message returns.  If it doesn't handle the
+operation it should just return <obj>nil</obj>.
+</description></definition><definition><define key=":eval-inside-yourself-message" name=":eval-inside-yourself" type="message"><args>form</args>
+</define>
+
+<description>The argument is a form that is evaluated in an environment in which special
+variables with the names of the instance variables are bound to the values
+of the instance variables.  It works to <obj>setq</obj> one of these special variables;
+the instance variable is modified.  This is intended to be used mainly
+for debugging.
+</description></definition><definition><define key=":funcall-inside-yourself-message" name=":funcall-inside-yourself" type="message"><args>function <standard>&amp;rest</standard> args</args>
+</define>
+
+<description><arg>function</arg> is applied to <arg>args</arg> in an environment in which special
+variables with the names of the instance variables are bound to the values
+of the instance variables.  It works to <obj>setq</obj> one of these special variables;
+the instance variable is modified.  This is a way of allowing callers
+to provide actions to be performed in an environment set up by the instance.
+</description></definition><definition>
+<define key=":break-message" name=":break" type="message"></define>
+
+<description><obj>break</obj> is called in an environment in which special
+variables with the names of the instance variables are bound to the values
+of the instance variables.
+</description></definition></section><a name="method-combination"></a>
+
+
+<section chapter-number="22" name="method-combination" number="11" title="Method Combination"><index-entry index="concepts" title="method combination"></index-entry>
+
+<index-entry index="concepts" title="combined method"></index-entry>
+
+<p>When a flavor has or inherits more than one method for an operation,
+they must be called in a specific sequence.
+The flavor system creates a function called a <arg>combined method</arg>
+which calls all the user-specified methods in the proper order.
+Invocation of the operation actually calls the combined method,
+which is responsible for calling the others.
+</p>
+
+<p>For example, if the flavor <obj>foo</obj> has components and methods as follows:
+</p>
+
+<lisp>(defflavor foo () (foo-mixin foo-base))
+(defflavor foo-mixin () (bar-mixin))
+
+(defmethod (foo :before :hack) ...)
+(defmethod (foo :after :hack) ...)
+
+(defmethod (foo-mixin :before :hack) ...)
+(defmethod (foo-mixin :after :hack) ...)
+
+(defmethod (bar-mixin :before :hack) ...)
+(defmethod (bar-mixin :hack) ...)
+
+(defmethod (foo-base :hack) ...)
+(defmethod (foo-base :after :hack) ...)
+</lisp><nopara></nopara>
+<p>then the combined method generated looks like this (ignoring many
+important details not related to this issue):
+</p>
+
+<lisp>(defmethod (foo :combined :hack) (&amp;rest args)
+  (apply #'(:method foo :before :hack) args)
+  (apply #'(:method foo-mixin :before :hack) args)
+  (apply #'(:method bar-mixin :before :hack) args)
+  (multiple-value-prog1
+      (apply #'(:method bar-mixin :hack) args)
+    (apply #'(:method foo-base :after :hack) args)
+    (apply #'(:method foo-mixin :after :hack) args)
+    (apply #'(:method foo :after :hack) args)))
+</lisp>
+<index-entry index="concepts" title="method types"></index-entry>
+
+<index-entry index="concepts" title="untyped methods"></index-entry>
+
+<p>This example shows the default style of method combination, the one
+described in the introductory parts of this chapter, called <obj>:daemon</obj>
+combination.  Each style of method combination defines which <arg>method types</arg>
+it allows, and what they mean.  <obj>:daemon</obj> combination
+accepts method types <obj>:before</obj> and <obj>:after</obj>,
+in addition to <arg>untyped</arg> methods; then it creates a combined method which
+calls all the <obj>:before</obj> methods, only one of the untyped methods, and
+then all the <obj>:after</obj> methods, returning the value of the untyped
+method.  The combined method is constructed by a function much like a
+macro's expander function, and the precise technique used to create the
+combined method is what gives <obj>:before</obj> and <obj>:after</obj> their meaning.
+</p>
+
+<p>Note that the <obj>:before</obj> methods are called in the order <obj>foo</obj>,
+<obj>foo-mixin</obj>, <obj>bar-mixin</obj> and <obj>foo-base</obj>.  (<obj>foo-base</obj> does not
+have a <obj>:before</obj> method, but if it had one that one would be last.)
+This is the standard ordering of the components of the flavor <obj>foo</obj>
+(see <ref definition-in-file="flavor" key="flavor-components" type="page"></ref>); since it puts the base flavor last, it is
+called <obj>:base-flavor-last</obj> ordering.  The <obj>:after</obj> methods are
+called in the opposite order, in which the base flavor comes first.
+This is called <obj>:base-flavor-first</obj> ordering.
+</p>
+
+<index-entry index="concepts" title="primary method"></index-entry>
+
+<p>Only one of the untyped methods is used; it is the one that comes first
+in <obj>:base-flavor-last</obj> ordering.  An untyped method used in this way
+is called a <arg>primary</arg> method.
+</p>
+
+<p>Other styles of method combination define their own method types
+and have their own ways of combining them.  Use of another
+style of method combination is requested with the <obj>:method-combination</obj> option to
+<obj>defflavor</obj> (see <ref definition-in-file="flavor" key="method-combination-option" type="page"></ref>).  Here is an example
+which uses <obj>:list</obj> method combination, a style of combination
+that allows <obj>:list</obj> methods and untyped methods:
+</p>
+
+<lisp>(defflavor foo () (foo-mixin foo-base))
+(defflavor foo-mixin () (bar-mixin))
+(defflavor foo-base () ()
+  (:method-combination (:list :base-flavor-last :win)))
+
+(defmethod (foo :list :win) ...)
+(defmethod (foo :win) ...)
+
+(defmethod (foo-mixin :list :win) ...)
+
+(defmethod (bar-mixin :list :win) ...)
+(defmethod (bar-mixin :win) ...)
+
+(defmethod (foo-base :win) ...)
+
+<exdent amount="96"><caption>yielding the combined method </caption>
+(defmethod (foo :combined :win) (&amp;rest args)
+  (list
+    (apply #'(:method foo :list :win) args)
+    (apply #'(:method foo-mixin :list :win) args)
+    (apply #'(:method bar-mixin :list :win) args)
+    (apply #'(:method foo :win) args)
+    (apply #'(:method bar-mixin :win) args)
+    (apply #'(:method foo-base :win) args)))
+</exdent></lisp>
+<p>The <obj>:method-combination</obj> option in the <obj>defflavor</obj> for <obj>foo-base</obj>
+causes <obj>:list</obj> method combination to be used for the <obj>:win</obj>
+operation on all flavors that have <obj>foo-base</obj> as a component,
+including <obj>foo</obj>.  The result is a combined method which calls all the
+methods, including all the untyped methods rather than just one, and
+makes a list of the values they return.  All the <obj>:list</obj> methods are
+called first, followed by all the untyped methods; and within each type,
+the <obj>:base-flavor-last</obj> ordering is used as specified.  If the <obj>:method-combination</obj>
+option said <obj>:base-flavor-first</obj>, the relative order of the <obj>:list</obj>
+methods would be reversed, and so would the untyped methods, but
+the <obj>:list</obj> methods would still be called before the untyped ones.
+<obj>:base-flavor-last</obj> is more often right, since it means that
+<obj>foo</obj>'s own methods are called first and <obj>si:vanilla-flavor</obj>'s
+methods (if it has any) are called last.
+</p>
+
+<p>A few specific method types, such as <obj>:default</obj> and <obj>:around</obj>, have
+standard meanings independent of the style of method combination, and
+can be used with any style.  They are described in a table below.
+</p>
+
+<p>Here are the standardly defined method combination styles.
+</p>
+
+<table><tbody><tr><td><obj>:daemon</obj></td><td>The default style of method combination.  All the <obj>:before</obj>
+methods are called, then the primary (untyped) method for the outermost
+flavor that has one is called, then all the <obj>:after</obj> methods are
+called.  The value returned is the value of the primary method.
+
+</td></tr><tr><td><obj>:daemon-with-or</obj></td><td>Like the <obj>:daemon</obj> method combination style, except that the primary
+method is wrapped in an <obj>:or</obj> special form with all <obj>:or</obj> methods.
+Multiple values can be returned from the primary method, but not from
+the <obj>:or</obj> methods (as in the <obj>or</obj> special form).  This produces
+code like the following in combined methods:
+
+<lisp>(progn (foo-before-method)
+       (multiple-value-prog1
+         (or (foo-or-method)
+             (foo-primary-method))
+         (foo-after-method)))
+</lisp>
+This is useful primarily for flavors in which a mixin introduces an
+alternative to the primary method.  Each <obj>:or</obj> method gets a chance
+to run before the primary method and to decide whether the primary
+method should be run or not; if any <obj>:or</obj> method returns a non-<obj>nil</obj>
+value, the primary method is not run (nor are the rest of the <obj>:or</obj>
+methods).  Note that the ordering of the combination of the <obj>:or</obj> methods
+is controlled by the <arg>order</arg> keyword in the <obj>:method-combination</obj> option.
+
+</td></tr><tr><td><obj>:daemon-with-and</obj></td><td>Like <obj>:daemon-with-or</obj> except that it combines <obj>:and</obj> methods
+in an <obj>and</obj> special form.  The primary method is run only
+if all of the <obj>:and</obj> methods return non-<obj>nil</obj> values.
+
+</td></tr><tr><td><obj>:daemon-with-override</obj></td><td>Like the <obj>:daemon</obj> method combination style, except an <obj>or</obj>
+special form is wrapped around the entire combined method with all
+<obj>:override</obj> typed methods before the combined method.  This differs
+from <obj>:daemon-with-or</obj> in that the <obj>:before</obj> and <obj>:after</obj> daemons
+are run only if <arg>none</arg> of the <obj>:override</obj> methods returns
+non-<obj>nil</obj>.  The combined method looks something like this:
+
+<lisp>(or (foo-override-method)
+    (progn (foo-before-method)
+           (foo-primary-method)
+           (foo-after-method)))
+</lisp>
+</td></tr><tr><td><obj>:progn</obj></td><td>Calls all the methods inside a <obj>progn</obj> special form.  Only
+untyped and <obj>:progn</obj> methods are allowed.  The combined method calls
+all the <obj>:progn</obj> methods and then all the untyped methods.  The result
+of the combined method is whatever the last of the methods returns.
+
+</td></tr><tr><td><obj>:or</obj></td><td>Calls all the methods inside an <obj>or</obj> special form.  This means
+that each of the methods is called in turn.  Only untyped methods and
+<obj>:or</obj> methods are allowed; the <obj>:or</obj> methods are called first.  If a
+method returns a non-<obj>nil</obj> value, that value is returned and none of
+the rest of the methods are called; otherwise, the next method is
+called.  In other words, each method is given a chance to handle the
+message; if it doesn't want to handle the message, it can return
+<obj>nil</obj>, and the next method gets a chance to try.
+
+</td></tr><tr><td><obj>:and</obj></td><td>Calls all the methods inside an <obj>and</obj> special form.  Only
+untyped methods and <obj>:and</obj> methods are allowed.  The basic idea is
+much like <obj>:or</obj>; see above.
+
+</td></tr><tr><td><obj>:append</obj></td><td>Calls all the methods and appends the values together.
+Only untyped methods and <obj>:append</obj> methods are allowed; the
+<obj>:append</obj> methods are called first.
+
+</td></tr><tr><td><obj>:nconc</obj></td><td>Calls all the methods and <obj>nconc</obj>'s the values together.
+Only untyped methods and <obj>:nconc</obj> methods are allowed, etc.
+
+</td></tr><tr><td><obj>:list</obj></td><td>Calls all the methods and returns a list of their returned values.
+Only untyped methods and <obj>:list</obj> methods are allowed, etc.
+
+</td></tr><tr><td><obj>:inverse-list</obj></td><td>Calls each method with one argument; these arguments are successive
+elements of the list that is the sole argument to the operation.
+Returns no particular value.  Only untyped methods and <obj>:inverse-list</obj>
+methods are allowed, etc.
+
+If the result of a <obj>:list</obj>-combined operation is
+sent back with an <obj>:inverse-list</obj>-combined operation, with the same
+ordering and with corresponding method definitions, each component
+flavor receives the value that came from that flavor.
+
+</td></tr><tr><td><obj>:pass-on</obj></td><td>Calls each method on the values returned by the preceeding one.  The values
+returned by the combined method are those of the outermost call.  The format
+of the declaration in the <obj>defflavor</obj> is:
+
+<lisp>(:method-combination (:pass-on (<arg>ordering</arg> . <arg>arglist</arg>))
+                     . <arg>operation-names</arg>)
+</lisp>
+where <arg>ordering</arg> is <obj>:base-flavor-first</obj> or <obj>:base-flavor-last</obj>.
+<arg>arglist</arg> may include the <obj>&amp;aux</obj> and <obj>&amp;optional</obj> keywords.
+
+Only untyped methods and <obj>:pass-on</obj> methods are allowed.
+The <obj>:pass-on</obj> methods are called first.
+
+</td></tr><tr><td><obj>:case</obj></td><td>With <obj>:case</obj> method combination, the combined method automatically
+does a <obj>selectq</obj> dispatch on the first argument of the operation,
+known as the <arg>suboperation</arg>.  Methods of type <obj>:case</obj> can be used,
+and each one specifies one suboperation that it applies to.  If no
+<obj>:case</obj> method matches the suboperation, the primary method, if any,
+is called.
+
+
+<lisp><exdent amount="96"><caption>Example: </caption>(defflavor foo (a b) ()
+  (:method-combination (:case :base-flavor-last :win)))
+
+</exdent><exdent amount="96"><caption>This method handles <obj>(send a-foo :win :a)</obj>: </caption>(defmethod (foo :case :win :a) ()
+  a)
+
+</exdent><exdent amount="96"><caption>This method handles <obj>(send a-foo :win :a*b)</obj>: </caption>(defmethod (foo :case :win :a*b) ()
+  (* a b))
+
+</exdent><exdent amount="96"><caption>This method handles <obj>(send a-foo :win :something-else)</obj>: </caption>(defmethod (foo :win) (suboperation)
+  (list 'something-random suboperation))
+</exdent></lisp>
+<obj>:case</obj> methods are unusual in that one flavor can have many <obj>:case</obj>
+methods for the same operation, as long as they are for different
+suboperations.
+
+The suboperations <obj>:which-operations</obj>, <obj>:operation-handled-p</obj>,
+<obj>:send-if-handles</obj> and <obj>:get-handler-for</obj> are all handled
+automatically based on the collection of <obj>:case</obj> methods that are
+present.
+
+Methods of type <obj>:or</obj> are also allowed.  They are called just before
+the primary method, and if one of them returns a non-<obj>nil</obj> value, that
+is the value of the operation, and no more methods are called.
+</td></tr></tbody></table>
+<p>Here is a table of all the method types recognized by the standard
+styles of method combination.
+</p>
+
+<table><tbody><tr><td><obj><standard>(no type)</standard></obj></td><td>If no type is given to <obj>defmethod</obj>, a primary method is created.
+This is the most common type of method.
+
+</td></tr><tr><td><obj>:before</obj></td><td></td></tr><tr><td><obj>:after</obj></td><td>Used for the before-daemon and after-daemon
+methods used by <obj>:daemon</obj> method combination.
+
+</td></tr><tr><td><obj>:default</obj></td><td>If there are no untyped methods among any of the flavors being combined,
+then the <obj>:default</obj> methods (if any) are treated as if they were untyped.
+If there are any untyped methods, the <obj>:default</obj> methods are ignored.
+
+Typically a base-flavor (see <ref definition-in-file="flavor" key="base-flavor" type="page"></ref>) defines some default
+methods for certain of the operations understood by its family.  When
+using the default kind of method combination these default methods are
+suppressed if another component provides a primary method.
+
+</td></tr><tr><td><obj>:or</obj></td><td></td></tr><tr><td><obj>:and</obj></td><td>Used for <obj>:daemon-with-or</obj> and <obj>:daemon-with-and</obj>
+method combination.  The <obj>:or</obj> methods are wrapped in an <obj>or</obj>,
+or the <obj>:and</obj> methods are wrapped in an <obj>and</obj>, together
+with the primary method, between the <obj>:before</obj> and <obj>:after</obj> methods.
+
+</td></tr><tr><td><obj>:override</obj></td><td>Allows the features of <obj>:or</obj> method combination to
+be used together with daemons.  If you specify
+<obj>:daemon-with-override</obj> method combination, you may use
+<obj>:override</obj> methods.  The <obj>:override</obj> methods are executed first, until
+one of them returns non-<obj>nil</obj>.  If this happens, that method's value(s)
+are returned and no more methods are used.  If all the <obj>:override</obj>
+methods return <obj>nil</obj>, the <obj>:before</obj>, primary and <obj>:after</obj> methods are
+executed as usual.
+
+In typical usages of this feature, the
+<obj>:override</obj> method usually returns <obj>nil</obj> and does nothing,
+but in exceptional circumstances it takes over the handling of the
+operation.
+
+</td></tr><tr><td><obj>:or<standard>, </standard>:and<standard>, </standard>:progn<standard>, </standard>:list<standard>, </standard>:inverse-list<standard>, </standard>pass-on<standard>, </standard>:append<standard>, </standard>:nconc<standard>.</standard></obj></td><td>Each of these methods types is allowed in the method combination style
+of the same name.  In those method combination styles, these typed
+methods work just like untyped ones, but all the typed methods are
+called before all the untyped ones.
+
+</td></tr><tr><td><obj>:case</obj></td><td><obj>:case</obj> methods are used by <obj>:case</obj> method combination.
+</td></tr></tbody></table><nopara></nopara>
+<p>These method types can be used with any method combination style; they
+have standard meanings independent of the method combination style being
+used.
+</p>
+
+<table><tbody><tr><td><obj>:around</obj></td><td>An <obj>:around</obj> method is able to control when, whether and how the
+remaining methods are executed.  It is given a continuation that is a
+function that will execute the remaining methods, and has complete
+responsibility for calling it or not, and deciding what arguments to give
+it.  For the simplest behavior, the arguments should be the operation name
+and operation arguments that the <obj>:around</obj> method itself received; but
+sometimes the whole purpose of the <obj>:around</obj> method is to modify the
+arguments before the remaining methods see them.
+
+The <obj>:around</obj> method receives three special arguments before the
+arguments of the operation itself: the <arg>continuation</arg>, the
+<arg>mapping-table</arg>, and the <arg>original-argument-list</arg>.  The last is a list
+of the operation name and operation arguments.  The simplest way
+for the <obj>:around</obj> method to invoke the remaining methods is to do
+
+<lisp>(lexpr-funcall-with-mapping-table
+  <arg>continuation</arg> <arg>mapping-table</arg>
+  <arg>original-argument-list</arg>)
+</lisp>In general, the <arg>continuation</arg> should be called with either
+<obj>funcall-with-mapping-table</obj> or <obj>lexpr-funcall-with-mapping-table</obj>,
+providing the <arg>continuation</arg>, the <arg>mapping-table</arg>, and the operation name
+(which you know because it is the same as in the <obj>defmethod</obj>), followed
+by whatever arguments the remaining methods are supposed to see.
+
+
+<lisp>(defflavor foo-one-bigger-mixin () ())
+
+(defmethod (foo-one-bigger-mixin :around :set-foo)
+           (cont mt ignore new-foo)
+  (funcall-with-mapping-table cont mt :set-foo
+                              (1+ new-foo)))
+</lisp>
+is a mixin which modifies the <obj>:set-foo</obj> operation so that the value
+actually used in it is one greater than the value specified in the message.
+
+</td></tr><tr><td><obj>:inverse-around</obj></td><td><obj>:inverse-around</obj> methods work like <obj>:around</obj> methods, but they are
+invoked at a different time and in a different order.
+
+With <obj>:around</obj> methods, those of earlier flavor components components
+are invoked first, starting with the instantiated flavor itself, and
+those of earlier components are invoked within them.
+<obj>:inverse-around</obj> methods are invoked in the opposite order:
+<obj>si:vanilla-flavor</obj> would come first.  Also, all <obj>:around</obj> methods
+and wrappers are invoked inside all the <obj>:inverse-around</obj> methods.
+
+For example, the <obj>:inverse-around</obj> <obj>:init</obj> method for <obj>tv:sheet</obj> (a base
+flavor for all window flavors) is used to handle the init keywords
+<obj>:expose-p</obj> and <obj>:activate-p</obj>, which cannot be handled correctly
+until the window is entirely set up.  They are handled in this method
+because it is guaranteed to be the first method invoked by the <obj>:init</obj>
+operation on any flavor of window (because no component of <obj>tv:sheet</obj>
+defines an <obj>:inverse-around</obj> method for this operation).  All the rest
+of the work of making a new window valid takes place in this method's
+continuation; when the continuation returns, the window must be as valid
+as it will ever be, and it is ready to be exposed or activated.
+
+</td></tr><tr><td><obj>:wrapper</obj></td><td>Used internally by <obj>defwrapper</obj>.
+
+Note that if one flavor defines both a wrapper and an <obj>:around</obj> method
+for the same operation, the <obj>:around</obj> method is executed inside the
+wrapper.
+
+</td></tr><tr><td><obj>:combined</obj></td><td>Used internally for automatically-generated <arg>combined</arg> methods.
+</td></tr></tbody></table>
+<p>The most common form of combination is <obj>:daemon</obj>.  One thing may not
+be clear: when do you use a <obj>:before</obj> daemon and when do you use an <obj>:after</obj>
+daemon?  In some cases the primary method performs a clearly-defined
+action and the choice is obvious:  <obj>:before :launch-rocket</obj> puts in the
+fuel, and <obj>:after :launch-rocket</obj> turns on the radar tracking.
+</p>
+
+<p>In other cases the choice can be less obvious.  Consider the <obj>:init</obj>
+message, which is sent to a newly-created object.  To decide what kind
+of daemon to use, we observe the order in which daemon methods are
+called.  First the <obj>:before</obj> daemon of the instantiated flavor
+is called, then <obj>:before</obj> daemons of successively more basic
+flavors are called, and finally the <obj>:before</obj> daemon (if
+any) of the base flavor is called.  Then the primary method is called.
+After that, the <obj>:after</obj> daemon for the base flavor is
+called, followed by the <obj>:after</obj> daemons at successively less
+basic flavors.
+</p>
+
+<p>Now, if there is no interaction among all these methods, if their
+actions are completely independent, then it doesn't matter whether you
+use a <obj>:before</obj> daemon or an <obj>:after</obj> daemon.  There is a difference
+if there is some interaction.  The interaction we are talking about is
+usually done through instance variables; in general, instance variables
+are how the methods of different component flavors communicate with each
+other.  In the case of the <obj>:init</obj> operation, the <arg>init-plist</arg> can be
+used as well.  The important thing to remember is that no method knows
+beforehand which other flavors have been mixed in to form this flavor; a
+method cannot make any assumptions about how this flavor has been
+combined, and in what order the various components are mixed.
+</p>
+
+<p>This means that when a <obj>:before</obj> daemon has run, it must assume that
+none of the methods for this operation have run yet.  But the <obj>:after</obj>
+daemon knows that the <obj>:before</obj> daemon for each of the other flavors
+has run.  So if one flavor wants to convey information to the other, the
+first one should ``transmit'' the information in a <obj>:before</obj> daemon, and
+the second one should ``receive'' it in an <obj>:after</obj> daemon.  So while
+the <obj>:before</obj> daemons are run, information is ``transmitted''; that is,
+instance variables get set up.  Then, when the <obj>:after</obj> daemons are
+run, they can look at the instance variables and act on their values.
+</p>
+
+<p>In the case of the <obj>:init</obj> method, the <obj>:before</obj> daemons typically set up
+instance variables of the object based on the init-plist, while the
+<obj>:after</obj> daemons actually do things, relying on the fact that all of the
+instance variables have been initialized by the time they are called.
+</p>
+
+<p>The problems become most difficult when you are creating a network of
+instances of various flavors that are supposed to point to each other.
+For example, suppose you have flavors for ``buffers'' and ``streams'', and
+each buffer should be accompanied by a stream.  If you create the stream
+in the <obj>:before</obj> <obj>:init</obj> method for buffers, you can inform the
+stream of its corresponding buffer with an init keyword, but the stream
+may try sending messages back to the buffer, which is not yet ready to
+be used.  If you create the stream in the <obj>:after</obj> <obj>:init</obj> method
+for buffers, there will be no problem with stream creation, but some
+other <obj>:after</obj> <obj>:init</obj> methods of other mixins may have run and made
+the assumption that there is to be no stream.  The only way to guarantee
+success is to create the stream in a <obj>:before</obj> method and inform it of
+its associated buffer by sending it a message from the buffer's
+<obj>:after</obj> <obj>:init</obj> method.  This scheme--creating associated objects
+in <obj>:before</obj> methods but linking them up in <obj>:after</obj> methods--often
+avoids problems, because all the various associated objects used by
+various mixins at least exist when it is time to make other objects
+point to them.
+</p>
+
+<p>Since flavors are not hierarchically organized, the notion of
+levels of abstraction is not rigidly applicable.  However, it remains a
+useful way of thinking about systems.
+</p>
+</section><a name="Implementation of Flavors"></a>
+
+
+<section chapter-number="22" name="Implementation of Flavors" number="12" title="Implementation of Flavors"><p>An object that is an instance of a flavor is implemented using the
+data type <obj>dtp-instance</obj>.  The representation is a structure whose
+first word, tagged with <obj>dtp-instance-header</obj>, points to a structure
+(known to the microcode as an ``instance descriptor'') containing the
+internal data for the flavor.  The remaining words of the structure are value cells
+containing the values of the instance variables.  The instance descriptor
+is a <obj>defstruct</obj> that appears on the <obj>si:flavor</obj> property of the flavor
+name.  It contains, among other things, the name of the flavor, the
+size of an instance, the table of methods for handling operations, and
+information for accessing the instance variables.
+</p>
+
+<p><obj>defflavor</obj> creates such a data structure for each flavor, and
+links them together according to the dependency relationships
+between flavors.
+</p>
+
+<p>A message is sent to an instance simply by calling it as a function,
+with the first argument being the operation.
+The microcode binds <obj>self</obj> to the object and binds those instance
+variables that are supposed to be special to the value
+cells in the instance.  Then it
+passes on the operation and arguments to a funcallable hash table taken
+from the flavor-structure for this flavor.
+</p>
+
+<p>When the funcallable hash table is called as a function, it hashes the
+first argument (the operation) to find a function to handle the operation
+and an array called a mapping table.  The variable
+<obj>sys:self-mapping-table</obj> is bound to the mapping table, which tells
+the microcode how to access the lexical instance variables, those not
+defined to be special.  Then the function is called.  If there is only
+one method to be invoked, this function is that method; otherwise it is
+an automatically-generated function called the combined method (see
+<ref definition-in-file="flavor" key="combined-method" type="page"></ref>),
+which calls the appropriate methods in the right order.
+If there are wrappers, they are incorporated into this combined
+method.
+</p>
+
+<p>The mapping table is an array whose elements correspond to the instance
+variables which can be accessed by the flavor to which the currently
+executing method belongs.  Each element contains the position in
+<obj>self</obj> of that instance variable.  This position varies with the other
+instance variables and component flavors of the flavor of <obj>self</obj>.
+</p>
+
+<p>Each time the combined method calls another method, it sets up the
+mapping table required by that method--not in general the same
+one which the combined method itself uses.  The mapping tables for the
+called methods are extracted from the array leader of the mapping table
+used by the combined method, which is kept in a local variable of the
+combined method's stack frame while <obj>sys:self-mapping-table</obj> is set to
+the mapping tables for the component methods.
+</p>
+<definition>
+<define key="sys:self-mapping-table-var" name="sys:self-mapping-table" type="var"></define>
+
+<description>Holds the current mapping table, which tells the running
+flavor method where in <obj>self</obj> to find each instance variable.
+</description></definition>
+<p>Ordered instance variables are referred to directly without going
+through the mapping table.  This is a little faster, and reduces the
+amount of space needed for mapping tables.  It is also the reason why
+compiled code contains the positions of the ordered instance variables
+and must be recompiled when they change.
+</p>
+
+
+
+<subsection name="NIL" title="Order of Definition"><p>There is a certain amount of freedom to the order in which you do <obj>defflavor</obj>'s,
+<obj>defmethod</obj>'s, and <obj>defwrapper</obj>'s.  This freedom is designed to make it easy
+to load programs containing complex flavor structures without having to do things
+in a certain order.  It is considered important that not all the methods for a flavor
+need be defined in the same file.  Thus the partitioning of a program into files
+can be along modular lines.
+</p>
+
+<p>The rules for the order of definition are as follows.
+</p>
+
+<p>Before a method can be defined (with <obj>defmethod</obj> or <obj>defwrapper</obj>) its flavor
+must have been defined (with <obj>defflavor</obj>).  This makes sense because the system
+has to have a place to remember the method, and because it has to know the
+instance-variables of the flavor if the method is to be compiled.
+</p>
+
+<p>When a flavor is defined (with <obj>defflavor</obj>) it is not necessary that
+all of its component flavors be defined already.  This is to allow
+<obj>defflavor</obj>'s to be spread between files according to the modularity
+of a program, and to provide for mutually-dependent flavors.
+Methods can be defined for a flavor some of whose component flavors are
+not yet defined; however, in certain cases compiling those methods may
+produce a warning that an instance variable was declared
+special (because the system did not realize it was an instance
+variable).  If this happens, you should fix the problem and recompile.
+</p>
+
+<p>The methods automatically generated by the <obj>:gettable-instance-variables</obj>
+and <obj>:settable-instance-variables</obj> <obj>defflavor</obj> options
+(see <ref definition-in-file="flavor" key="gettable-instance-variables-option" type="page"></ref>) are generated at the time
+the <obj>defflavor</obj> is done.
+</p>
+
+<p>The first time a flavor is instantiated, or when
+<obj>compile-flavor-methods</obj> is done, the system looks through all of the
+component flavors and gathers various information.  At this point an
+error is signaled if not all of the components have been
+<obj>defflavor</obj>'ed.  This is also the time at which certain other errors
+are detected, for instance lack of a required instance-variable (see the
+<obj>:required-instance-variables</obj> <obj>defflavor</obj> option,
+<ref definition-in-file="flavor" key="required-instance-variables-option" type="page"></ref>).  The combined methods (see
+<ref definition-in-file="flavor" key="combined-method" type="page"></ref>) are generated at this time also, unless they already
+exist.
+</p>
+
+<p>After a flavor has been instantiated, it is possible to make changes to it.
+Such changes affect all existing instances if possible.  This is
+described more fully immediately below.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Changing a Flavor"><p>You can change anything about a flavor at any time.  You can change the
+flavor's general attributes by doing another <obj>defflavor</obj> with the same
+name.  You can add or modify methods by doing <obj>defmethod</obj>'s.  If you
+do a <obj>defmethod</obj> with the same flavor-name, operation (and
+suboperation if any), and (optional) method-type as an existing method,
+that method is replaced by the new definition.  You can remove a
+method with <obj>undefmethod</obj> (see <ref definition-in-file="flavor" key="undefmethod-fun" title="Macro undefmethod" type="mac"></ref>).
+</p>
+
+<p>These changes always propagate to all flavors that depend upon the
+changed flavor.  Normally the system propagates the changes to all
+existing instances of the changed flavor and its dependent flavors.
+However, this is not possible when the flavor has been changed so
+drastically that the old instances would not work properly with the new
+flavor.  This happens if you change the number of instance variables,
+which changes the size of an instance.  It also happens if you change
+the order of the instance variables (and hence the storage layout of an
+instance), or if you change the component flavors (which can change
+several subtle aspects of an instance).  The system does not keep a list
+of all the instances of each flavor, so it cannot find the instances and
+modify them to conform to the new flavor definition.  Instead it gives
+you a warning message, on the <obj>*error-output*</obj> stream, to the effect
+that the flavor was changed incompatibly and the old instances will not
+get the new version.  The system leaves the old flavor data-structure
+intact (the old instances continue to point at it) and makes a new
+one to contain the new version of the flavor.  If a less drastic change
+is made, the system modifies the original flavor data-structure, thus
+affecting the old instances that point at it.  However, if you redefine
+methods in such a way that they only work for the new version of the
+flavor, then trying to use those methods with the old instances won't
+work.
+</p>
+</subsection></section><a name="Useful Editor Commands"></a>
+
+
+<section chapter-number="22" name="Useful Editor Commands" number="13" title="Useful Editor Commands"><p>This section briefly documents
+some editor commands that are useful in conjunction with flavors.
+</p>
+
+<table><tbody><tr><td><obj>Meta-.</obj></td><td>The <obj>Meta-.</obj> (<obj>Edit Definition</obj>) command can find the definition of a flavor
+in the same way that it can find the definition of a function.
+
+<obj>Edit Definition</obj> can find the definition of a method if you give it
+a suitable function spec starting with <obj>:method</obj>, such as <obj>(:method
+tv:sheet :expose)</obj>.  The keyword <obj>:method</obj> may be omitted if the
+definition is in the editor already.  Completion is available on the
+flavor name and operation name, as usual only for definitions
+loaded into the editor.
+
+</td></tr><tr><td><obj>Meta-X Describe Flavor</obj></td><td>Asks for a flavor name in the mini-buffer and describes its characteristics.
+When typing the flavor name you have completion over the names of all defined
+flavors (thus this command can be used to aid in guessing the name of a flavor).
+The display produced is mouse sensitive where there are names of flavors and
+of methods; as usual the right-hand mouse button gives you a menu of
+editor commands to apply to the name
+and the left-hand mouse button does one of them, typically positioning
+the editor to the source code for that name.
+
+</td></tr><tr><td><obj>Meta-X List Methods</obj></td><td></td></tr><tr><td><obj>Meta-X Edit Methods</obj></td><td>Asks you for an operation in the mini-buffer and lists all the flavors
+that have a method for that operation.  You may type in the operation name,
+point to it with the mouse, or let it default to the operation of the message
+being sent by the Lisp form the cursor is on.  <obj>List Methods</obj>
+produces a mouse-sensitive display allowing you to edit selected methods
+or just to see which flavors have methods, while <obj>Edit Methods</obj> skips the
+display and proceeds directly to editing the methods.
+
+As usual with this type of command, the editor command <obj>Control-Shift-P</obj>
+advances the editor cursor to the next method in the list, reading in
+its source file if necessary.  Typing <obj>Control-Shift-P</obj>, while the display
+is on the screen, edits the first method.
+
+In addition, you can find a copy of the list in the editor buffer
+<obj>*Possibilities*</obj>.  While in that buffer, the command <obj>Control-/</obj>
+visits the definition of the method described on the line the cursor is
+pointing at.
+
+These techniques of moving through the objects listed apply to all the
+following commands as well.
+
+</td></tr><tr><td><obj>Meta-X List Combined Methods</obj></td><td></td></tr><tr><td><obj>Meta-X Edit Combined Methods</obj></td><td>Asks you for an operation name and a flavor in two mini-buffers and lists all
+the methods that would be called to handle that operation for an instance of that
+flavor.
+
+<obj>List Combined Methods</obj> can be very useful for telling what a flavor
+will do in response to a message.  It shows you the primary method,
+the daemons, and the wrappers and lets you see the code for all of
+them; type <obj>Control-Shift-P</obj> to get to successive ones.
+
+</td></tr><tr><td><obj>Meta-X List Flavor Components</obj></td><td></td></tr><tr><td><obj>Meta-X Edit Flavor Components</obj></td><td>Asks you for a flavor and lists or begins visiting all the flavors it depends on.
+
+</td></tr><tr><td><obj>Meta-X List Flavor Dependents</obj></td><td></td></tr><tr><td><obj>Meta-X Edit Flavor Dependents</obj></td><td>Asks you for a flavor and lists or begins visiting all the flavors that depend on it.
+
+</td></tr><tr><td><obj>Meta-X List Flavor Direct Dependents</obj></td><td></td></tr><tr><td><obj>Meta-X Edit Flavor Direct Dependents</obj></td><td>Asks you for a flavor and lists or begins visiting all the flavors
+that depend directly on it.
+
+</td></tr><tr><td><obj>Meta-X List Flavor Methods</obj></td><td></td></tr><tr><td><obj>Meta-X Edit Flavor Methods</obj></td><td>Asks you for a flavor and lists or begins visiting all the methods defined
+for that flavor.  (This does not include methods inherited from its component
+flavors.)
+</td></tr></tbody></table></section><a name="Property List Operations"></a>
+
+
+<section chapter-number="22" name="Property List Operations" number="14" title="Property List Operations"><p>It is often useful to associate a property list with an abstract object,
+for the same reasons that it is useful to have a property list
+associated with a symbol.  This section describes a mixin flavor that
+can be used as a component of any new flavor in order to provide that
+new flavor with a property list.  For more details and examples, see the
+general discussion of property lists (<ref chapter="5" definition-in-file="fd-con" key="plist" section="10" title="Property Lists" type="section"></ref>).  The usual property
+list functions (<obj>get</obj>, <obj>putprop</obj>, etc.) all work on instances by
+sending the instance the corresponding message.
+</p>
+<definition>
+<define key="si:property-list-mixin-flavor" name="si:property-list-mixin" type="flavor"></define>
+
+<description>This mixin flavor provides the basic operations on property lists.
+</description></definition><definition><define key="si:property-list-mixin-get-method" name="si:property-list-mixin" type="method"><args>property-name <standard>&amp;optional</standard> default</args>
+</define>
+
+<description>Looks up the object's <arg>property-name</arg> property.
+If it finds such a property, it returns the value; otherwise it
+returns <arg>default</arg>.
+</description></definition><definition><define key="si:property-list-mixin-getl-method" name="si:property-list-mixin" type="method"><args>property-name-list</args>
+</define>
+
+<description>Like the <obj>:get</obj> operation, except that the
+argument is a list of property names.  The <obj>:getl</obj> operation searches
+down the property list until it finds a property whose property name is
+one of the elements of <arg>property-name-list</arg>.  It returns the portion
+of the property list begining with the first such property that it
+found.  If it doesn't find any, it returns <obj>nil</obj>.
+</description></definition><definition><define key="si:property-list-mixin-putprop-method" name="si:property-list-mixin" type="method"><args>value property-name</args>
+</define>
+
+<description>Gives the object an <arg>property-name</arg> property of <arg>value</arg>.
+
+<lisp>(send <arg>object</arg> :set :get <arg>property-name</arg> <arg>value</arg>)
+</lisp>also has this effect.
+</description></definition><definition><define key="si:property-list-mixin-remprop-method" name="si:property-list-mixin" type="method"><args>property-name</args>
+</define>
+
+<description>Removes the object's <arg>property-name</arg> property, by splicing it out
+of the property list.  It returns one of the cells spliced out, whose car
+is the former value of the property that was just removed.  If there was
+no such property to begin with, the value is <obj>nil</obj>.
+</description></definition><definition><define key="si:property-list-mixin-get-location-or-nil-method" name="si:property-list-mixin" type="method"><args>property-name</args>
+</define><define key="si:property-list-mixin-get-location-method" name="si:property-list-mixin" type="method"><args>property-name</args>
+</define>
+
+<description>Both return a locative pointer to the cell in which this object's
+<arg>property-name</arg> property is stored.  If there is no such property,
+<obj>:get-location-or-nil</obj> returns <obj>nil</obj>, but <obj>:get-location</obj>
+adds a cell to the property list and initialized to <obj>nil</obj>, and a
+pointer to that cell is returned.
+</description></definition><definition><define key="si:property-list-mixin-push-property-method" name="si:property-list-mixin" type="method"><args>value property-name</args>
+</define>
+
+<description>The <arg>property-name</arg> property of the object should be a list (note that
+<obj>nil</obj> is a list and an absent property is <obj>nil</obj>).  This operation sets
+the <arg>property-name</arg> property of the object to a list whose car is
+<arg>value</arg> and whose cdr is the former <arg>property-name</arg> property of the
+list.  This is analogous to doing
+
+<lisp>(push <arg>value</arg> (get <arg>object</arg> <arg>property-name</arg>))
+</lisp>See the <obj>push</obj> special form (<ref definition-in-file="fd-con" key="push-fun" title="Macro push" type="mac"></ref>).
+</description></definition><definition>
+<define key="si:property-list-mixin-property-list-method" name="si:property-list-mixin" type="method"></define>
+
+<description>Returns the list of alternating property names and values that implements
+the property list.
+</description></definition><definition>
+<define key="si:property-list-mixin-property-list-location-method" name="si:property-list-mixin" type="method"></define>
+
+<description>Returns a locative pointer to the cell in the instance which holds
+the property list data.
+</description></definition><definition><define key="si:property-list-mixin-set-property-list-method" name="si:property-list-mixin" type="method"><args>list</args>
+</define>
+
+<description>Sets the list of alternating property names and values that implements
+the property list to <arg>list</arg>.  So does
+
+<lisp>(send <arg>object</arg> :set :property-list <arg>list</arg>)
+</lisp></description></definition><definition><define key="si:property-list-mixin-initoption" name="si:property-list-mixin" type="initoption"><args>:property-list list</args>
+</define>
+
+<description>This initializes the list of alternating property names and values that implements
+the property list to <arg>list</arg>.
+</description></definition></section><a name="Printing Flavor Instances Readably"></a>
+
+
+<section chapter-number="22" name="Printing Flavor Instances Readably" number="15" title="Printing Flavor Instances Readably"><p>A flavor instance can print out so that it can be read back in, as long
+as you give it a <obj>:print-self</obj> method that produces a suitable
+printed representation, and provide a way to parse it.  The convention
+for doing this is to print as
+
+<lisp>#⊂<arg>flavor-name</arg> <arg>additional-data</arg>⊃
+</lisp>and make sure that the flavor defines or inherits a <obj>:read-instance</obj>
+method that can parse the <arg>additional-data</arg> and return an instance
+(see <ref definition-in-file="rdprt" key="horseshoe-read" type="page"></ref>).  A convenient way of doing this is to use
+<obj>si:print-readably-mixin</obj>.
+</p>
+<definition>
+<define key="si:print-readably-mixin-flavor" name="si:print-readably-mixin" type="flavor"></define>
+
+<description>Provides for flavor instances to print out using the <obj>#⊂</obj>
+syntax, and also for reading things that were printed in that way.
+</description></definition><definition>
+<define key="si:print-readably-mixin-reconstruction-init-plist-method" name="si:print-readably-mixin" type="method"></define>
+
+<description>When you use <obj>si:print-readably-mixin</obj>, you must define the operation
+<obj>:reconstruction-init-plist</obj>.  This should return an alternating list
+of init options and values that could be passed to <obj>make-instance</obj> to
+create an instance ``like'' this one.  Sufficient similarity is defined
+by the practical purposes of the flavor's implementor.
+</description></definition></section><a name="io"></a>
+
+
+<section chapter-number="22" name="io" number="16" title="Copying Instances"><p>Many people have asked ``How do I copy an instance?'' and have
+expressed surprise when told that the flavor system does not
+include any built-in way to copy instances.  Why isn't there
+just a function <obj>copy-instance</obj> that creates a new instance
+of the same flavor with all its instance variables having the same
+values as in the original instance?  This would work for the
+simplest use of flavors, but it isn't good enough for most
+advanced uses of flavors.  A number of issues are raised by
+copying:
+</p>
+
+<table><tbody><tr><td><standard>*</standard></td><td>Do you or do you not send an <obj>:init</obj> message to the new instance?
+If you do, what init-plist options do you supply?
+
+</td></tr><tr><td><standard>*</standard></td><td>If the instance has a property list, you should copy the property
+list (e.g. with <obj>copylist</obj>) so that <obj>putprop</obj> or <obj>remprop</obj>
+on one of the instances does not affect the properties of the
+other instance.
+
+</td></tr><tr><td><standard>*</standard></td><td>If the instance is a pathname, the concept of copying is not even meaningful.
+Pathnames are <arg>interned</arg>, which means that there can only be one pathname
+object with any given set of instance-variable values.
+
+</td></tr><tr><td><standard>*</standard></td><td>If the instance is a stream connected to a network, some of the
+instance variables represent an agent in another host elsewhere in the
+network.  Should the copy talk to the same agent, or should a new
+agent be constructed for it?
+
+</td></tr><tr><td><standard>*</standard></td><td>If the instance is a stream connected to a file, should copying the
+stream make a copy of the file or should it make another stream open
+to the same file?  Should the choice depend on whether the file is
+open for input or for output?
+</td></tr></tbody></table>
+<p>In general, you can see that in order to copy an instance one must understand
+a lot about the instance.  One must know what the instance variables mean so
+that the values of the instance variables can be copied if necessary.  One must
+understand what relations to the external environment the instance has so
+that new relations can be established for the new instance.  One must even
+understand what the general concept `copy' means in the context of this
+particular instance, and whether it means anything at all.
+</p>
+
+<p>Copying is a generic operation, whose implementation for a particular instance
+depends on detailed knowledge relating to that instance.  Modularity dictates
+that this knowledge be contained in the instance's flavor, not in a ``general
+copying function''.  Thus the way to copy an instance is to send it a message,
+as in <obj>(send object :copy)</obj>.  It is up to you to implement the
+operation in a suitable fashion, such as
+
+<lisp>(defflavor foo (a b c) ()
+  (:inittable-instance-variables a b))
+
+(defmethod (foo :copy) ()
+  (make-instance 'foo :a a :b b))
+</lisp></p>
+
+<p>The flavor system chooses not to provide any default method for copying an
+instance, and does not even suggest a standard name for the copying message,
+because copying involves so many semantic issues.
+</p>
+
+<p>If a flavor supports the <obj>:reconstruction-init-plist</obj> operation, a
+suitable copy can be made by invoking this operation and passing the
+result to <obj>make-instance</obj> along with the flavor name.  This is
+because the definition of what the <obj>:reconstruction-init-plist</obj>
+operation should do requires it to address all the problems listed
+above.  Implementing this operation is up to you, and so is making
+sure that the flavor implements sufficient init keywords to transmit
+any information that is to be copied.  See
+<ref definition-in-file="flavor" key="si:print-readably-mixin-reconstruction-init-plist-method" title="Method si:print-readably-mixin :reconstruction-init-plist" type="method"></ref>.
+</p>
+</section></chapter>
+</document-part>

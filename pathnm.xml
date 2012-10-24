@@ -1,0 +1,2188 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="pathname-chapter"></a>
+<chapter name="pathname-chapter" number="25" title="Naming of Files"><index-entry index="concepts" title="filename"></index-entry>
+
+<index-entry index="concepts" title="pathname"></index-entry>
+
+<p>A Lisp Machine generally has access to many file systems.  While it may
+have its own file system on its own disks, usually a community of Lisp
+Machine users want to have a shared file system accessible by any of the
+Lisp Machines over a network.  These shared file systems can be
+implemented by any computer that is capable of providing file system
+service.  A file server computer may be a special-purpose computer that
+does nothing but service file system requests from computers on a
+network, or it may be a time-sharing system.
+</p>
+
+<p>Programs need to use names to designate files within these file systems.
+The main difficulty in dealing with names of files is that different
+file systems have different naming formats for files.  For example, in
+the ITS file system, a typical name looks like:
+
+<lisp>        DSK: GEORGE; FOO QFASL
+</lisp>with <obj>DSK</obj> being a device name, <obj>GEORGE</obj> being a directory name, <obj>FOO</obj>
+being the first file name and <obj>QFASL</obj> being the second file name.  However, in
+TOPS-20, a similar file name is expressed as:
+
+<lisp>        PS:&lt;GEORGE&gt;FOO.QFASL
+</lisp>It would be unreasonable for each program that deals with file names to
+be expected to know about each different file name format that exists, or
+new formats that could get added in the future.  However, existing
+programs should retain their abilities to manipulate the names.
+</p>
+
+<p>The functions and flavors described in this chapter exist to solve this
+problem.  They provide an interface through which a program can deal with
+names of files and manipulate them without depending on anything about
+their syntax.  This lets a program deal with multiple remote file
+servers simultaneously, using a uniform set of conventions.
+</p>
+<a name="Pathnames"></a>
+
+
+<section chapter-number="25" name="Pathnames" number="1" title="Pathnames"><p>All file systems dealt with by the Lisp Machine are mapped into a common
+model, in which files are named by something called a <arg>pathname</arg>.  A
+pathname always has six components, each with a standard meaning.  These
+components are the common interface that allows programs to work the
+same way with different file systems; the mapping of the pathname
+components into the concepts peculiar to each file system is taken care
+of by the pathname software.  Pathname components are described in the
+following section, and the mappings between components and user syntax
+is described for each file system later in this chapter.
+</p>
+<definition><define key="pathnamep-fun" name="pathnamep" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is a pathname.
+</description></definition>
+<p>A pathname is an instance of a flavor (see <ref chapter="22" definition-in-file="flavor" key="flavor" section="0" title="Objects, Message Passing, and Flavors" type="section"></ref>); exactly which
+flavor depends on what the host of the pathname is, but <obj>pathname</obj>
+is always one of its component flavors.  If <arg>p</arg> is a pathname, then
+<obj>(typep <arg>p</arg> 'pathname)</obj> returns <obj>t</obj>.  One of the messages
+handled by host objects is the <obj>:pathname-flavor</obj> operation, which
+returns the name of the flavor to use for pathnames on that host.  And
+one of the differences between host flavors is how they handle this
+operation.
+</p>
+
+<p>There are functions for manipulating pathnames, and there are also
+messages that can be sent to them.  These are described later in this
+chapter.
+</p>
+
+<index-entry index="concepts" title="parse (pathname)"></index-entry>
+
+<index-entry index="concepts" title="merge (pathname)"></index-entry>
+
+<p>Two important operations of the pathname system are <arg>parsing</arg> and <arg>merging</arg>.
+Parsing is the conversion of a string--which might be something typed in by the
+user when asked to supply the name of a file--into a pathname object.  This involves
+finding out what host the pathname is for, then using the file name syntax
+conventions of that host to parse the string into the standard pathname components.
+Merging is the operation that takes a pathname with missing components and
+supplies values for those components from a set of defaults.
+</p>
+
+<p>The function <obj>string</obj>, applied to a pathname, converts it into a
+string that is in the file name syntax of its host's file system, except
+that the name of the host followed by a colon is inserted at the front.
+This is the inverse of parsing.  <obj>princ</obj> of a pathname also does this,
+then prints the contents of the string.  Flavor operations such as
+<obj>:string-for-dired</obj> exist which convert all or part of a pathname to a
+string in other fashions that are designed for specific applications.
+<obj>prin1</obj> of a pathname prints the pathname using the <example>#⊂</example> syntax so
+it can be read back in to produce an equivalent pathname (or the same
+pathname, if read in the same session).
+</p>
+
+<p>Since each kind of file server can have its own character string
+representation of names of its files, there has to be a different parser
+for each of these representations, capable of examining such a character
+string and figuring out what each component is.  The parsers all work
+differently.  How can the parsing operation know which parser to use?
+The first thing that the parser does is to figure out which host this
+filename belongs to.  A filename character string may specify a host
+explicitly by having the name of the host, followed by a colon, at
+either the beginning or the end of the string.  For example, the following
+strings all specify hosts explicitly:
+
+<lisp>AI: COMMON; GEE WHIZ            ;<standard> This specifies host AI.</standard>
+COMMON; GEE WHIZ AI:            ;<standard> So does this.</standard>
+AI: ARC: USERS1; FOO BAR        ;<standard> So does this.</standard>
+ARC: USERS1; FOO BAR AI:        ;<standard> So does this.</standard>
+EE:PS:&lt;COMMON&gt;GEE.WHIZ.5        ;<standard> This specifies host EE.</standard>
+PS:&lt;COMMON&gt;GEE.WHIZ.5 EE:       ;<standard> So does this.</standard>
+</lisp>If the string does not specify a host explicitly, the parser chooses a
+host by default and uses the syntax for that host.  The optional
+arguments passed to the parsing function (<obj>fs:parse-pathname</obj>) tell it
+which host to assume.  Note: the parser is not confused by strings
+starting with <obj>DSK:</obj> or <obj>PS:</obj> because it knows that neither of
+those is a valid host name.  But if the default host has a device whose
+name happens to match the name of some host, you can prevent the device
+name from being misinterpreted as a host name by writing an extra colon
+at the beginning of the string: For example, <obj>:EE:&lt;RMS&gt;FOO.BAR</obj> refers
+to the device <obj>EE</obj> on the default host (assumed to use TOPS-20 syntax)
+rather than to the host named <obj>EE</obj>.
+</p>
+
+<p>Pathnames are kept unique, like symbols, so that there is only one
+object with a given set of components.  This is useful because a
+pathname object has a property list (see <ref chapter="5" definition-in-file="fd-con" key="plist" section="10" title="Property Lists" type="section"></ref>) on which you can
+store properties describing the file or family of files that the
+pathname represents.  The uniqueness implies that each time the same
+components are typed in, the program gets the same pathname object
+and finds there the properties it ought to find.
+</p>
+
+<p>Note that a pathname is not necessarily the name of a specific file.  Rather,
+it is a way to get to a file; a pathname need not correspond to any file that
+actually exists, and more than one pathname can refer to the same file.  For
+example, the pathname with <obj>:newest</obj> as its version refers to the same file
+as a pathname which has the appropriate number as the version.
+In systems with links, multiple file names, logical devices, etc., two pathnames
+that look quite different may really turn out to address the same file.
+To get from a pathname to a file requires doing a file system operation
+such as <obj>open</obj>.
+</p>
+
+<p>When you want to store properties describing an individual file,
+use the pathname you get by sending <obj>:truename</obj> to a stream rather
+than the pathname you open.  This avoids problems with different pathnames
+that refer to the same file.
+</p>
+
+<p>To get a unique pathname object representing a family of files, send the
+message <obj>:generic-pathname</obj> to a pathname for any file in the family
+(see <ref chapter="25" definition-in-file="pathnm" key="generic-pathname" section="5" title="Generic Pathnames" type="section"></ref>).
+</p>
+</section><a name="canonical-types"></a>
+
+
+<section chapter-number="25" name="canonical-types" number="2" title="Pathname Components"><index-entry index="concepts" title="host (pathname)"></index-entry>
+
+<index-entry index="concepts" title="device (pathname)"></index-entry>
+
+<index-entry index="concepts" title="directory (pathname)"></index-entry>
+
+<index-entry index="concepts" title="name (pathname)"></index-entry>
+
+<index-entry index="concepts" title="type (pathname)"></index-entry>
+
+<index-entry index="concepts" title="version (pathname)"></index-entry>
+
+<p>These are the components of a pathname.  They are clarified by an example below.
+
+<table><tbody><tr><td><arg>host</arg></td><td>An object that represents the file system machine on which the file
+resides.  A host object is an instance of a flavor one of whose
+components is <obj>si:basic-host</obj>.  The precise flavor varies depending on the type
+of file system and how the files are to be accessed.
+
+</td></tr><tr><td><arg>device</arg></td><td>Corresponds to the ``device'' or ``file structure'' concept in many host file systems.
+
+</td></tr><tr><td><arg>directory</arg></td><td>The name of a group of related files belonging to a single user or project.
+Corresponds to the ``directory'' concept in many host file systems.
+
+</td></tr><tr><td><arg>name</arg></td><td>The name of a group of files that can be thought of as conceptually the
+``same'' file.  Many host file systems have a concept of ``name'' which maps
+directly into this component.
+
+</td></tr><tr><td><arg>type</arg></td><td>Corresponds to the ``filetype'' or ``extension'' concept in many host file systems.
+This says what kind of file this is; such as, a Lisp source file, a QFASL file, etc.
+
+</td></tr><tr><td><arg>version</arg></td><td>Corresponds to the ``version number'' concept in many host file systems.
+This is a number that increments every time the file is modified.
+Some host systems do not support version numbers.
+</td></tr></tbody></table></p>
+
+<p>As an example, consider a Lisp program named <obj>CONCH</obj>.  If it belongs
+to <obj>GEORGE</obj>, who uses the <obj>FISH</obj> machine, the host would be the
+host-object for the machine <obj>FISH</obj>, the device would probably be the default
+and the directory would be <obj>GEORGE</obj>.  On this directory
+would be a number of files related to the <obj>CONCH</obj> program.  The source
+code for this program would live in a set of files with name <obj>CONCH</obj>,
+type <obj>LISP</obj>, and versions <obj>1</obj>, <obj>2</obj>, <obj>3</obj>, etc.  The compiled form
+of the program would live in files named <obj>CONCH</obj> with type <obj>QFASL</obj>;
+each would have the same version number as the source file that it came
+from.  If the program had a documentation file, it would have type
+<obj>INFO</obj>.
+</p>
+
+<p>Not all of the components of a pathname need to be specified.  If a
+component of a pathname is missing, its value is <obj>nil</obj>.  Before a file
+server can do anything interesting with a file, such as opening the
+file, all the missing components of a pathname must be filled in from
+defaults.  But pathnames with missing components are often handed around
+inside the machine, since almost all pathnames typed by users do not
+specify all the components explicitly.  The host is not allowed to be
+missing from any pathname; since the behavior of a pathname is
+host-dependent to some extent, it has to know what its host is.  All
+pathnames have host attributes, even if the string being parsed does not
+specify one explicitly.
+</p>
+
+<index-entry index="concepts" title="unspecific pathname components"></index-entry>
+
+<p>A component of a pathname can also be the special symbol
+<obj>:unspecific</obj>.  <obj>:unspecific</obj> means, explicitly, ``this component has
+been specified as missing'', whereas <obj>nil</obj> means that the component was
+not specified and should default.  In merging, <obj>:unspecific</obj> counts as
+a specified component and is not replaced by a default.  <obj>:unspecific</obj>
+does <arg>not</arg> mean ``unspecified''; it is unfortunate that those two words
+are similar.
+</p>
+
+<p><obj>:unspecific</obj> is used in <arg>generic</arg> pathnames, which refer not to a
+file but to a whole family of files.  The version, and usually the type,
+of a generic pathname are <obj>:unspecific</obj>.  Another way <obj>:unspecific</obj>
+is used has to do with mapping of pathnames into file systems such as
+ITS that do not have all six components.  A component that is really ``not
+there'' is <obj>:unspecific</obj> in the pathname.  When a pathname is
+converted to a string, <obj>nil</obj> and <obj>:unspecific</obj> both cause the
+component not to appear in the string.
+</p>
+
+<p>A component of a pathname can also be the special symbol <obj>:wild</obj>.  This is
+useful only when the pathname is being used with a directory primitive such
+as <obj>fs:directory-list</obj> (see <ref definition-in-file="files" key="fs:directory-list-fun" title="Function fs:directory-list" type="fun"></ref>), where it means that this pathname component matches
+anything.  The printed representation of a pathname usually designates
+<obj>:wild</obj> with an asterisk; however, this is host-dependent.
+</p>
+
+<p>What values are allowed for components of a pathname depends, in general,
+on the pathname's host.  However, in order for pathnames to be usable
+in a system-independent way certain global conventions are adhered to.
+These conventions are stronger for the type and version than for the
+other components, since the type and version are actually understood by
+many programs, while the other components are usually just treated as something
+supplied by the user that only needs to be remembered.
+</p>
+
+<p>In general, programs can interpret the components of a pathname
+independent of the file system; and a certain minimum set of possible
+values of each component are supported on all file systems.  The
+same pathname component value may have very different representations
+when the pathname is made into a string, depending on the file system.
+This does not affect programs that operate on the components.  The user,
+when asked to type a pathname, always uses the system-dependent string
+representation.  This is convenient for the user who moves between using
+the Lisp Machine on files stored on another host and making direct use of that
+host.  However, when the mapping between string form and components is
+complicated, the components may not be obvious from what you type.
+</p>
+
+<p>The type is always a string, or one of the special symbols <obj>nil</obj>,
+<obj>:unspecific</obj>, and <obj>:wild</obj>.  Certain hosts impose a limit on the
+size of string allowed, often very small.  Many programs that deal with
+files have an idea of what type they want to use.  For example, Lisp
+source programs are usually <obj>&quot;LISP&quot;</obj>, compiled Lisp programs are
+<obj>&quot;QFASL&quot;</obj>, etc.  However, these file type conventions are
+host-specific, for the important reason that some hosts do not allow a
+string five characters long to be used as the type.  Therefore, programs
+should use a <arg>canonical type</arg> rather than an actual string to specify
+their conventional default file types.  Canonical types are described below.
+</p>
+
+<p>For the version, it is always legitimate to use a positive fixnum, or
+certain special symbols.  <obj>nil</obj>, <obj>:unspecific</obj>, and <obj>:wild</obj> have
+been explained above.  The other standardly allowed symbols are
+<obj>:newest</obj> and <obj>:oldest</obj>.  <obj>:newest</obj> refers to the largest version
+number that exists when reading a file, or that number plus one when
+writing a new file.  <obj>:oldest</obj> refers to the smallest version number
+that exists.  Some file systems may define other special version
+symbols, such as <obj>:installed</obj> for example, or may allow negative
+numbers.  Some do not support versions at all.  Then a pathname may still
+contain any of the standard version components, but it does not matter
+what the value is.
+</p>
+
+<index-entry index="concepts" title="structured pathname components"></index-entry>
+
+<p>The device, directory, and name are more system-dependent.  These can be strings
+(with host-dependent rules on allowed characters and length) or they can
+be <arg>structured</arg>.  A structured component is a list of strings.  This
+is used for file system features such as hierarchical directories.  The system is
+arranged so that programs do not need to know about structured components
+unless they do host-dependent operations.  Giving a string as a pathname component
+to a host that wants a structured value converts the string to the appropriate
+form.  Giving a structured component to a host that does not understand them
+converts it to a string by taking the first element and ignoring the rest.
+</p>
+
+<p>Some host file systems have features that do not fit into this pathname
+model.  For instance, directories might be accessible as files, there
+might be complicated structure in the directories or names, or there
+might be relative directories, such as `&lt;' in Multics.  These features
+appear in the parsing of strings into pathnames, which is one reason why
+the strings are written in host-dependent syntax.  Pathnames for hosts with
+these features are also likely to handle additional messages besides the
+common ones documented in this chapter, for the benefit of
+host-dependent programs that want to access those features.  However,
+once your program depends on any such features, it will
+work only for certain file servers and not others; in general, it is a good
+idea to make your program work just as well no matter what file server
+is being used.
+</p>
+
+
+
+<subsection name="NIL" title="Raw Components and Interchange Components"><index-entry index="concepts" title="interchange form of pathname components"></index-entry>
+
+<index-entry index="concepts" title="raw pathname components"></index-entry>
+
+<p>On some host file systems it is conventional to use lower-case letters
+in file names, while in others upper case is customary, or possibly
+required.  When pathname components are moved from pathnames of one file
+system to pathnames of another file system, it is useful to convert the
+case if necessary so that you get the right case convention for the
+latter file system as a default.  This is especially useful when copying
+files from one file system to another.
+</p>
+
+<p>The Lisp Machine system defines two representations for each of several
+pathname components (the device, directory, name and type).  There is
+the <arg>raw</arg> form, which is what actually appears in the filename on the
+host file system, and there is the <arg>interchange</arg> form, which may
+differ in alphabetic case from the raw form.  The raw form is what is
+stored inside the pathname object itself, but programs nearly always
+operate on the interchange form.  The <obj>:name</obj>, <obj>:type</obj>, etc.,
+operations return the interchange form, and the <obj>:new-name</obj>, etc.,
+operations expect the interchange form.  Additional operations
+<obj>:raw-name</obj>, etc., are provided for working with the raw components,
+but these are rarely needed.
+</p>
+
+<p>The interchange form is defined so that it is always customarily in
+upper case.  If upper case is customary on the host file system, then
+the interchange form of a component is the same as the raw form.  If
+lower case is customary on the host file system, as on Unix, then the
+interchange form has case inverted.  More precisely, an all-upper-case
+component is changed to all-lower-case, an all-lower-case component is
+changed to all-upper-case, and a mixed-case component is not changed.
+(This is a one-to-one mapping).  Thus, a Unix pathname with a name
+component of <obj>&quot;foo&quot;</obj> has an interchange-format name of
+<obj>&quot;FOO&quot;</obj>, and vice versa.
+</p>
+
+<p>For host file systems which record case when files are created but
+ignore case when comparing filenames, the interchange form is always
+upper case.
+</p>
+
+<p>The host component is not really a name, and case is always ignored in
+host names, so there is no need for two forms of host component.  The
+version component does not need them either, because it is never a string.
+</p>
+</subsection>
+
+<subsection name="NIL" title="Pathname Component Operations"><definition>
+<define key="pathname-host-method" name="pathname" type="method"></define>
+<define key="pathname-device-method" name="pathname" type="method"></define>
+<define key="pathname-directory-method" name="pathname" type="method"></define>
+<define key="pathname-name-method" name="pathname" type="method"></define>
+<define key="pathname-type-method" name="pathname" type="method"></define>
+<define key="pathname-version-method" name="pathname" type="method"></define>
+
+<description>These return the components of the pathname, in interchange form.  The
+returned values can be strings, special symbols, or lists of strings in
+the case of structured components.  The type is always a string or
+a symbol.  The version is always a number or a symbol.
+</description></definition><definition>
+<define key="pathname-raw-device-method" name="pathname" type="method"></define>
+<define key="pathname-raw-directory-method" name="pathname" type="method"></define>
+<define key="pathname-raw-name-method" name="pathname" type="method"></define>
+<define key="pathname-raw-type-method" name="pathname" type="method"></define>
+
+<description>These return the components of the pathname, in raw form.
+</description></definition><definition><define key="pathname-new-device-method" name="pathname" type="method"><args>dev</args>
+</define><define key="pathname-new-directory-method" name="pathname" type="method"><args>dir</args>
+</define><define key="pathname-new-name-method" name="pathname" type="method"><args>name</args>
+</define><define key="pathname-new-type-method" name="pathname" type="method"><args>type</args>
+</define><define key="pathname-new-version-method" name="pathname" type="method"><args>version</args>
+</define>
+
+<description>These return a new pathname that is the same as the pathname they are
+sent to except that the value of one of the components has been changed.
+The specified component value is interpreted as being in interchange
+form, which means its case may be converted.  The <obj>:new-device</obj>,
+<obj>:new-directory</obj> and <obj>:new-name</obj> operations accept a string (or a
+special symbol) or a list that is a structured name.  If the host does
+not define structured components, and you specify a list, its first
+element is used.
+</description></definition><definition><define key="pathname-new-raw-device-method" name="pathname" type="method"><args>dev</args>
+</define><define key="pathname-new-raw-directory-method" name="pathname" type="method"><args>dir</args>
+</define><define key="pathname-new-raw-name-method" name="pathname" type="method"><args>name</args>
+</define><define key="pathname-new-raw-type-method" name="pathname" type="method"><args>type</args>
+</define>
+
+<description>These return a new pathname that is the same as the pathname they are
+sent to except that the value of one of the components has been changed.
+The specified component value is interpreted as raw.
+</description></definition><definition><define key="pathname-new-suggested-name-method" name="pathname" type="method"><args>name</args>
+</define><define key="pathname-new-suggested-directory-method" name="pathname" type="method"><args>dir</args>
+</define>
+
+<description>These differ from the <obj>:new-name</obj> and <obj>:new-directory</obj> operations in
+that the new pathname constructed has a name or directory based on the
+suggestion, but not necessarily identical to it.  It tries, in a
+system-dependent manner, to adapt the suggested name or directory to the
+usual customs of the file system in use.
+
+For example, on a TOPS-20 system, these operations would convert
+<arg>name</arg> or <arg>dir</arg> to upper case, because while lower-case letters
+<arg>may</arg> appear in TOPS-20 pathnames, it is not customary to generate
+such pathnames by default.
+</description></definition><definition><define key="pathname-new-pathname-method" name="pathname" type="method"><args><standard>&amp;rest</standard> options</args>
+</define>
+
+<description>This returns a new pathname that is the same as the pathname it is sent
+to except that the values of some of the components have been changed.
+<arg>options</arg> is a list of alternating keywords and values.  The keywords
+all specify values of pathname components; they are <obj>:host</obj>,
+<obj>:device</obj>, <obj>:directory</obj>, <obj>:name</obj>, <obj>:type</obj>, and <obj>:version</obj>.
+Alternatively, the keywords <obj>:raw-device</obj>, <obj>:raw-directory</obj>,
+<obj>:raw-name</obj> and <obj>:raw-type</obj> may be used to specify a component in
+raw form.
+
+Two additional keywords, <obj>:canonical-type</obj> and <obj>:original-type</obj>,
+allow the type field to be specified as a canonical type.  See the
+following section for a description of canonical types.  Also, the value
+specified for the keyword <obj>:type</obj> may be a canonical type symbol.
+
+If an invalid component is specified, it is replaced by some valid
+component so that a valid pathname can be returned.  You can tell
+whether a component is valid by specifying it in <obj>:new-pathname</obj>
+and seeing whether that component of the resulting pathname
+matches what you specified.
+
+The operations <obj>:new-name</obj>, etc., are equivalent to <obj>:new-pathname</obj>
+specifying only one component to be changed; in fact, that is how those
+operations are implemented.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Canonical Types"><index-entry index="concepts" title="canonical type (of a pathname)"></index-entry>
+
+<p><arg>Canonical types</arg> are a way of specifying a pathname type component
+using host-dependent conventions without making the program itself
+explicitly host dependent.  For example, the function <obj>compile-file</obj>
+normally provides a default type of <obj>&quot;LISP&quot;</obj>, but on VMS systems the
+default must be <obj>&quot;LSP&quot;</obj> instead, and on Unix systems it is <obj>&quot;l&quot;</obj>.
+What <obj>compile-file</obj> actually does is to use a canonical type, the keyword
+<obj>:lisp</obj>, as the default.  This keyword is given a definition as a
+canonical type, which specifies what it maps into on various file
+systems.
+</p>
+
+<p>A single canonical type may have more than one mapping on a particular
+file system.  For example, on TOPS-20 systems the canonical type
+<obj>:LISP</obj> maps into either <obj>&quot;LISP&quot;</obj> or <obj>&quot;LSP&quot;</obj>.  One of the
+possibilities is marked as ``preferred''; in this case, it is <obj>&quot;LISP&quot;</obj>.
+The effect of this is that either <obj>FOO.LISP</obj> or <obj>FOO.LSP</obj> would be
+acceptable as having canonical type <obj>:lisp</obj>, but merging
+yields <obj>&quot;LISP&quot;</obj> as the type when defaulting from <obj>:lisp</obj>.
+</p>
+
+<p>Note that the canonical type of a pathname is not a distinct component.
+It is another way of describing or specifying the type component.
+</p>
+
+<p>A canonical type must be defined before it is used.
+</p>
+<definition><define key="fs:define-canonical-type-fun" name="fs:define-canonical-type" type="mac"><args>symbol standard-mapping system-dependent-mappings...</args>
+</define>
+
+<description>Defines <arg>symbol</arg> as a canonical type.  <arg>standard-mapping</arg> is the
+actual type component that it maps into (a string), with exceptions as
+specified by <arg>system-dependent-mappings</arg>.  Each element of
+<arg>system-dependent-mappings</arg> (that is, each additional argument) is a list of the form
+
+<lisp>(<arg>system-type</arg> <arg>preferred-mapping</arg> <arg>other-mappings</arg>...)
+</lisp><arg>system-type</arg> is one of the system-type keywords the <obj>:system-type</obj>
+operation on a host object can return, such as <obj>:unix</obj>, <obj>:tops20</obj>,
+and <obj>:lispm</obj> (see <ref definition-in-file="pathnm" key="si:host-alist-var" title="Variable si:host-alist" type="var"></ref>).  The argument describes how
+to map this canonical type on that type of file system.
+<arg>preferred-map</arg> (a string) is the preferred mapping of the canonical
+type, and <arg>other-mappings</arg> are additional strings that are accepted as
+matching the canonical type.
+
+<arg>system-type</arg> may also be a list of system types.  Then the argument
+applies to all of those types of file systems.
+
+All of the mapping strings are in interchange form.
+
+For example, the canonical type <obj>:lisp</obj> is defined as follows:
+
+<lisp>(fs:define-canonical-type :lisp &quot;LISP&quot;
+  (:unix &quot;L&quot; &quot;LISP&quot;)
+  (:vms &quot;LSP&quot;)
+  ((:tops20 :tenex) &quot;LISP&quot; &quot;LSP&quot;))
+</lisp>
+Other canonical types defined by the system include <obj>:qfasl</obj>,
+<obj>:text</obj>, <obj>:press</obj>, <obj>:qwabl</obj>, <obj>:babyl</obj>, <obj>:mail</obj>, <obj>:xmail</obj>,
+<obj>:init</obj>, <obj>:patch-directory</obj>, <obj>:midas</obj>, <obj>:palx</obj>, <obj>:unfasl</obj>,
+<obj>:widths</obj>, <obj>:output</obj>, <obj>mac</obj>, <obj>tasm</obj>, <obj>doc</obj>, <obj>mss</obj>, <obj>tex</obj>,
+<obj>pl1</obj> and <obj>clu</obj>.  The standard mapping for each is the symbol's
+pname.
+</description></definition>
+<p>To match a pathname against a canonical type, use the <obj>:canonical-type</obj> operation.
+</p>
+<definition>
+<define key="pathname-canonical-type-method" name="pathname" type="method"></define>
+
+<description>Returns two values which describe whether and how this pathname's type
+component matches any canonical type.
+
+If the type component is one of the possible mappings of some canonical
+type, the first value is that canonical type (the symbol).  The second
+value is <obj>nil</obj> if the type component is the preferred mapping of the
+canonical type; otherwise it is the actual type component, in
+interchange form.  The second value is called the <arg>original type</arg> of
+the pathname.
+
+If the type component does not match a canonical type, the first value is the
+type component in interchange form (a string), and the second value is <obj>nil</obj>.
+
+This operation is useful in matching a pathname against a canonical
+type; the first value is <obj>eq</obj> to the canonical type if the pathname
+matches it.  The operation is also useful for transferring a type field
+from one file system to another while preserving canonical type; this is
+described below.
+</description></definition>
+<p>A new pathname may also be constructed by specifying a canonical type.
+</p>
+<definition><define key="pathname-new-canonical-type-method" name="pathname" type="method"><args>canonical-type <standard>&amp;optional</standard> original-type</args>
+</define>
+
+<description>Returns a pathname different from this one in having a type component
+that matches <arg>canonical-type</arg>.
+
+If <arg>original-type</arg> is a possible mapping for <arg>canonical-type</arg> on
+this pathname's host, then it is used as the type component.  Otherwise,
+the preferred mapping for <arg>canonical-type</arg> is used.  If
+<arg>original-type</arg> is not specified, it defaults to this pathname's type
+component.  If it is specified as <obj>nil</obj>, the preferred mapping of the
+canonical type is always used.  If <arg>canonical-type</arg> is a string rather
+than an actual canonical type, it is used directly as the type
+component, and the <arg>original-type</arg> does not matter.
+
+The <obj>:new-pathname</obj> operation accepts the keywords <obj>:canonical-type</obj>
+and <obj>:original-type</obj>.  The <obj>:new-canonical-type</obj> operation is
+equivalent to <obj>:new-pathname</obj> with those keywords.
+</description></definition>
+<p>Suppose you wish to copy the file named <arg>old-pathname</arg> to a directory
+named <arg>target-directory-pathname</arg>, possibly on another host, while
+preserving the name, version and canonical type.  That is, if the original file
+has a name acceptable for a QFASL file, the new file should also.
+Here is how to compute the new pathname:
+
+<lisp>(multiple-value-bind (canonical original)
+    (send old-pathname :canonical-type)
+  (send target-directory-pathname :new-pathname 
+        :name (send old-pathname :name)
+        :version (send old-pathname :version)
+        :canonical-type canonical
+        :original-type original))
+</lisp></p>
+
+<p>Suppose that <arg>old-pathname</arg> is <obj>OZ:&lt;FOO&gt;A.LISP.5</obj>, where <obj>OZ</obj> is a
+TOPS-20, and the target directory is on a VMS host.  Then <obj>canonical</obj> is
+<obj>:lisp</obj> and <obj>original</obj> is <obj>&quot;LISP&quot;</obj>.  Since <obj>&quot;LISP&quot;</obj> is
+not an acceptable mapping for <obj>:lisp</obj> on a VMS system, the resulting pathname
+has as its type component the preferred mapping for <obj>:lisp</obj> on VMS,
+namely, <obj>&quot;LSP&quot;</obj>.
+</p>
+
+<p>But if the target host is a Unix host, the new file's type is
+<obj>&quot;LISP&quot;</obj>, since that is an acceptable (though not preferred) mapping
+for <obj>:lisp</obj> on Unix hosts.
+If you would rather that the preferred mapping always be used for the
+new file's type, omit the <obj>:original-type</obj> argument to the
+<obj>:new-pathname</obj> operation.  This would result in a type component of
+<obj>&quot;L&quot;</obj> in interchange form, or <obj>&quot;l&quot;</obj> in raw form, in the new file's pathname.
+</p>
+
+<p>The function <obj>compile-file</obj> actually does something cleverer than using the
+canonical type as a default.  Doing that, and opening the resulting
+pathname, would look only for the preferred mapping of the canonical
+type.  <obj>compile-file</obj> actually tries to open <arg>each</arg> possible mapping,
+trying the preferred mapping first.  Here is how it does so:
+</p>
+<definition><define key="pathname-open-canonical-default-type-method" name="pathname" type="method"><args>canonical-type <standard>&amp;rest</standard> options</args>
+</define>
+
+<description>If this pathname's type component is non-<obj>nil</obj>, the pathname is simply
+opened, passing the <arg>options</arg> to the <obj>:open</obj> operation.  If the type
+component is <obj>nil</obj>, each mapping of <arg>canonical-type</arg> is tried as a
+type component, in the order the mappings appear in the canonical type
+definition.  If an open succeeds, a stream is returned.  The
+possibilities continue to be tried as long as <obj>fs:file-not-found</obj>
+errors happen; other errors are not handled.  If all the possibilities fail,
+a <obj>fs:file-not-found</obj> error is signaled for the caller, with a pathname
+that contains the preferred mapping as its type component.
+</description></definition></subsection></section><a name="Defaults and Merging"></a>
+
+
+<section chapter-number="25" name="Defaults and Merging" number="3" title="Defaults and Merging"><index-entry index="concepts" title="default (pathname)"></index-entry>
+
+<index-entry index="concepts" title="merge (pathname)"></index-entry>
+
+<p>When the user is asked to type in a pathname, it is of course unreasonable
+to require the user to type a complete pathname, containing all components.
+Instead there are defaults, so that components not specified by the user can
+be supplied automatically by the system.  Each program that deals with pathnames
+typically has its own set of defaults.
+</p>
+
+<p>The system defines an object called a <arg>defaults alist</arg>.  Functions are
+provided to create one, get the default pathname out of one, merge a pathname
+with one, and store a pathname back into one.  A defaults alist can remember
+more than one default pathname if defaults are being kept separately for
+each host; this is controlled by the variable <obj>fs:*defaults-are-per-host*</obj>.
+The main primitive for using defaults is the function
+<obj>fs:merge-pathname-defaults</obj> (see <ref definition-in-file="pathnm" key="fs:merge-pathname-defaults-fun" title="Function fs:merge-pathname-defaults" type="fun"></ref>).
+</p>
+
+<p>In place of a defaults alist, you may use just a pathname.  Defaulting one
+pathname from another is useful for cases such as a program that has an input
+file and an output file, and asks the user for the name of both, letting
+the unsupplied components of one name default from the other.  Unspecified
+components of the output pathname come from the input pathname, except
+that the type should default not to the type of the input but to the appropriate
+default type for output from this program.
+</p>
+
+<p>The implementation of a defaults alist is an association list of host names
+and default pathnames.  The host name <obj>nil</obj> is special and holds the
+defaults for all hosts, when defaults are not per-host.
+</p>
+
+<p>The <arg>merging</arg> operation takes as input a pathname, a defaults alist
+(or another pathname), a default type, and a default version, and returns a
+pathname.  Basically, the missing components in the pathname are filled
+in from the defaults alist.  However, if a name is specified but the
+type or version is not, then the type or version is treated specially.
+</p>
+
+<p>Here are the merging rules in full detail.
+</p>
+
+<p>If no host is specified, the host is taken from the defaults.  If the
+pathname explicitly specifies a host and does not supply a device, then
+the the default file device for that host is used.
+</p>
+
+<p>If the pathname specifies a device named <obj>DSK</obj>, that is replaced with the
+<arg>working device</arg> for the pathname's host, and the directory defaults to
+the <arg>working directory</arg> for the host if it is not specified.  See
+<obj>fs:set-host-working-directory</obj>, below.
+</p>
+
+<p>Next, if the pathname does not specify a host, device, directory, or name,
+that component comes from the defaults.
+</p>
+
+<p>If the value of <obj>fs:*always-merge-type-and-version*</obj> is non-<obj>nil</obj>,
+the type and version are merged just like the other components.
+</p>
+
+<p>If <obj>fs:*always-merge-type-and-version*</obj> is <obj>nil</obj>, as it normally
+is, the merging rules for the type and version are more complicated
+and depend on whether the pathname specifies a name.  If the pathname
+doesn't specify a name, then the type and version, if not provided,
+come from the defaults, just like the other components.  However,
+if the pathname does specify a name, then the type and version come
+from the <arg>default-type</arg> and <arg>default-version</arg> arguments to
+<obj>merge-pathname-defaults</obj>.  If those arguments were omitted, the
+value of <obj>fs:*name-specified-default-type*</obj> (initially, <obj>:lisp</obj>)
+is used as the default type, and <obj>:newest</obj> is used as the default
+version.
+</p>
+
+<p>The reason for this is that the type and version
+``belong to'' some other filename, and are thought to be unlikely to have
+anything to do
+with the new filename you are typing in.
+</p>
+<definition><define key="fs:set-host-working-directory-fun" name="fs:set-host-working-directory" type="fun"><args>host pathname</args>
+</define>
+
+<description>Sets the <arg>working device</arg> and <arg>working directory</arg> for <arg>host</arg> to
+those specified in <arg>pathname</arg>.  <arg>host</arg> should be a host object or the
+name of a host.  <arg>pathname</arg> may be a string or a pathname.
+The working device and working directory are used for defaulting pathnames
+in which the device is specified as <obj>DSK</obj>.
+
+The editor command <obj>Meta-X Set Working Directory</obj> provides a convenient
+interface to this function.
+</description></definition>
+<p>The following special variables are parts of the pathname interface
+that are relevant to defaults.
+</p>
+<definition>
+<define key="fs:*defaults-are-per-host*-var" name="fs:*defaults-are-per-host*" type="var"></define>
+
+<description>This is a user customization option intended to be set by a user's
+<obj>LISPM INIT</obj> file (see <ref chapter="36" definition-in-file="fd-hac" key="lispm-init-file" section="8" title="Logging In" type="section"></ref>).  The default value is
+<obj>nil</obj>, which means that each program's set of defaults contains only
+one default pathname.  If you type in just a host name and a colon, the
+other components of the name default from the previous host, with
+appropriate translation to the new host's pathname syntax.  If
+<obj>fs:*defaults-are-per-host*</obj> is set to <obj>t</obj>, each program's set of
+defaults maintains a separate default pathname for each host.  If
+you type in just a host name and a colon, the last file that was
+referenced on that host is used. 
+</description></definition><definition>
+<define key="fs:*always-merge-type-and-version*-var" name="fs:*always-merge-type-and-version*" type="var"></define>
+
+<description>If this variable is non-<obj>nil</obj>, then the type and version are defaulted
+only from the pathname defaults just like the other components.
+</description></definition><definition>
+<define key="fs:*name-specified-default-type*-var" name="fs:*name-specified-default-type*" type="var"></define>
+
+<description>If <obj>fs:*always-merge-type-and-version*</obj> is <obj>nil</obj>, then when a name is
+specified but not a type, the type defaults from an argument to the
+merging function.  If that argument is not specified, this variable's
+value is used.  It may be a string or a canonical type keyword.  The
+value is initially <obj>:lisp</obj>.
+</description></definition><definition>
+<define key="*default-pathname-defaults*-var" name="*default-pathname-defaults*" type="var"></define>
+
+<description>This is the default defaults alist; if the pathname primitives that need
+a set of defaults are not given one, they use this one.  Most programs, however,
+should have their own defaults rather than using these.
+</description></definition><definition>
+<define key="cli:*default-pathname-defaults*-var" name="cli:*default-pathname-defaults*" type="var"></define>
+
+<description>The Common Lisp version of the default pathname defaults.  The value of
+this variable is a pathname rather than an alist.  This variable is
+magically (with a forwarding pointer) identified with a cell in the
+defaults-alist which the system really uses, so that setting this
+variable modifies the contents of the alist.
+</description></definition><definition>
+<define key="fs:last-file-opened-var" name="fs:last-file-opened" type="var"></define>
+
+<description>This is the pathname of the last file that was opened.  Occasionally
+this is useful as a default.  Since some programs deal with files
+without notifying the user, you must not expect the user to know what
+the value of this symbol is.  Using this symbol as a default may cause
+unfortunate surprises if you don't announce it first, and so such use is
+discouraged.
+</description></definition><need amount="1500"></need><nopara></nopara>
+<p>These functions are used to manipulate defaults alists directly.
+</p>
+<definition>
+<define key="fs:make-pathname-defaults-fun" name="fs:make-pathname-defaults" type="fun"></define>
+
+<description>Creates a defaults alist initially containing no defaults.  If you ask
+this empty set of defaults for its default pathname before anything has
+been stored into it you get the file <obj>FOO</obj> on the user's home
+directory on the host he logged in to.
+</description></definition><definition><define key="fs:copy-pathname-defaults-fun" name="fs:copy-pathname-defaults" type="fun"><args>defaults</args>
+</define>
+
+<description>Creates a defaults alist, initially a copy of <arg>defaults</arg>.
+</description></definition><definition><define key="fs:default-pathname-fun" name="fs:default-pathname" type="fun"><args><standard>&amp;optional</standard> defaults host default-type default-version</args>
+</define>
+
+<description>This is the primitive function for getting a default pathname out of a defaults alist.
+Specifying the optional arguments <arg>host</arg>, <arg>default-type</arg>, and <arg>default-version</arg>
+to be non-<obj>nil</obj> forces those fields of the returned pathname to contain those values.
+
+If <obj>fs:*defaults-are-per-host*</obj> is <obj>nil</obj> (its default value), this gets the
+one relevant default from the alist.  If it is <obj>t</obj>, this gets the default for
+<arg>host</arg> if one is specified, otherwise for the host most recently used.
+
+If <arg>defaults</arg> is not specified, the default defaults are used.
+
+This function also has an additional optional argument <arg>internal-p</arg>, which is obsolete.
+</description></definition><definition><define key="fs:default-host-fun" name="fs:default-host" type="fun"><args>defaults</args>
+</define>
+
+<description>Returns the default host object specified by the defaults-alist <arg>defaults</arg>.
+This is the host used by pathname defaulting with the given defaults
+if no host is specified.
+</description></definition><definition><define key="fs:set-default-pathname-fun" name="fs:set-default-pathname" type="fun"><args>pathname <standard>&amp;optional</standard> defaults</args>
+</define>
+
+<description>This is the primitive function for updating a set of defaults.  It
+stores <arg>pathname</arg> into <arg>defaults</arg>.
+If <arg>defaults</arg> is not specified, the default defaults are used.
+</description></definition></section><a name="Pathname Functions"></a>
+
+<section chapter-number="25" name="Pathname Functions" number="4" title="Pathname Functions"><nopara></nopara>
+<p>This function obtains a pathname from an object if that is possible.
+</p>
+<definition><define key="pathname-fun" name="pathname" type="fun"><args>object</args>
+</define>
+
+<description>Converts <arg>object</arg> to a pathname and returns that, if possible.  If
+<arg>object</arg> is a string or symbol, it is parsed.  If <arg>object</arg> is a
+plausible stream, it is asked for its pathname with the <obj>:pathname</obj>
+operation.  If <arg>object</arg> is a pathname, it is simply returned.
+Any other kind of <arg>object</arg> causes an error.
+</description></definition><nopara></nopara>
+<p>These functions are what programs use to parse and default file names
+that have been typed in or otherwise supplied by the user.
+</p>
+<definition><define key="parse-namestring-fun" name="parse-namestring" type="fun"><args>thing <standard>&amp;optional</standard> host defaults <standard>&amp;key</standard> (start <obj>0</obj>) end junk-allowed</args>
+</define>
+
+<description>Is the Common Lisp function for parsing file names.  It is equivalent to
+<obj>fs:parse-pathname</obj> except in that it takes some keyword arguments where
+the other function takes all positional arguments.
+</description></definition><definition><define key="fs:parse-pathname-fun" name="fs:parse-pathname" type="fun"><args>thing <standard>&amp;optional</standard> host defaults (start <obj>0</obj>) end junk-allowed</args>
+</define>
+
+<description>This turns <arg>thing</arg>, which can be a pathname, a string, a symbol, or a
+Maclisp-style name list, into a pathname.  Most functions that are advertised
+to take a pathname argument call <obj>fs:parse-pathname</obj> on it so that they can
+accept anything that can be turned into a pathname.  If <obj>thing</obj> is itself
+a pathname, it is returned unchanged.
+
+If <arg>thing</arg> is a string, <arg>start</arg> and <arg>end</arg> are interpreted as
+indices specifying a substring to parse.  They are just like
+the second and third arguments to <obj>substring</obj>.  The rest of <arg>thing</arg> is
+ignored.  <arg>start</arg> and <arg>end</arg> are ignored if <arg>thing</arg> is not a string.
+
+If <arg>junk-allowed</arg> is non-<obj>nil</obj>, parsing stops without error if the
+syntax is invalid, and this function returns <obj>nil</obj>.  The second value
+is then the index of the invalid character.  If parsing is successful,
+the second value is the index of the place at which parsing was supposed
+to stop (<arg>end</arg>, or the end of <arg>thing</arg>).  If <arg>junk-allowed</arg> is
+<obj>nil</obj>, invalid syntax signals an error.
+
+This function does <arg>not</arg> do defaulting, even though it has an argument
+named <arg>defaults</arg>; it only does parsing.  The <arg>host</arg> and <arg>defaults</arg>
+arguments are there because in order to parse a string into a pathname,
+it is necessary to know what host it is for so that it can be parsed with
+the file name syntax peculiar to that host.  If <arg>thing</arg> does not contain
+a manifest host name, then if <arg>host</arg> is non-<obj>nil</obj>, it is the host name
+to use, as a string.  If <arg>thing</arg> is a string, a manifest host name may be
+at the beginning or the end, and consists of the name of a host followed by a colon.
+If <arg>host</arg> is <obj>nil</obj> then the host name is obtained
+from the default pathname in <arg>defaults</arg>.  If <arg>defaults</arg> is not supplied,
+the default defaults (<obj>*default-pathname-defaults*</obj>) are used.
+
+Note that if <arg>host</arg> is specified, and <arg>thing</arg> contains a host name, an
+error is signaled if they are not the same host.
+</description></definition><definition><define key="fs:pathname-parse-error-condition" name="fs:pathname-parse-error" type="condition"><args>(<obj>fs:pathname-error</obj> <obj>error</obj>)</args>
+</define>
+
+<description>This condition is signaled when <obj>fs:parse-pathname</obj> finds a syntax
+error in the string it is given.
+
+<obj>fs:parse-pathname</obj> sets up a nonlocal proceed type <obj>:new-pathname</obj>
+for this condition.  The proceed type expects one argument, a pathname,
+which is returned from <obj>fs:parse-pathname</obj>.
+</description></definition><definition><define key="fs:merge-pathname-defaults-fun" name="fs:merge-pathname-defaults" type="fun"><args>pathname <standard>&amp;optional</standard> defaults default-type default-version</args>
+</define>
+
+<description>Fills in unspecified components of <arg>pathname</arg> from the defaults and returns
+a new pathname.  This is the function that most programs should call to
+process a file name supplied by the user.  <arg>pathname</arg> can be a pathname,
+a string, a symbol, or a Maclisp namelist.  The returned value is always
+a pathname.  The merging rules are documented on <ref definition-in-file="pathnm" key="pathname-merging-rules" type="page"></ref>.
+
+If <arg>defaults</arg> is a pathname, rather than a defaults alist, then the defaults
+are taken from its components.  This is how you merge two pathnames.  (In Maclisp
+that operation is called <obj>mergef</obj>.)
+
+<arg>defaults</arg> defaults to the value of <obj>*default-pathname-defaults*</obj>
+if unsupplied.  <arg>default-type</arg> defaults to the value of
+<obj>fs:*name-specified-default-type*</obj>.  <arg>default-version</arg> defaults to <obj>:newest</obj>.
+</description></definition><definition><define key="merge-pathnames-fun" name="merge-pathnames" type="fun"><args>pathname <standard>&amp;optional</standard> defaults (default-version <obj>:newest</obj>)</args>
+</define>
+
+<description>Is the Common Lisp function for pathname defaulting.  It does only some
+of the things that <obj>fs:merge-pathname-defaults</obj> does.  It merges
+defaults from <arg>defaults</arg> (which defaults to the value of
+<obj>*default-pathname-defaults*</obj>) into <arg>pathname</arg> to get a new
+pathname, which is returned.  <arg>pathname</arg> can be a string (or symbol);
+then it is parsed and the result is defaulted.  <arg>default-version</arg> is
+used as the version when pathname has a name but no version.
+</description></definition><definition><define key="fs:merge-and-set-pathname-defaults-fun" name="fs:merge-and-set-pathname-defaults" type="fun"><args>pathname <standard>&amp;optional</standard> defaults default-type default-version</args>
+</define>
+
+<description>This is the same as <obj>fs:merge-pathname-defaults</obj> except that after it
+is done the defaults-list <arg>defaults</arg> is modified so that the merged
+pathname is the new default.  This is handy for programs that have
+sticky defaults, which means that the default for each command
+is the last filename used.  (If <arg>defaults</arg> is a pathname rather than a
+defaults alist, then no storing back is done.)  The optional arguments
+default the same way as in <obj>fs:merge-pathname-defaults</obj>.
+</description></definition><need amount="1500"></need><nopara></nopara>
+<p>These functions convert a pathname into a namestring for all or some
+of the pathname's components.
+</p>
+<definition><define key="namestring-fun" name="namestring" type="fun"><args>pathname</args>
+</define>
+
+<description>Returns a string containing the printed form of <arg>pathname</arg>, as you would type it in.
+This uses the <obj>:string-for-printing</obj> operation.
+</description></definition><definition><define key="file-namestring-fun" name="file-namestring" type="fun"><args>pathname</args>
+</define>
+
+<description>Returns a string showing just the name, type and version of <arg>pathname</arg>.
+This uses the <obj>:string-for-dired</obj> operation.
+</description></definition><definition><define key="directory-namestring-fun" name="directory-namestring" type="fun"><args>pathname</args>
+</define>
+
+<description>Returns a string showing just the device and directory of <arg>pathname</arg>.
+This uses the <obj>:string-for-directory</obj> operation.
+</description></definition><definition><define key="enough-namestring-fun" name="enough-namestring" type="fun"><args>pathname <standard>&amp;optional</standard> defaults</args>
+</define>
+
+<description>Returns a string showing just the components of <arg>pathname</arg> which would
+not be obtained by defaulting from <arg>defaults</arg>.  This is the shortest
+string that would suffice to specify pathname, given those defaults.  It
+is made by using the <obj>:string-for-printing</obj>  operation on a modified
+pathname.
+</description></definition><need amount="1500"></need><nopara></nopara>
+<p>This function yields a pathname given its components.
+</p>
+<definition><define key="make-pathname-fun" name="make-pathname" type="fun"><args><standard>&amp;key</standard> (defaults <obj>t</obj>) host device raw-device directory raw-directory name raw-name type raw-type version canonical-type original-type</args>
+</define>
+
+<description>Returns a pathname whose components are as specified.
+
+If <arg>defaults</arg> is a pathname or a defaults-alist, any components not
+explicitly specified default from it.  If <arg>defaults</arg> is <obj>t</obj> (which
+is the default), then unspecified components default to <obj>nil</obj>, except
+for the host (since every pathname must have a specific host), which
+defaults based on <obj>*default-pathname-defaults*</obj>.
+</description></definition><need amount="1500"></need><nopara></nopara>
+<p>These functions give the components of a pathname.
+</p>
+<definition><define key="pathname-host-fun" name="pathname-host" type="fun"><args>pathname</args>
+</define>
+
+<description>Returns the host component of <arg>pathname</arg>.
+</description></definition><definition><define key="pathname-device-fun" name="pathname-device" type="fun"><args>pathname</args>
+</define><define key="pathname-directory-fun" name="pathname-directory" type="fun"><args>pathname</args>
+</define><define key="pathname-name-fun" name="pathname-name" type="fun"><args>pathname</args>
+</define><define key="pathname-type-fun" name="pathname-type" type="fun"><args>pathname</args>
+</define><define key="pathname-version-fun" name="pathname-version" type="fun"><args>pathname</args>
+</define>
+
+<description>Likewise, for the other components
+</description></definition><need amount="1500"></need><nopara></nopara>
+<p>These functions return useful information.
+</p>
+<definition><define key="fs:user-homedir-fun" name="fs:user-homedir" type="fun"><args><standard>&amp;optional</standard> host reset-p (user <obj>user-id</obj>) force-p</args>
+</define><define key="user-homedir-pathname-fun" name="user-homedir-pathname" type="fun"><args><standard>&amp;optional</standard> host reset-p (user <obj>user-id</obj>) force-p</args>
+</define>
+
+
+<description><index-entry index="concepts" title="home directory"></index-entry>
+Returns the pathname of the <arg>user</arg> 's home directory on <arg>host</arg>.
+These default to the logged in user and the host logged in to.  Home
+directory is a somewhat system-dependent concept, but from the point of
+view of the Lisp Machine it is the directory where the user keeps
+personal files such as init files and mail.
+
+This function returns a pathname without any name, type, or version
+component (those components are all <obj>nil</obj>).
+
+If <arg>reset-p</arg> is specified non-<obj>nil</obj>, the machine the user is logged
+in to is changed to be <arg>host</arg>.
+
+The synonym <obj>user-homedir-pathname</obj> is from Common Lisp.
+</description></definition><definition><define key="init-file-pathname-fun" name="init-file-pathname" type="fun"><args>program-name <standard>&amp;optional</standard> host</args>
+</define>
+
+
+<description><index-entry index="concepts" title="init file"></index-entry>
+Returns the pathname of the logged-in user's init file for the program <arg>program-name</arg>,
+on the <arg>host</arg>, which defaults to the host the user logged in to.  Programs that load
+init files containing user customizations call this function to find where to look
+for the file, so that they need not know the separate init file name conventions of
+each host operating system.  The <arg>program-name</arg> <obj>&quot;LISPM&quot;</obj> is used by the <obj>login</obj>
+function.
+</description></definition><need amount="1500"></need><nopara></nopara>
+<p>These functions are useful for poking around.
+</p>
+<definition><define key="fs:describe-pathname-fun" name="fs:describe-pathname" type="fun"><args>pathname</args>
+</define>
+
+<description>If <arg>pathname</arg> is a pathname object, this describes it, showing you its properties
+(if any) and information about files with that name that have been loaded into the
+machine.  If <arg>pathname</arg> is a string, this describes all interned pathnames that
+match that string, ignoring components not specified in the string.
+One thing this is useful for is finding the directory of a file
+whose name you remember.  Giving <obj>describe</obj> (see <ref definition-in-file="fd-hac" key="describe-fun" title="Function describe" type="fun"></ref>) a pathname
+object invokes this function.
+</description></definition><definition><define key="fs:pathname-plist-fun" name="fs:pathname-plist" type="fun"><args>pathname</args>
+</define>
+
+<description>Parses and defaults <arg>pathname</arg>, then returns the list of properties of that pathname.
+</description></definition><definition>
+<define key="fs:*pathname-hash-table*-var" name="fs:*pathname-hash-table*" type="var"></define>
+
+<description>This is the hash table in which pathname objects are interned.  You can
+find all pathnames ever constructed by applying the function <obj>maphash</obj>
+to this hash table.
+</description></definition></section><a name="generic-pathname"></a>
+
+
+<section chapter-number="25" name="generic-pathname" number="5" title="Generic Pathnames"><index-entry index="concepts" title="generic pathname"></index-entry>
+
+<p>A generic pathname stands for a whole family of files.  The property
+list of a generic pathname is used to remember information about the
+family, some of which (such as the package) comes from the <example>-*-</example> line
+(see <ref chapter="26" definition-in-file="files" key="file-attribute-list" section="5" title="File Attribute Lists" type="section"></ref>)
+of a source file in the family.  Several types of files with that name, in
+that directory, belong together.  They are different members of the same
+family; for example, they may be source code and compiled code.
+However, there may be several other types
+of files that form a logically distinct group even though they have
+this same name; <obj>TEXT</obj> and <obj>PRESS</obj> for example.  The exact mapping is
+done on a per host basis since it can sometimes be affected by host naming
+conventions.
+</p>
+
+<p>The generic pathname of pathname <arg>p</arg> usually has the same host,
+device, directory, and name as <arg>p</arg> does.  However, it has a version of
+<obj>:unspecific</obj>.  The type of the generic pathname is obtained by
+sending a <obj>:generic-base-type</obj> <arg>type-of-p</arg> message to the host of
+<arg>p</arg>.  The default response to this message is to return the associated
+type from <obj>fs:*generic-base-type-alist*</obj> if there is one, else
+<arg>type-of-p</arg>.  Both the argument and the value are either strings, in
+interchange form, or canonical type symbols.
+</p>
+
+<p>However, the ITS file system presents special problems.  One cannot
+distinguish multiple generic base types in this same way since the type
+component does not exist as such; it is derived from the second
+filename, which unfortunately is also sometimes used as a version
+number.  Thus, on ITS, the type of a generic pathname is always
+<obj>:unspecific</obj> if there is any association for the type of the pathname
+on <obj>fs:*generic-base-type-alist*</obj>. 
+</p>
+
+<p>  Since generic pathnames are primarily useful for storing properties,
+it is important that they be as standardized and conceptualized as possible.
+For this reason, generic pathnames are defined to be backtranslated, i.e.
+the generic pathname of a pathname that is (or could be) the result of a logical host
+translation has the host and directory of the logical pathname.  For
+example, the generic pathname of <obj>OZ:&lt;L.WINDOW&gt;;STREAM LISP</obj> would be
+<obj>SYS:WINDOW;STREAM⋃⋃</obj> if <obj>OZ</obj> is the system host.
+</p>
+
+<p>  All version numbers of a particular pathname share the
+same identical generic pathname.  If the values of particular properties have
+changed between versions, it is possible for confusion to result.
+One way to deal with this problem is to have the property be a list associating
+version number with the actual desired property.  Then it is relatively
+easy to determine which versions have which values for the property in question
+and select one appropriately.  But in the applications for which
+generic pathnames are typically used, this is not necessary.
+</p>
+
+<p>The <obj>:generic-pathname</obj> operation on a pathname returns its
+corresponding generic pathname.  See
+<ref definition-in-file="pathnm" key="pathname-generic-pathname-method" title="Method pathname :generic-pathname" type="method"></ref>.  The <obj>:source-pathname</obj> operation
+on a pathname returns the actual or probable pathname of the
+corresponding source file (with <obj>:newest</obj> as the version).  See
+<ref definition-in-file="pathnm" key="pathname-source-pathname-method" title="Method pathname :source-pathname" type="method"></ref>.
+</p>
+<definition>
+<define key="fs:*generic-base-type-alist*-var" name="fs:*generic-base-type-alist*" type="var"></define>
+
+<description>This is an association list of the file types and the type of the generic pathname
+used for the group of which that file type is a part.  Constructing a generic
+pathname replaces the file type with the association from this list, if there
+is one (except that ITS hosts always replace with <obj>:unspecific</obj>).
+File types not in this list are really part of the name in some sense.
+The initial list is
+
+<lisp> ((:text . :text) (&quot;DOC&quot; . :text)
+  (:press . :text) (&quot;XGP&quot; . :text)
+  (:lisp . :unspecific) (:qfasl . :unspecific)
+  (nil . :unspecific))
+</lisp>The association of <obj>:lisp</obj> and <obj>:unspecific</obj> is unfortunately made
+necessary by the problems of ITS mentioned previously.  This way makes
+the generic pathnames of logically mapped <obj>LISP</obj> files identical no
+matter whether the logical host is mapped to an ITS host or not.
+
+The first entry in the list with a particular cdr is the entry for
+the type that source files have.  Note how the first element whose
+cdr is <obj>:unspecific</obj> is the one for <obj>:lisp</obj>.  This is how the
+<obj>:source-pathname</obj> operation knows what to do, by default.
+
+Some users may need to add to this list.
+</description></definition>
+<p>The system records certain properties on generic pathnames
+automatically.
+</p>
+
+<table><tbody><tr><td><obj>:warnings</obj></td><td>This property is used to record compilation and other warnings for the
+file.
+
+</td></tr><tr><td><obj>:definitions</obj></td><td>This property records all the functions and other things defined in the
+file.  The value has one element for each
+package into which the file has been loaded; the element's car is the
+package itself and the cdr is a list of definitions made.
+
+Each definition is a cons whose car is the symbol or function spec
+defined and whose cdr is the type of definition (usually one of the
+symbols <obj>defun</obj>, <obj>defvar</obj>, <obj>defflavor</obj> and <obj>defstruct</obj>).
+
+</td></tr><tr><td><obj>:systems</obj></td><td>This property's value is a list of the names of all the systems (defined
+with <obj>defsystem</obj>, see <ref definition-in-file="maksys" key="defsystem-fun" title="Macro defsystem" type="mac"></ref>) of which this is a source file.
+
+</td></tr><tr><td><obj>:file-id-package-alist</obj></td><td>This property records what version of the file was most recently loaded.
+In case the file has been loaded into more than one package, as is
+sometimes necessary, the loaded version is remembered for each package
+separately.  This is how <obj>make-system</obj> tells whether a file needs to
+be reloaded.  The value is a list with an element for each package that
+the file has been loaded into; the elements look like
+
+<lisp>(package file-information)
+</lisp><arg>package</arg> is the package object itself; <arg>file-information</arg>
+is the value returned by the <obj>:info</obj> operation on a file stream, and
+is usually a cons whose car is the truename (a pathname) and whose cdr
+is the file creation date (a universal time number).
+</td></tr></tbody></table>
+<p>Some additional properties are put on the generic pathname by reading
+the attribute list of the file (see <ref definition-in-file="files" key="fs:read-attribute-list-fun" title="Function fs:read-attribute-list" type="fun"></ref>).  It
+is not completely clear that this is the right place to store these
+properties, so it may change in the future.  Any property name can
+appear in the attributes list and get onto the generic pathname; the
+standard ones are described in <ref chapter="26" definition-in-file="files" key="file-attribute-list" section="5" title="File Attribute Lists" type="section"></ref>.
+</p>
+</section><a name="Pathname Operations"></a>
+
+
+<section chapter-number="25" name="Pathname Operations" number="6" title="Pathname Operations"><p>This section documents the operations a user may send to a pathname
+object.  Pathnames handle some additional operations that are only
+intended to be sent by the file system itself, and therefore are not
+documented here.  Someone who wants to add a new host to the system
+would need to understand those internal operations.
+</p>
+
+<p>The operations on pathnames that actually operate on files are
+documented in <ref chapter="26" definition-in-file="files" key="pathname-file-operations" section="4" title="Pathname Operations That Access Files" type="section"></ref>.  Certain pathname flavors,
+for specific kinds of hosts, allow additional special purpose
+operations.  These are documented in <ref chapter="25" definition-in-file="pathnm" key="specific-host-syntax" section="7" title="Host File Systems Supported" type="section"></ref> in the
+section on the specific host type.
+</p>
+<definition>
+<define key="pathname-generic-pathname-method" name="pathname" type="method"></define>
+
+<description>Returns the generic pathname for the family of files of which this pathname is a member.
+See <ref chapter="25" definition-in-file="pathnm" key="generic-pathname" section="5" title="Generic Pathnames" type="section"></ref> for documentation on generic pathnames.
+</description></definition><definition>
+<define key="pathname-source-pathname-method" name="pathname" type="method"></define>
+
+<description>Returns the pathname for the source file in the family of files to which
+this pathname belongs.  The returned pathname has <obj>:newest</obj>
+as its version.  If the file has been loaded in some fashion into the
+Lisp environment, then the pathname type is that which the user actually
+used.  Otherwise, the conventional file type for source files is determined
+from the generic pathname.
+</description></definition><definition>
+<define key="pathname-primary-device-method" name="pathname" type="method"></define>
+
+<description>Returns the default device name for the pathname's host.  This is used
+in generating the initial default pathname for a host.
+</description></definition><need amount="1500"></need><nopara></nopara>
+<p>Operations dealing with wildcards.
+
+<index-entry index="concepts" title="wildcards (in pathnames)"></index-entry>
+</p>
+
+<p>The character <example>*</example> in a namestring is a <arg>wildcard</arg>.
+It means that the pathname is a really a pattern which
+specifies a set of possible filenames rather than a single
+filename.  The <example></example> matches any sequence of characters
+within a single component of the name.  Thus, the component
+<obj>FOO*</obj> would match <obj>FOO</obj>, <obj>FOOBAR</obj>, <obj>FOOT</obj>,
+or any other component starting with <obj>FOO</obj>.
+</p>
+
+<p>Any component of a pathname can contain wildcards except the
+host; wild hosts are not allowed because a known host is required
+in order to know what flavor the pathname should be.
+If a pathname component is written in the namestring as just <example>*</example>,
+the actual component of the pathname instance is the keyword
+<obj>:wild</obj>.  Components which contain wildcards but are not
+simply a single wildcard are represented in ways subject to change.
+</p>
+
+<p>Pathnames whose components contain wildcards are called
+<arg>wild</arg> pathnames.  Wild pathnames useful in functions such as
+<obj>delete-file</obj> for requesting the deletion of many files at once.
+Less obviously but more fundamentally, wild pathnames are
+required for most use of the function <obj>fs:directory-list</obj>;
+an entire directory's contents are obtained by specifying a
+pathname whose name, type and version components are <obj>:wild</obj>.
+</p>
+<definition>
+<define key="pathname-wild-p-method" name="pathname" type="method"></define>
+
+<description>Returns non-<obj>nil</obj> if this pathname contains any sort of wildcards.
+If the value is not <obj>nil</obj>, it is a keyword, one of
+<obj>device</obj>, <obj>:directory</obj>, <obj>:name</obj>, <obj>:type</obj> and
+<obj>:version</obj>, and it identifies the `first' component
+which is wild.
+</description></definition><definition>
+<define key="pathname-device-wild-p-method" name="pathname" type="method"></define>
+
+<description><obj>t</obj> if this pathname's device contains any sort of wildcards.
+</description></definition><definition>
+<define key="pathname-directory-wild-p-method" name="pathname" type="method"></define>
+<define key="pathname-name-wild-p-method" name="pathname" type="method"></define>
+<define key="pathname-type-wild-p-method" name="pathname" type="method"></define>
+<define key="pathname-version-wild-p-method" name="pathname" type="method"></define>
+
+<description>Similar, for the other components that can be wild.  (The host cannot
+ever be wild.)
+</description></definition><definition><define key="pathname-pathname-match-method" name="pathname" type="method"><args>candidate-pathname <standard>&amp;optional</standard> (match-host-p <obj>t</obj>)</args>
+</define>
+
+<description>Returns <obj>t</obj> if <obj>candidate-pathname</obj> matches the pathname
+on which the operation is invoked (called, in this context, the
+<arg>pattern pathname</arg>).  If the pattern pathname contains
+no wildcards, the pathnames match only if they are identical.
+This operation is intended in cases where wildcards are expected.
+
+Wildcard matching is done individually by component; the operation
+returns <obj>t</obj> only if each component matches.  Within each component,
+an occurrencs of <example>*</example> in pattern pathname's component can match
+any sequence of characters in <arg>candidate-pathname</arg>'s component.
+Other characters, except for host-specific wildcards, must match exactly.
+<obj>:wild</obj> as a component of the pattern pathname matches any component
+that <arg>candidate-pathname</arg> may have.
+
+Note that if a component of the pattern pathname is <obj>nil</obj>,
+<arg>candidate-pathname</arg>'s component must be <obj>nil</obj> also to match it.
+Most user programs that read pathnames and use them as patterns
+default unspecified components to <obj>:wild</obj> first.
+
+Examples:
+
+<lisp>(defvar pattern)
+(defun test (str)
+  (send pattern
+        :pathname-match
+        (parse-namestring str)))
+
+(setq pattern
+      (parse-namestring &quot;OZ:*:&lt;F*O&gt;*.TEXT.*&quot;))
+
+(test &quot;OZ:&lt;FOO&gt;A.TEXT&quot;) =&gt; t
+(test &quot;OZ:&lt;FO&gt;HAHA.TEXT.3&quot;) =&gt; t
+(test &quot;OZ:&lt;FPPO&gt;HAHA.TEXT.*&quot;) =&gt; t
+(test &quot;OZ:&lt;FOX&gt;LOSE.TEXT&quot;) =&gt; nil
+
+(setq pattern
+      (parse-namestring &quot;OZ:*:&lt;*&gt;A.TEXT*.5&quot;))
+
+(test &quot;OZ:&lt;FOO&gt;A.TEXT.5&quot;) =&gt; t
+(test &quot;OZ:&lt;FOO&gt;A.TEXTTTT.5&quot;) =&gt; t
+(test &quot;OZ:&lt;FOO&gt;A.TEXT&quot;) =&gt; nil
+</lisp>
+If <arg>match-host-p</arg> is <obj>nil</obj>, then the host components of
+the two pathnames are not tested.  The result then depends only
+on the other components.
+</description></definition><definition><define key="pathname-translate-wild-pathname-method" name="pathname" type="method"><args>target-pattern starting-data <standard>&amp;optional</standard> reversible</args>
+</define>
+
+<description>Returns a pathname corresponding to <arg>starting-data</arg> under the mapping
+defined by the wild pathnames <arg>source-pattern</arg>, which is the
+pathname this operation is invoked on, and <arg>target-pattern</arg>, the argument.
+It is expected that <arg>starting-data</arg> would match
+the source pattern under the <obj>:pathname-match</obj> operation.
+
+<obj>:translate-wild-pathname</obj> is used by functions such as
+<obj>copy-file</obj> which use one wild pathname to
+specify a set of files and a second wild pathname to specify
+a corresponding filename for each file in the set.
+The first wild pathname would be used as the source-pattern
+and the second, specifying the name to copy each file to,
+would be passed as the <arg>target-pattern</arg> pathname.
+
+Each component of the result is computed individually from the corresponding
+components of <arg>starting-data</arg> and the pattern pathnames, using the
+following rules:
+
+<table><tbody><tr><td><standard>1)</standard></td><td>If <arg>target-pattern</arg>'s component is <obj>;wild</obj>,
+then the result component is taken from <arg>starting-data</arg>.
+
+</td></tr><tr><td><standard>2)</standard></td><td>Otherwise, each non-wild character in <arg>target-pattern</arg>'s component
+is taken literally into the result.  Each wild character in
+<arg>target-pattern</arg>'s component is paired with a wild character in
+<arg>source-pattern</arg>'s component, and thereby with the portion of
+<arg>starting-data</arg>'s component which that matched.  This portion
+of <arg>starting-data</arg> appears in the result in place of the wild
+target character.
+</td></tr></tbody></table>
+Example:
+
+<lisp>(setq source (fs:parse-pathname &quot;OZ:PS:&lt;FOO&gt;A*B*.*.*&quot;))
+(setq target (fs:parse-pathname &quot;OZ:SS:&lt;*&gt;*LOSE*.*B.*&quot;))
+
+(send source :translate-wild-pathname target
+      (fs:parse-pathname &quot;OZ:PS:&lt;FOO&gt;ALIBI.LISP.3&quot;))
+ =&gt; <arg>the pathname </arg>OZ:SS:&lt;FOO&gt;LILOSEI.LISPB.3
+</lisp>
+It is easiest to understand the mapping as being done
+in interchange case: the interchange components of the
+arguments are used and the results specify the interchange
+components of the value.
+
+The type component is slightly special; if the <arg>target-pattern</arg> type
+is <obj>:wild</obj>, the canonical type of <arg>starting-data</arg> is taken
+and then interpreted according to the mappings of the target host.
+Example:
+
+<lisp>(setq source (fs:parse-pathname &quot;OZ:PS:&lt;FOO&gt;A*.*.*&quot;))
+(setq target (fs:parse-pathname &quot;U://usr//foo//b*.*&quot;))
+
+(send source :translate-wild-pathname target
+      (fs:parse-pathname &quot;OZ:PS:&lt;FOO&gt;ALL.LISP&quot;))
+ =&gt; <arg>the pathname </arg>U:/usr/foo/bll.l
+</lisp>
+If <arg>reversible</arg> is non-<obj>nil</obj>, rule 1 is not used;
+rule 2 controls all mapping.  This mode is used by logical
+pathname translation.  It makes a difference when
+the target pattern component is <obj>:wild</obj> and the source
+pattern component contains wildcards but is not simply
+<obj>:wild</obj>.  For example, with source and target pattern
+components <obj>BIG<example>*</example></obj> and <example>*</example>, and starting data
+<obj>BIGGER</obj>, the result is ordinarily <obj>BIGGER</obj> by rule 1,
+but with reversible translation the result is <obj>GER</obj>.
+</description></definition><need amount="1500"></need><nopara></nopara>
+<p>Operations to get a path name string out of a pathname object:
+</p>
+<definition>
+<define key="pathname-string-for-printing-method" name="pathname" type="method"></define>
+
+<description>Returns a string that is the printed representation of the path name.  This is
+the same as what you get if you <obj>princ</obj> the pathname or take <obj>string</obj> of it.
+</description></definition><definition><define key="pathname-string-for-wholine-method" name="pathname" type="method"><args>length</args>
+</define>
+
+<description>Returns a string like the <obj>:string-for-printing</obj>, but designed to fit
+in <arg>length</arg> characters.  <arg>length</arg> is a suggestion; the actual
+returned string may be shorter or longer than that.  However, the
+who-line updater truncates the value to that length if it is longer.
+</description></definition><definition>
+<define key="pathname-string-for-editor-method" name="pathname" type="method"></define>
+
+<description>Returns a string that is the pathname with its components rearranged so
+that the name is first.  The editor uses this form to name its buffers.
+</description></definition><definition>
+<define key="pathname-string-for-dired-method" name="pathname" type="method"></define>
+
+<description>Returns a string to be used by the directory editor.  The string contains only
+the name, type, and version.
+</description></definition><definition>
+<define key="pathname-string-for-directory-method" name="pathname" type="method"></define>
+
+<description>Returns a string that contains only the device and directory of
+the pathname.  It identifies one directory among all directories on the host.
+</description></definition><definition>
+<define key="pathname-string-for-host-method" name="pathname" type="method"></define>
+
+<description>Returns a string that is the pathname the way the host file system likes to see it.
+</description></definition><need amount="1500"></need><nopara></nopara>
+<p>Operations to move around through a hierarchy of directories:
+</p>
+<definition>
+<define key="pathname-pathname-as-directory-method" name="pathname" type="method"></define>
+
+<description>Assuming that the file described by the pathname is a directory,
+return another pathname specifying that <arg>as</arg> a directory.
+Thus, if sent to a pathname <obj>OZ:&lt;RMS&gt;FOO.DIRECTORY</obj>, it would return the
+pathname <obj>OZ:&lt;RMS.FOO&gt;</obj>.  The name, type and version of the returned
+pathname are <obj>:unspecific</obj>.
+</description></definition><definition>
+<define key="pathname-directory-pathname-as-file-method" name="pathname" type="method"></define>
+
+<description>This is the inverse of the preceding operation.  It returns a pathname
+specifying as a file the directory of the original pathname.  The name,
+type and version of the original pathname are ignored.
+</description></definition>
+<p>The special symbol <obj>:root</obj> can be used as the directory component of a
+pathname on file systems that have a root directory.
+</p>
+<need amount="1500"></need><nopara></nopara>
+<p>Operations to manipulate the property list of a pathname:
+</p>
+<definition><define key="pathname-get-method" name="pathname" type="method"><args>property-name <standard>&amp;optional</standard> default-value</args>
+</define><define key="pathname-getl-method" name="pathname" type="method"><args>list-of-property-names</args>
+</define><define key="pathname-putprop-method" name="pathname" type="method"><args>value property-name</args>
+</define><define key="pathname-remprop-method" name="pathname" type="method"><args>property-name</args>
+</define>
+<define key="pathname-plist-method" name="pathname" type="method"></define>
+
+<description>These manipulate the pathname's property list, and are used if you call
+the property list functions of the same names (see <ref definition-in-file="fd-con" key="get-fun" title="Function get" type="fun"></ref>) giving
+the pathname as the first argument.  Please read the paragraph on
+<ref definition-in-file="pathnm" key="pathname-plist-warning" type="page"></ref> explaining the care you must take in using
+property lists of pathnames.
+</description></definition></section><a name="zwei-hosts"></a>
+
+
+<section chapter-number="25" name="zwei-hosts" number="7" title="Host File Systems Supported"><p>This section lists the host file systems supported, gives an example
+of the pathname syntax for each system, and discusses any special idiosyncracies.
+More host types may be added in the future.
+</p>
+
+
+
+<subsection name="NIL" title="ITS"><index-entry index="concepts" title="ITS pathnames"></index-entry>
+
+<p>An ITS pathname looks like <obj>&quot;<arg>host</arg>: <arg>device</arg>: <arg>dir</arg>; <arg>name</arg> <arg>type-or-version</arg>&quot;</obj>.
+The primary device is <obj>DSK:</obj> but other devices such as <obj>ML:</obj>, <obj>ARC:</obj>,
+<obj>DVR:</obj>, or <obj>PTR:</obj> may be used.
+</p>
+
+<p>ITS does not exactly fit the virtual file system model, in that a file
+name has two components (FN1 and FN2) rather than three (name, type, and
+version).  Consequently to map any virtual pathname into an ITS
+filename, it is necessary to decide whether the FN2 is the type or
+the version.  The rule is that usually the type goes in the FN2 and the
+version is ignored; however, certain types (<obj>LISP</obj> and <obj>TEXT</obj>) are
+ignored and instead the version goes in the FN2.  Also if the type is <obj>:unspecific</obj>
+the FN2 is the version.
+</p>
+
+<p>Given an ITS filename, it is converted into a pathname by making the FN2
+the version if it is `&lt;', `&gt;', or a number.  Otherwise the FN2 becomes
+the type.  ITS pathnames allow the special version symbols <obj>:oldest</obj>
+and <obj>:newest</obj>, which correspond to `&lt;' and `&gt;' respectively.
+</p>
+
+<p>In every ITS pathname either the version or the type is <obj>:unspecific</obj>
+or <obj>nil</obj>; sometimes both are.  When you create a new ITS pathname, if
+you specify only the version or only the type, the one not specified
+becomes <obj>:unspecific</obj>.  If both are specified, the version is
+<obj>:unspecific</obj> unless the type is a normally-ignored type (such as
+<obj>LISP</obj>) in which case the version is <obj>:newest</obj> and the type is
+<obj>:unspecific</obj> so that numeric FN2's are found.
+</p>
+
+<p>Each component of an ITS pathname is mapped to upper case and truncated to
+six characters.
+</p>
+
+<p>Special characters (space, colon, and semicolon) in a component of an ITS pathname
+can be quoted by prefixing them with right horseshoe (<example>⊃</example>)
+or equivalence sign (<example>≡</example>).  Right horseshoe is the same character code in the
+Lisp Machine character set as control-Q in the ITS character set.
+</p>
+
+<p>An ITS pathname can have a structured name, which is a list of two strings,
+the FN1 and the FN2.  In this case there is neither a type nor a version.
+</p>
+
+<p>An ITS pathname with an FN2 but no FN1 (i.e. a type and/or version but no name)
+is represented with the placeholder FN1 `<example>↔</example>', because ITS pathname syntax
+provides no way to write an FN2 without an FN1 before it.
+</p>
+
+<p>The ITS init file naming convention is <obj>&quot;<arg>homedir</arg>; <arg>user</arg> <arg>program</arg>&quot;</obj>.
+</p>
+<definition>
+<define key="fs:*its-uninteresting-types*-var" name="fs:*its-uninteresting-types*" type="var"></define>
+
+<description>The ITS file system does not have separate file types and version numbers;
+both components are stored in the ``FN2''.  This variable is a list of the file
+types that are ``not important''; files with these types use the FN2 for a version
+number.  Files with other types use the FN2 for the type and do not have a version
+number.  The initial list is
+
+<lisp>(&quot;LISP&quot; &quot;TEXT&quot; nil :unspecific)
+</lisp>Some users may need to add to this list.
+</description></definition><definition>
+<define key="its-pathname-fn1-method" name="its-pathname" type="method"></define>
+<define key="its-pathname-fn2-method" name="its-pathname" type="method"></define>
+
+<description>These two operations return a string that is the FN1 or FN2 host-dependent
+component of the pathname.
+</description></definition><definition>
+<define key="pathname-type-and-version-method" name="pathname" type="method"></define><define key="pathname-new-type-and-version-method" name="pathname" type="method"><args>new-type new-version</args>
+</define>
+
+<description>These two operations provide a way of pretending that ITS pathnames can
+have both a type and a version.  They use the first three characters of
+the FN2 to store a type and the last three to store a version number.
+
+On an ITS-pathname,
+<obj>:type-and-version</obj> returns the type and version thus extracted (not
+the same as the type and version of the pathname).
+<obj>:new-type-and-version</obj> returns a new pathname constructed from the
+specified new type and new version.
+
+On any other type of pathname, these operations simply return or set
+both the type component and the version component.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="TOPS-20 (Twenex), Tenex, and VMS."><index-entry index="concepts" title="TOPS-20 pathnames"></index-entry>
+
+<index-entry index="concepts" title="Twenex pathnames"></index-entry>
+
+<p>A pathname on TOPS-20 (better known as Twenex) looks like
+
+<lisp><arg>host</arg>:<arg>device</arg>:&lt;<arg>directory</arg>&gt;<arg>name</arg>.<arg>type</arg>.<arg>version</arg>
+</lisp>The primary device is <obj>PS:</obj>.
+</p>
+
+<p>TOPS-20 pathnames are mapped to upper case.  Special characters (including
+lower-case letters) are quoted with the circle-cross (<example>⊗</example>) character, which
+has the same character code in the Lisp Machine character set as Control-V,
+the standard Twenex quoting character, in the ASCII character set.
+</p>
+
+<p>If you specify a period after the name, but nothing after that,
+then the type is <obj>:unspecific</obj>, which translates into an empty
+extension on the TOPS-20 system.  If you omit the period, you have
+allowed the type to be defaulted.
+</p>
+
+<p>TOPS-20 pathnames allow the special version symbols <obj>:oldest</obj> and
+<obj>:newest</obj>.  In the string form of a pathname, these are expressed as
+`<obj>.-2</obj>', and as an omitted version.
+</p>
+
+<p>The directory component of a TOPS-20 pathname may be structured.  The
+directory <obj>&lt;FOO.BAR&gt;</obj> is represented as the list <obj>(&quot;FOO&quot; &quot;BAR&quot;)</obj>.
+</p>
+
+<p>The characters <obj>*</obj> and <obj>%</obj> are wildcards that match any sequence of
+characters and any single character (within one pathname component),
+respectively.  To specify a filename that actually contains a <obj>*</obj> or
+<obj>%</obj> character, quote the character with <obj>⊗</obj>.  When a component is
+specified with just a single <obj>*</obj>, the symbol <obj>:wild</obj> appears in the
+pathname object.
+</p>
+
+<p>The TOPS-20 init file naming convention is <obj>&quot;&lt;<arg>user</arg>&gt;<arg>program</arg>.INIT&quot;</obj>.
+</p>
+
+<p>When there is an attempt to display a TOPS-20 file name in the who-line and
+there isn't enough room to show the entire name, the name is truncated
+and followed by a center-dot character to indicate that there is more to
+the name than can be displayed.
+</p>
+
+<index-entry index="concepts" title="Tenex pathnames"></index-entry>
+
+<p>Tenex pathnames are almost the same as TOPS-20 pathnames, except that
+the version is preceeded by a semi-colon instead of a period, the
+default device is <obj>DSK</obj> instead of <obj>PS</obj>, and the quoting
+requirements are slightly different.
+</p>
+
+<index-entry index="concepts" title="VMS pathnames"></index-entry>
+
+<index-entry index="concepts" title="very mangled software"></index-entry>
+
+<p>VMS pathnames are basically like TOPS-20 pathnames, with a few
+complexities.  The primary device is <obj>USRD$</obj>.
+</p>
+
+<p>First of all, only alphanumeric characters are allowed in filenames
+(though <obj>$</obj> and underscore can appear in device names).
+</p>
+
+<p>Secondly, a version number is preceded by `<obj>;</obj>' rather than by `<obj>.</obj>'.
+</p>
+
+<p>Thirdly, file types (called ``extensions'' in VMS terminology) are
+limited to three characters.  Each of the system's canonical types has a
+special mapping for VMS pathnames, which is three characters long:
+
+<lisp>:lisp → LSP     :text → TXT     :qfasl → QFS    :midas → MID
+:press → PRS    :widths → WID   :patch-directory → PDR
+:qwabl → QWB    :babyl → BAB    :mail → MAI     :xmail → XML
+:init → INI     :unfasl → UNF   :output → OUT
+</lisp></p>
+</subsection>
+
+
+<subsection name="NIL" title="Unix and Multics Pathnames"><index-entry index="concepts" title="Unix pathnames"></index-entry>
+
+<p>A Unix pathname is a sequence of directory or file names separated by
+slashes.  The last name is the filename; preceding ones are directory
+names (but directories are files anyway).  There are no devices or
+versions.  Alphabetic case is significant in Unix pathnames, no case
+conversion is normally done, and lower case is the default.  Therefore,
+components of solid upper or lower case are inverted in case when going
+between interchange form and raw form.  (What the user types in a
+pathname string is the raw form.)
+</p>
+
+<p>Unix allows you to specify a pathname relative to your default directory
+by using just a filename, or starting with the first subdirectory name;
+you can specify it starting from the root directory by starting with
+a slash.  In addition, you can start with `<obj>..</obj>' as a directory name one
+or more times, to refer upward in the hierarchy from the default
+directory.
+</p>
+
+<p>Unix pathnames on the Lisp Machine provide all these features too, but
+the canonicalization to a simple descending list of directory names
+starting from the root is done on the Lisp Machine itself when you merge
+the specified pathname with the defaults.
+</p>
+
+<p>If a pathname string starts with a slash, the pathname object that
+results from parsing it is called ``absolute''.  Otherwise the pathname
+object is called ``relative''.
+</p>
+
+<p>In an absolute pathname object, the directory component is either a
+symbol (<obj>nil</obj>, <obj>:unspecific</obj> or <obj>:root</obj>), a string, or a list of
+strings.  A single string is used when there is only one level of
+directory in the pathname.
+</p>
+
+<p>A relative pathname has a directory that is a list of the symbol
+<obj>:relative</obj> followed by some strings.  When the pathname is merged
+with defaults, the strings in the list are appended to the strings
+in the default directory.  The result of merging is always an absolute
+pathname.
+</p>
+
+<p>In a relative pathname's string form, the string ``<obj>..</obj>'' can be used as a
+directory name.  It is translated to the symbol <obj>:up</obj> when the string
+is parsed.  That symbol is processed when the relative pathname is
+merged with the defaults.
+</p>
+
+<p>Restrictions on the length of Unix pathnames require abbreviations for
+the standard Zetalisp pathname types, just as for VMS.  On Unix the
+preferred mappings of all canonical types are one or two characters
+long.  We give here the mappings in raw form; they are actually
+specified in interchange form.
+
+<lisp>:lisp → l       :text → tx      :qfasl → qf     :midas → md
+:press → pr     :widths → wd    :patch-directory → pd
+:qwabl → qw     :babyl → bb     :mail → ma      :xmail → xm
+:init → in      :unfasl → uf    :output → ot
+</lisp></p>
+
+<index-entry index="concepts" title="Multics pathnames"></index-entry>
+
+<p>The Multics file system is much like the Unix one; there are absolute
+and relative pathnames, absolute ones start with a directory delimiter,
+and there are no devices or versions.  Alphabetic case is significant.
+</p>
+
+<p>There are differences in details.  Directory names are terminated, and
+absolute pathnames begun, with the character `<obj>&gt;</obj>'.  The containing
+directory is referred to by the character `<obj>&lt;</obj>', which is complete in
+itself.  It does not require a delimiter.  Thus, <obj>&lt;&lt;FOO&gt;BAR</obj> refers to
+subdirectory <obj>FOO</obj>, file <obj>BAR</obj> in the superdirectory of the superdirectory
+of the default directory.
+</p>
+
+<p>The limits on filename sizes are very large, so the system canonical
+types all use their standard mappings.  Since the mappings are specified
+as upper case, and then interpreted as being in interchange form, the
+actual file names on Multics contain lower case.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Lisp Machine File Systems"><index-entry index="concepts" title="Lisp machine pathnames"></index-entry>
+
+<p>There are two file systems that run in the MIT Lisp Machine system.
+They have different pathname syntax.  Both can be accessed either
+remotely like any other file server, or locally.
+</p>
+
+<index-entry index="concepts" title="Local-File pathnames"></index-entry>
+
+<p>The Local-File system uses host name <obj>LM</obj> for the machine you are on.
+A Local-File system on another machine can be accessed using the name of
+that machine as a host name, provided that machine is known as a file
+server.
+</p>
+
+<p>The remainder of the pathname for the Local-File system looks like
+<obj>&quot;<arg>directory</arg>; <arg>name</arg>.<arg>type</arg>#<arg>version</arg>&quot;</obj>.  There is no restriction on the length
+of names; letters are converted to upper case.  Subdirectories are
+allowed and are specified by putting periods between the directory
+components, as in <obj>RMS.SUBDIR;</obj>.
+</p>
+
+<p>The TOPS-20 pathname syntax is also accepted.  In addition, if the flag
+<obj>fs:*lmfs-use-twenex-syntax*</obj> is non-<obj>nil</obj>, Local-File pathnames
+print out using TOPS-20 syntax.  Note that since the printed representation
+of a pathname is cached, changing this flag's value does not change the
+printing of pathnames with existing representations.
+</p>
+
+<p>The Local-File system on the filecomputer at MIT has the host name <obj>FS</obj>.
+</p>
+
+<index-entry index="concepts" title="LMFILE pathnames"></index-entry>
+
+<p>The LMFILE system is primarily for use as a file server, unless you have
+512k of memory.  At MIT it runs on the filecomputer and is accessed
+remotely with host name <obj>FC</obj>.
+</p>
+
+<p>The remainder of an LMFILE pathname looks like <obj>&quot;<arg>directory</arg>;
+<arg>name</arg> <arg>type</arg>#<arg>version</arg>&quot;</obj>.  However, the directory and name can
+be composed of any number of subnames, separated by backslashes.  This
+is how subdirectories are specified.  <obj>FOO;BAR\X</obj> refers to the same
+file as <obj>FOO\BAR;X</obj>, but the two ways of specifying the file have
+different consequences in defaulting, getting directory listings, etc.
+</p>
+
+<p>Case is significant in LMFILE pathnames; however, when you open a file,
+the LMFILE system ignores the case when it matches your pathname against
+the existing files.  As a result, the case you use matters when you
+create or rename a file, and appears in directory listings, but it is
+ignored when you refer to an existing file, and you cannot have two
+files whose names differ only in case.  When components are accessed in
+interchange form, they are always converted to upper case.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Logical Pathnames"><index-entry index="concepts" title="logical pathnames"></index-entry>
+
+<p>There is another kind of pathname that doesn't correspond to any
+particular file server.  It is called a <arg>logical</arg> pathname, and its host
+is called a logical host.  Every logical pathname can be translated
+into a corresponding <arg>physical</arg> pathname because each logical host
+records a corresponding actual (``physical'') host and rules for translating
+the other components of the pathname.
+</p>
+
+<p>The reason for having logical pathnames is to make it easy to keep
+bodies of software on more than one file system.  An important example
+is the body of software that constitutes the Lisp Machine system.  Every
+site has a copy of all of the sources of the programs that are loaded
+into the initial Lisp environment.  Some sites may store the sources on
+an ITS file system, while others may store them on a TOPS-20.  However,
+system software (including <obj>make-system</obj>) wishes to be able to find a
+particular file independent of the name of the host a particular site
+stores it on, or even the kind of host it is.  This is done by means of
+the logical host <obj>SYS</obj>; all pathnames for system files are actually
+logical pathnames with host <obj>SYS</obj>.  At each site, <obj>SYS</obj> is defined
+as a logical host, but translations are different at each site.  For
+example, at MIT the source files are stored on the TOPS-20 system named
+OZ, so MIT's site file says that <obj>SYS</obj> should translate to the host
+<obj>OZ</obj>.
+</p>
+
+<p>Each logical host, such as <obj>SYS</obj>, has a list of translations, each of
+which says how to map certain pathnames for that host into pathnames for
+the corresponding physical host.  To translate a logical pathname, the
+system tests each of the logical host's translations, in sequence, to see if it is applicable.
+(If none is applicable, an error is signaled.)  A translation
+consists of a pair of pathnames or namestrings, typically containing
+wildcards.  Unspecified components in them default to <obj>:wild</obj>.  The
+<arg>from</arg>-pathname of the translation is used to match against the
+pathname to be translated; if it matches, the corresponding
+<arg>to</arg>-pathname is used to construct the translation, filling in its
+wild fields from the pathname being translated as in the
+<obj>:translate-wild-pathname</obj> operation
+(<ref definition-in-file="pathnm" key="pathname-translate-wild-pathname-method" title="Method pathname :translate-wild-pathname" type="method"></ref>).
+</p>
+
+<p>Most commonly the translations contain pathnames that have only
+directories specified, everything else wild.  Then the other components
+are unchanged by translation.
+</p>
+
+<p>If the files accessed through the logical host are moved, the translations
+can be changed so that the same logical pathnames refer to the same files
+on their new physical host via physical pathnames changed to fit
+the restrictions and the conventions of the new physical host.
+</p>
+
+<p>Each translation is specified as a list of two strings.  The strings
+are parsed into pathnames and any unspecified components are defaulted
+to <obj>:wild</obj>.  The first string of the pair is the source pattern;
+it is parsed with logical pathname syntax.  The second string is the
+target pattern, and it is parsed with the pathname syntax for the
+specified physical host.
+</p>
+
+<p>For example, suppose that logical host <obj>FOO</obj> maps to physical host
+<obj>BAR</obj>, a Tops-20, and has the following list of translations:
+
+<lisp>((&quot;BACK;&quot; &quot;PS:&lt;FOO.BACK&gt;&quot;)
+ (&quot;FRONT;* QFASL&quot; &quot;SS:&lt;FOO.QFASL&gt;*.QFASL&quot;)
+ (&quot;FRONT;&quot; &quot;PS:&lt;FOO.FRONT&gt;&quot;))
+</lisp>Then all pathnames with host <obj>FOO</obj> and directory <obj>BACK</obj>
+translate to host <obj>BAR</obj>, device <obj>PS</obj> and directory <obj>&lt;FOO.BACK&gt;</obj>
+with name, type and version unchanged.
+All pathnames with host <obj>FOO</obj>, directory <obj>FRONT</obj> and
+type <obj>QFASL</obj> translate to host <obj>BAR</obj>, device <obj>SS</obj>,
+directory <obj>&lt;FOO.QFASL&gt;</obj> and type <obj>QFASL</obj>, with name
+and version unchanged.  All other pathnames with host <obj>FOO</obj>
+and directory <obj>FRONT</obj> map to host <obj>BAR</obj>, device <obj>PS</obj>
+and directory <obj>&lt;FOO.FRONT&gt;</obj>, with name, type and version
+unchanged.  Note that the first translation whose pattern
+matches a given pathname is the one that is used.
+</p>
+
+<p>Another site might define <obj>FOO</obj>'s to map to a Unix host
+<obj>QUUX</obj>, with the following translation list:
+
+<lisp>((&quot;BACK;&quot; &quot;//nd//foo//back//&quot;)
+ (&quot;FRONT;&quot; &quot;//nd//foo//front//&quot;))
+</lisp>This site apparently does not see a need to store the <obj>QFASL</obj>
+files in a separate directory.  Note that the slashes are duplicated
+to quote them for Lisp; the actual namestrings contain single slashes
+as is usual with Unix.
+</p>
+
+<p>If the last translation's source pattern is entirely wild, it applies
+to any pathname not so far handled.  Example:
+
+<lisp>((&quot;BACK;&quot; &quot;//nd//foo//back//&quot;)
+ (&quot;&quot; &quot;//nd//foo1//*//&quot;))
+</lisp></p>
+
+<p>Physical pathnames can also be <arg>back-translated</arg> into the
+corresponding logical pathname.  This is the inverse transformation
+of ordinary translation.  It is necessary to specify which logical
+host to back translate for, as it may be that the same physical
+pathname could be the translation of different logical pathnames
+on different hosts.  Use the <obj>:back-translated-pathname</obj> operation,
+below.
+</p>
+<definition><define key="fs:add-logical-pathname-host-fun" name="fs:add-logical-pathname-host" type="fun"><args>logical-host physical-host translations</args>
+</define><define key="fs:set-logical-pathname-host-fun" name="fs:set-logical-pathname-host" type="fun"><args>logical-host <standard>&amp;key</standard> physical-host translations</args>
+</define>
+
+<description>Both create a new logical host named <arg>logical-host</arg>.  Its
+corresponding physical host (that is, the host to which it should
+forward most operations) is <arg>physical-host</arg>.  <arg>logical-host</arg> and
+<arg>physical-host</arg> should both be strings.  <arg>translations</arg> should be a
+list of translation specifications, as described above.
+The two functions differ only in that one accepts positional
+arguments and the other accepts keyword arguments.
+Example:
+
+<lisp>(add-logical-pathname-host &quot;MUSIC&quot; &quot;MUSIC-10-A&quot;
+      '((&quot;MELODY;&quot; &quot;SS:&lt;MELODY&gt;&quot;)
+        (&quot;DOC;&quot; &quot;PS:&lt;MUSIC-DOCUMENTATION&gt;&quot;)))
+</lisp>
+This creates a new logical host called <obj>MUSIC</obj>.  An attempt to open the
+file <obj>MUSIC:DOC;MANUAL  TEXT  2</obj> will be re-directed to the file
+<obj>MUSIC-10-A:PS:&lt;MUSIC-DOCUMENTATION&gt;MANUAL.TEXT.2</obj> (assuming that the
+host <obj>MUSIC-10-A</obj> is a TOPS-20 system).
+</description></definition><definition><define key="fs:make-logical-pathname-host-fun" name="fs:make-logical-pathname-host" type="fun"><args>name</args>
+</define>
+
+<description>Requests that the definition of logical host <arg>name</arg> be
+loaded from a standard place in the file system: namely,
+the file <obj>SYS: SITE; <arg>name</arg> TRANSLATIONS</obj>.
+This file is loaded immediately with <obj>load</obj>, in
+the <obj>fs</obj> package.
+It should contain code to create the logical host;
+normally, a call to <obj>fs:set-logical-pathname-host</obj> or
+<obj>fs:add-logical-pathname-host</obj>, above.
+
+The same file is automatically reloaded, if it has been changed,
+at appropriate times: by <obj>load-patches</obj>, and whenever
+site information is updated.
+</description></definition><definition>
+<define key="fs:logical-pathname-translated-pathname-method" name="fs:logical-pathname" type="method"></define>
+
+<description>Converts a logical pathname to a physical pathname.  It returns the
+translated pathname of this instance, a pathname whose host
+component is the physical host that corresponds to this instance's
+logical host.
+
+If this operation is applied to a physical pathname, it simply returns
+that pathname unchanged.
+</description></definition><definition><define key="fs:logical-pathname-back-translated-pathname-method" name="fs:logical-pathname" type="method"><args>pathname</args>
+</define>
+
+<description>Converts a physical pathname to a logical pathname.
+<arg>pathname</arg> should be a pathname whose host is the physical host
+corresponding to this instance's logical host.  This returns
+a pathname whose host is the logical host and whose translation
+is <arg>pathname</arg>.  If <arg>pathname</arg> is not the translation
+of any logical pathname on this instance's host, <obj>nil</obj> is returned.
+
+Here is an example of how this would be used in connection with truenames.
+Given a stream that was obtained by opening a logical pathname,
+
+<lisp>(send stream :pathname)
+</lisp>returns the logical pathname that was opened.
+
+<lisp>(send stream :truename)
+</lisp>returns the true name of the file that is open, which of course is
+a pathname on the physical host.  To get this in the form of a logical
+pathname, one would do
+
+<lisp>(send (send stream :pathname)
+      :back-translated-pathname
+      (send stream :truename))
+</lisp>
+If this operation is applied to a physical pathname, it simply returns its
+argument.  Thus the above example works no matter what kind of
+pathname was opened to create the stream.
+</description></definition><definition><define key="fs:unknown-logical-pathname-translation-condition" name="fs:unknown-logical-pathname-translation" type="condition"><args>(<obj>fs:pathname-error</obj> <obj>error</obj>)</args>
+</define>
+
+<description>This is signaled when a logical pathname has no translation.
+The condition instance supports the <obj>:logical-pathname</obj> operation,
+which returns the pathname that was untranslatable.
+
+The proceed type <obj>:define-directory</obj> is supported.
+It expects a single argument, a pathname or a string to be parsed into one.
+This defines the target pattern for a translation whose source pattern
+is the directory from the untranslatable pathname (and all else wild).
+Such a translation is added to the logical host, making it possible
+to translate the pathname.
+</description></definition>
+<p>A logical pathname looks like <obj>&quot;<arg>host</arg>: <arg>directory</arg>; <arg>name</arg> <arg>type</arg> <arg>version</arg>&quot;</obj>.
+There is no way to specify a device; parsing a logical pathname
+always returns a pathname whose device component is <obj>:unspecific</obj>.
+This is because devices don't have any meaning in logical pathnames.
+</p>
+
+<p>The equivalence-sign character (<obj>≡</obj>) can be used for quoting special
+characters such as spaces and semicolons.  The double-arrow character
+(`<obj>↔</obj>') can be used as a place-holder for components that are <obj>nil</obj>,
+and the up-horseshoe (`<obj>⋃</obj>') indicates <obj>:unspecific</obj> (generic pathnames
+typically have <obj>:unspecific</obj> as the type and the version).
+All letters are mapped to upper case unless quoted.  The <obj>:newest</obj>, <obj>:oldest</obj>,
+and <obj>:wild</obj> values for versions are written as
+`<obj>&gt;</obj>', `<obj>&lt;</obj>', and `<obj>*</obj>' respectively.
+</p>
+
+<p>There isn't any init file naming convention for logical hosts; you
+can't log into them.  The <obj>:string-for-host</obj>,
+<obj>:string-for-wholine</obj>, <obj>:string-for-dired</obj>, and <obj>:string-for-editor</obj> messages are all
+passed on to the translated pathname, but the <obj>:string-for-printing</obj>
+is handled by the <obj>fs:logical-pathname</obj> flavor itself and shows
+the logical name.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Editor Buffer Pathnames"><p>The hosts <obj>ED</obj>, <obj>ED-BUFFER</obj> and <obj>ED-FILE</obj> are used in pathnames
+which refer to buffers in the editor.  If you open such a pathname, you
+get a stream that reads or writes the contents of an editor buffer.  The
+three host names differ only in the syntax of the pathname, and in how
+it is interpreted.
+</p>
+
+<p>The host <obj>ED</obj> is followed by an abbreviation that should complete to
+the name of an existing editor buffer.  For example, the pathname
+<obj>ED:FOO</obj> could refer to the buffer <obj>FOO.LISP PS:&lt;ME&gt; OZ:</obj>.
+</p>
+
+<p>The host <obj>ED-BUFFER</obj> is followed by an exact buffer name.  If there is
+no buffer with that name, one is created.  This is most useful for
+creating a buffer.
+</p>
+
+<p>The host <obj>ED-FILE</obj> is followed by an arbitrary pathname, including a
+host name.  An <obj>ED-FILE</obj> pathname refers to a buffer visiting that
+file.  If necessary, the file is read into the editor.  For example,
+<obj>ED-FILE: OZ: PS:&lt;ME&gt;FOO.LISP</obj> would refer to the same buffer as
+<obj>ED: FOO</obj>.  The current default defaults are used in processing the
+pathname that follows <obj>ED-FILE</obj>, when the pathname is parsed.
+</p>
+</subsection></section><a name="file-stream"></a>
+
+
+<section chapter-number="25" name="file-stream" number="8" title="Hosts"><index-entry index="concepts" title="host objects"></index-entry>
+
+<p>Each host known to the Lisp Machine is represented by a flavor instance
+known as a host object.  The host object records such things as the name(s)
+of the host, its operating system type, and its network address(es).
+Host objects print like <obj>#⊂FS:TOPS20-CHAOS-HOST &quot;MIT-OZ&quot;⊃</obj>, so they
+can be read back in.
+</p>
+
+<p>Not all hosts support file access.  Those that do support it appear on the list
+<obj>fs:*pathname-host-list*</obj> and can be the host component of pathnames.
+A host object is also used as an argument when you make a Chaosnet
+connection for any purpose.
+</p>
+
+<p>The hosts that you can use for making network connections appear in the
+value of <obj>si:host-alist</obj>.  Most of the hosts you can use for pathnames
+are among these; but some, such as logical hosts, are not.
+</p>
+
+
+<subsection name="NIL" title="Parsing Hostnames"><definition><define key="si:parse-host-fun" name="si:parse-host" type="fun"><args>namestring <standard>&amp;optional</standard> no-error-p (unknown-ok <obj>t</obj>)</args>
+</define>
+
+<description>Returns a host object that recognizes the specified name.
+If the name is not recognized, it is an error, unless <arg>no-error-p</arg> is
+non-<obj>nil</obj>; in that case, <obj>nil</obj> is returned.
+
+If <arg>unknown-ok</arg> is non-<obj>nil</obj> (the default), a host table server on the
+local network is contacted, to see if perhaps it can find the name there.  If
+it can't, an error is signalled or <obj>nil</obj> is returned, according to
+<arg>no-error-p</arg>.  The host instance created in this manner contains all the kinds
+of information that a host defined from the host table file has.
+
+If a string of the form <obj>CHAOS|</obj><arg>nnn</arg> is used, a host object is
+created and given <arg>nnn</arg> (interpreted as octal) as its Chaosnet
+address.  This can be done regardless of the <arg>unknown-ok</arg> argument.
+
+The first argument is allowed to be a host object instead of a string.
+In this case, that argument is simply returned.
+</description></definition><definition><define key="sys:unknown-host-name-condition" name="sys:unknown-host-name" type="condition"><args>(<obj>sys:local-network-error</obj> <obj>sys:network-error</obj> <obj>error</obj>)</args>
+</define>
+
+<description>This condition is signaled by <obj>si:parse-host</obj> when the
+host is not recognized, if that is an error.
+
+The <obj>:name</obj> operation on the condition instance returns the string
+given to <obj>si:parse-host</obj>.
+</description></definition><definition><define key="si:get-host-from-address-fun" name="si:get-host-from-address" type="fun"><args>address network</args>
+</define>
+
+<description>Returns a host object given an address and the name of the network which
+that address is for.  Usually the symbol <obj>:chaos</obj> is used as the
+network name.
+
+<obj>nil</obj> is returned if there is no known host with that address.
+</description></definition><definition><define key="fs:get-pathname-host-fun" name="fs:get-pathname-host" type="fun"><args>name <standard>&amp;optional</standard> no-error-p</args>
+</define>
+
+<description>Returns a host object that can be used in pathnames.
+If the name is not recognized, it is an error, unless <arg>no-error-p</arg> is
+non-<obj>nil</obj>; in that case, <obj>nil</obj> is returned.
+
+The first argument is allowed to be a host object instead of a string.
+In this case, that argument is simply returned.
+
+<obj>si:parse-host</obj> and <obj>fs:get-pathname-host</obj> differ in the set of
+hosts searched.
+</description></definition><definition><define key="fs:unknown-pathname-host-condition" name="fs:unknown-pathname-host" type="condition"><args>(<obj>fs:pathname-error</obj> <obj>error</obj>)</args>
+</define>
+
+<description>This condition is signaled by <obj>fs:get-pathname-host</obj> when the
+host is not recognized, if that is an error.
+
+The <obj>:name</obj> operation on the condition instance returns the string
+given to <obj>fs:get-pathname-host</obj>.
+</description></definition><definition>
+<define key="fs:*pathname-host-list*-var" name="fs:*pathname-host-list*" type="var"></define>
+
+<description>This is a list of all the host objects that support file access.
+</description></definition><definition>
+<define key="si:host-alist-var" name="si:host-alist" type="var"></define>
+
+<description>This variable is a list of one element for each known network host.
+The element looks like this:
+
+<lisp>(<arg>full-name</arg> <arg>host-object</arg> (<arg>nickname</arg> <arg>nickname2</arg> ... <arg>full-name</arg>)
+ <arg>system-type</arg> <arg>machine-type</arg> <arg>site</arg>
+ <arg>network</arg> <arg>list-of-addresses</arg> <arg>network2</arg> <arg>list-of-addresses2</arg> ...)
+</lisp>The <arg>full-name</arg> is the host's official name.  The <obj>:name</obj> operation on
+the host object returns this.
+
+The <arg>host-object</arg> is a flavor instance that represents this host.
+It may be <obj>nil</obj> if none has been created yet; <obj>si:parse-host</obj>
+creates them when they are referred to.
+
+The <arg>nickname</arg>s are alternate names that <obj>si:parse-host</obj> should
+recognize for this host, but which are not its official name.
+
+The <arg>system-type</arg> is a symbol that tells what software the
+host runs.  This is used to decide what flavor of host object to
+construct.  Symbols now used include <obj>:lispm</obj>, <obj>:its</obj>, <obj>:tops-20</obj>,
+<obj>:tenex</obj>, <obj>:vms</obj>, <obj>:unix</obj>, <obj>:multics</obj>, <obj>:minits</obj>, <obj>:waits</obj>,
+<obj>:chaos-gateway</obj>, <obj>:dos</obj>, <obj>:rsx</obj>, <obj>:magicsix</obj>, <obj>:msdos</obj>, and others.
+Not all of these are specifically understood in any way by the Lisp Machine.
+If none of these applies to a host you wish to add, use a new symbol.
+
+The <arg>machine-type</arg> is a symbol that describes the hardware of the
+host.  Symbols in use include <obj>:lispm</obj>, <obj>:pdp10</obj>, <obj>:pdp11</obj>,
+<obj>:vax</obj>, <obj>:nu</obj>, <obj>:pe3230</obj>, and <obj>:ibmpc</obj>.
+<obj>(nil)</obj> has also been observed to appear here.
+Note that these machine types attempt to have wide meanings, lumping
+together various brands, models, etc.
+
+The <arg>site</arg> does not describe anything about the host.  Instead it
+serves to say what the Lisp Machine's site name was when the host was
+defined.  This is so that, when a Lisp Machine system is moved to a
+different institution that has a disjoint set of hosts, all the old
+site's hosts can be deleted from the host alist by site
+reinitialization.
+
+The <arg>network</arg>s and lists of addresses describe how to reach the host.
+Usually there is only one network and only one address in the list.
+The generality is so that hosts with multiple addresses on multiple
+networks can be recorded.  Networks include <obj>:chaos</obj> and <obj>:arpa</obj>.
+The address is meaningful only to code for a specific network.
+</description></definition></subsection>
+
+<subsection name="NIL" title="Host Object Operations"><definition><define key="&quot;host-method" name="&quot;host" type="metamethod"><args>objects&quot; :name</args>
+</define>
+
+<description>Returns the full, official name of the host.
+</description></definition><definition><define key="&quot;host-method" name="&quot;host" type="metamethod"><args>objects&quot; :name-as-file-computer</args>
+</define>
+
+<description>Returns the name to print in pathnames on this host (assuming it
+supports files).  This is likely to be a short nickname of the host.
+</description></definition><definition><define key="&quot;host-method" name="&quot;host" type="metamethod"><args>objects&quot; :short-name</args>
+</define>
+
+<description>Returns the shortest known nickname for this host.
+</description></definition><definition><define key="&quot;host-method" name="&quot;host" type="metamethod"><args>objects&quot; :pathname-host-namep string</args>
+</define>
+
+<description>Returns <obj>t</obj> if <arg>string</arg> is recognized as a name for this host for
+purposes of pathname parsing.  The local host will recognise <obj>LM</obj>
+as a pathname host name.
+</description></definition><definition><define key="&quot;host-method" name="&quot;host" type="metamethod"><args>objects&quot; :system-type</args>
+</define>
+
+<description>Returns the operating system type symbol for this host.
+See <ref definition-in-file="fd-hac" key="host-table" type="page"></ref>.
+</description></definition><definition><define key="&quot;host-method" name="&quot;host" type="metamethod"><args>objects&quot; :network-type</args>
+</define>
+
+<description>Returns the symbol for one network that this host is connected to,
+or <obj>nil</obj> if it is not connected to any.  <obj>:chaos</obj> is preferred if it
+is one of the possible values.
+</description></definition><definition><define key="&quot;host-method" name="&quot;host" type="metamethod"><args>objects&quot; :network-typep network</args>
+</define>
+
+<description>Returns <obj>t</obj> if the host is connected to the specified network.
+</description></definition><definition><define key="&quot;host-method" name="&quot;host" type="metamethod"><args>objects&quot; :network-addresses</args>
+</define>
+
+<description>Returns an alternating list of network names and lists of addresses, such as
+
+<lisp>(:chaos (3104) :arpa (106357002))
+</lisp>You can therefore find out all networks a host is known to be on, and
+its addresses on any network.
+</description></definition><definition><define key="&quot;host-method" name="&quot;host" type="metamethod"><args>objects&quot; :sample-pathname</args>
+</define>
+
+<description>Returns a pathname for this host, whose device, directory, name, type
+and version components are all <obj>nil</obj>.  Sample pathnames are often
+useful because many file-system-dependent pathname operations depend
+only on the pathname's host.
+</description></definition><definition><define key="&quot;host-method" name="&quot;host" type="metamethod"><args>objects&quot; :open-streams</args>
+</define>
+
+<description>Returns a list of all the open file streams for files on this host.
+</description></definition><definition><define key="&quot;host-method" name="&quot;host" type="metamethod"><args>objects&quot; :close-all-files</args>
+</define>
+
+<description>Closes all file streams open for files on this host.
+</description></definition><definition><define key="&quot;host-method" name="&quot;host" type="metamethod"><args>objects&quot; :generic-base-type type-component</args>
+</define>
+
+<description>Returns the type component for a generic pathname assuming it is being
+made from a pathname whose type component is the one specified.
+</description></definition></subsection></section></chapter>
+</document-part>

@@ -1,0 +1,954 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="process-chapter"></a>
+<chapter name="process-chapter" number="30" title="Processes"><index-entry index="concepts" title="process"></index-entry>
+
+<index-entry index="concepts" title="multiprocessing"></index-entry>
+
+<index-entry index="concepts" title="wait"></index-entry>
+
+<p>The Lisp Machine supports <arg>multi-processing</arg>;  several computations
+can be executed concurrently by placing each in a separate
+<arg>process</arg>.  A process is like a processor, simulated by software.
+Each process has its own program counter, its own stack of function
+calls and its own special-variable binding environment in which to
+execute its computation.  (This is implemented with stack groups; see
+<ref chapter="14" definition-in-file="fd-sg" key="stack-group" section="0" title="Stack Groups" type="section"></ref>.)
+</p>
+
+<p>If all the processes are simply trying to compute, the machine allows
+them all to run an equal share of the time.  This is not a particularly
+efficient mode of operation since dividing the finite memory and
+processor power of the machine among several processes certainly cannot
+increase the available power and in fact wastes some of it in overhead.
+The typical use for processes is that at any time only one or two
+are trying to run.  The rest are either <arg>waiting</arg> for some event to
+occur or <arg>stopped</arg> and not allowed to compete for resources.
+</p>
+
+<index-entry index="concepts" title="process wait function"></index-entry>
+
+<p>A process waits for an event by means of the <obj>process-wait</obj> primitive,
+which is given a predicate function which defines the event being waited
+for.  A module of the system called the process scheduler periodically
+calls that function.  If it returns <obj>nil</obj> the process continues to wait;
+if it returns <obj>t</obj> the process is made runnable and its call to
+<obj>process-wait</obj> returns, allowing the computation to proceed.
+</p>
+
+<index-entry index="concepts" title="run reason"></index-entry>
+
+<index-entry index="concepts" title="arrest reason"></index-entry>
+
+<index-entry index="concepts" title="active process"></index-entry>
+
+<p>A process may be <arg>active</arg> or <arg>stopped</arg>.  Stopped processes are
+never allowed to run; they are not considered by the scheduler, and so
+can never become the current process until they are made active again.
+The scheduler continually tests the waiting functions of all the active
+processes, and those which return non-<obj>nil</obj> values are allowed to run.
+When you first create a process with <obj>make-process</obj>, it is inactive.
+</p>
+
+<p>The activity of a process is controlled by two sets of Lisp objects
+associated with it, called its <arg>run reasons</arg> and its <arg>arrest
+reasons</arg>.  These sets are implemented as lists.  Any kind of object
+can be in these sets; typically keyword symbols and active objects
+such as windows and other processes are found.  A process is
+considered active when it has at least one run reason and no
+arrest reasons.
+</p>
+
+<p>To get a computation to happen in another process, you must first create
+a process, then say what computation you want to happen in that
+process.  The computation to be executed by a process is specified as an
+<arg>initial function</arg> and a list of arguments to that
+function.  When the process starts up it applies the function to the
+arguments.  In some cases the initial function is written so that it
+never returns, while in other cases it performs a certain computation
+and then returns, which stops the process.
+</p>
+
+<p>To <arg>reset</arg> a process means to exit its entire computation nonlocally
+using <obj>*unwind-stack</obj> (see <ref definition-in-file="fd-flo" key="*unwind-stack-fun" title="Function *unwind-stack" type="fun"></ref>).  Some processes are
+temporary and die when reset.  The other, permanent functions start
+their computations over again when reset.  Resetting a process clears
+its waiting condition, so that if it is active it becomes runnable.  To
+<arg>preset</arg> a function is to set up its initial function (and arguments)
+and then reset it.  This is how you start up a computation in a process.
+</p>
+
+<p>All processes in a Lisp Machine run in the same virtual address space,
+sharing the same set of Lisp objects.  Unlike other systems that have
+special restricted mechanisms for inter-process communication, the
+Lisp Machine allows processes to communicate in arbitrary ways through
+shared Lisp objects.  One process can inform another of an event simply
+by changing the value of a global variable.  Buffers containing messages
+from one process to another can be implemented as lists or arrays.
+The usual mechanisms of atomic operations, critical sections, and
+interlocks are provided
+(see <obj>store-conditional</obj> [<ref definition-in-file="proces" key="store-conditional-fun" title="Function store-conditional" type="fun"></ref>],
+<obj>without-interrupts</obj> [<ref definition-in-file="proces" key="without-interrupts-fun" title="Macro without-interrupts" type="mac"></ref>],
+and <obj>process-lock</obj> [<ref definition-in-file="proces" key="process-lock-fun" title="Function process-lock" type="fun"></ref>]).
+</p>
+
+<p>A process is a Lisp object, an instance of one of several flavors
+of process (see <ref chapter="22" definition-in-file="flavor" key="flavor" section="0" title="Objects, Message Passing, and Flavors" type="section"></ref>).  The remainder of this chapter describes
+the operations defined on processes, the functions you can apply to
+a process, and the functions and variables a program running in a process
+can use to manipulate its process.
+</p>
+<a name="scheduler"></a>
+
+
+<section chapter-number="30" name="scheduler" number="1" title="The Scheduler"><index-entry index="concepts" title="scheduler"></index-entry>
+
+<p indent="1">        At any time there is a set of <arg>active processes</arg>; as described
+above, these are all the processes that are not stopped.  Each active
+process is either currently running, runnable (ready to run), or waiting for some
+condition to become true.  The active processes are managed by a special
+stack group called the <arg>scheduler</arg>, which repeatedly examines each active
+process to determine whether it is waiting or ready to run.  The scheduler
+then selects one process and starts it up.
+</p>
+
+<p>The process chosen by the scheduler becomes the <arg>current process</arg>,
+that is, the one process that is running on the machine.  The scheduler
+sets the variable <obj>current-process</obj> to it.  It remains the current
+process and continues to run until either it decides to wait, or a
+<arg>sequence break</arg> occurs.  In either case, the scheduler stack group is
+resumed.  It then updates the process's run time meters and chooses a
+new process to run next.  This way, each process that is ready to run
+gets its share of time in which to execute.
+</p>
+
+<index-entry index="concepts" title="priority (of a process)"></index-entry>
+
+<p>Each process has a <arg>priority</arg> which is a number.  Most processes
+have priority zero.  Larger numbers give a process more priority.
+The scheduler only considers the highest priority runnable processes,
+so if there is one runnable process with priority 20 then no process
+with lesser priority can run.
+</p>
+
+<index-entry index="concepts" title="wait function"></index-entry>
+
+<p>The scheduler determines whether a process is runnable by applying the
+process's <arg>wait-function</arg> to its <arg>wait-argument-list</arg>.  If the
+wait-function returns a non-<obj>nil</obj> value, then the process is ready to
+run; otherwise, it is waiting.
+</p>
+
+<p>A process can wait for some condition to become true by calling
+<obj>process-wait</obj> (see <ref definition-in-file="proces" key="process-wait-fun" title="Function process-wait" type="fun"></ref>).  This function sets the
+process's wait-function and wait-argument-list as specified by the
+caller, and resumes the scheduler stack group.  A process can also wait
+for just a moment by calling <obj>process-allow-schedule</obj> (see
+<ref definition-in-file="proces" key="process-allow-schedule-fun" title="Function process-allow-schedule" type="fun"></ref>), which resumes the scheduler stack group
+but leaves the process runnable; it will run again as soon as all other
+runnable processes have had a chance.
+</p>
+
+<p>A sequence break is a kind of interrupt that is generated by the Lisp
+system for any of a variety of reasons; when it occurs, the scheduler is
+resumed.  The function <obj>si:sb-on</obj> (see <ref definition-in-file="proces" key="si:sb-on-fun" title="Function si:sb-on" type="fun"></ref>) can be used to
+control when sequence breaks occur.  The default is to sequence break
+once a second.  Thus even if a process never waits and is not stopped,
+it is forced to return control to the scheduler once a second so that
+any other runnable processes can get their turn.
+</p>
+
+<p>The system does not generate a sequence break when a page fault occurs;
+thus time spent waiting for a page to come in from the disk is ``charged''
+to a process the same as time spent computing, and cannot be used by
+other processes.  It is done this way for the sake of simplicity; this
+allows the whole implementation of the process system to reside in
+ordinary virtual memory, so that it does not have to worry specially
+about paging.  The performance penalty is small since Lisp Machines are
+personal computers, not multiplexed among a large number of processes.
+Usually only one process at a time is runnable.
+</p>
+
+<p>A process's wait function is free to touch any data structure it likes
+and to perform any computation it likes.  Of course, wait functions
+should be kept simple, using only a small amount of time and touching
+only a small number of pages, or system performance will be impacted
+since the wait function will consume resources even when its process is
+not running.
+</p>
+
+<p>If a wait function gets an error, the error occurs inside the scheduler.
+If this enters the debugger, all scheduling comes to a halt until the
+user proceeds or aborts.  Aborting in the debugger inside the scheduler
+``blasts'' the current process by giving it a trivial wait function that
+always returns <obj>nil</obj>; this prevents recurrence of the same problem.
+It is best to write wait functions that cannot get errors, by keeping
+them simple and by arranging for any problems to be detected before the
+scheduler sees the wait function.  <obj>process-wait</obj> calls the wait
+function once before giving it to the scheduler, and this often exposes
+an error before it can interfere with scheduling.
+</p>
+
+<p>Note well that a process's wait function is executed inside the
+scheduler stack-group, <arg>not</arg> inside the process.  This means that a
+wait function may not access special variables bound in the process.  It
+is allowed to access global variables.  It can access variables bound by
+a process through the closure mechanism (<ref chapter="13" definition-in-file="fd-clo" key="closure" section="0" title="Closures" type="section"></ref>).  If the wait
+function is defined lexically within the caller of <obj>process-wait</obj> then
+it can access local variables through the lexical scoping mechanism.
+Most commonly any values needed by the wait function are passed to it as
+arguments.
+</p>
+<definition>
+<define key="current-process-var" name="current-process" type="var"></define>
+
+<description>The value of <obj>current-process</obj> is the process that is currently
+executing, or <obj>nil</obj> while the scheduler is running.  When the
+scheduler calls a process's wait-function, it binds <obj>current-process</obj>
+to the process so that the wait-function can access its process.
+</description></definition><definition><define key="without-interrupts-fun" name="without-interrupts" type="mac"><args>body...</args>
+</define>
+
+<description>The <arg>body</arg> forms are evaluated with
+<obj>inhibit-scheduling-flag</obj> bound to <obj>t</obj>.  This is the recommended
+way to lock out multi-processing over a small critical section of code
+to prevent timing errors.  In other words the body is an
+<arg>atomic operation</arg>.  The values of the last form in the body
+are ultimately returned.
+
+In this example, <obj>list</obj> is presumed to be a global variable
+referred to from two places in the code which different
+processes will execute.
+
+<lisp><exdent amount="96"><caption></caption>(without-interrupts
+  (push item list))
+
+(without-interrupts
+  (cond ((memq item list)
+         (setq list (delq item list))
+         t)
+        (t nil)))
+</exdent></lisp></description></definition><definition>
+<define key="inhibit-scheduling-flag-var" name="inhibit-scheduling-flag" type="var"></define>
+
+<description>The value of <obj>inhibit-scheduling-flag</obj> is normally <obj>nil</obj>.
+<obj>without-interrupts</obj> binds it to <obj>t</obj>, which prevents
+process-switching until <obj>inhibit-scheduling-flag</obj> becomes <obj>nil</obj>
+again.  It is cleaner to use <obj>without-interrupts</obj> than to refer
+directly to this variable.
+</description></definition><definition><define key="process-wait-fun" name="process-wait" type="fun"><args>whostate function <standard>&amp;rest</standard> arguments</args>
+</define>
+
+<description>This is the primitive for waiting.  The current process waits until the
+application of <arg>function</arg> to <arg>arguments</arg> returns non-<obj>nil</obj>
+(at which time <obj>process-wait</obj> returns).  Note that <arg>function</arg> is applied
+in the environment of the scheduler, not the environment of the <obj>process-wait</obj>,
+so special bindings in effect when <obj>process-wait</obj> was called are <arg>not</arg> be
+in effect when <arg>function</arg> is applied.  Be careful when using any free
+references in <arg>function</arg>.  <arg>whostate</arg> is a string containing a brief
+description of the reason for waiting.  If the who-line at the bottom
+of the screen is looking at this process, it will show <arg>whostate</arg>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(process-wait &quot;Buffer&quot;
+        #'(lambda (b) (not (zerop (buffer-n-things b))))
+        the-buffer)
+</exdent></lisp></description></definition><definition><define key="process-sleep-fun" name="process-sleep" type="fun"><args>interval</args>
+</define>
+
+<description>Waits for <arg>interval</arg> sixtieths of a second, and then returns.
+It uses <obj>process-wait</obj>.
+</description></definition><definition><define key="sleep-fun" name="sleep" type="fun"><args>seconds</args>
+</define>
+
+<description>Waits <arg>seconds</arg> seconds and then returns.
+<arg>seconds</arg> need not be an integer.  This also uses <obj>process-wait</obj>.
+</description></definition><definition><define key="process-wait-with-timeout-fun" name="process-wait-with-timeout" type="fun"><args>whostate interval function <standard>&amp;rest</standard> arguments</args>
+</define>
+
+<description>This is like <obj>process-wait</obj> except that if <arg>interval</arg> sixtieths of a
+second go by and the application of <arg>function</arg> to <arg>arguments</arg> is
+still returning <obj>nil</obj>, then <obj>process-wait-with-timeout</obj> returns
+anyway.  The value returned is the value of applying <arg>function</arg> to
+<arg>arguments</arg>; thus, it is non-<obj>nil</obj> if the wait condition actually
+occurred, <obj>nil</obj> for a time-out.
+
+If <arg>interval</arg> is <obj>nil</obj>, there is no timeout, and this function is then
+equivalent to <obj>process-wait</obj>.
+</description></definition><definition><define key="with-timeout-fun" name="with-timeout" type="mac"><args>(interval timeout-forms...) body...</args>
+</define>
+
+<description><arg>body</arg> is executed with a timeout in effect for <arg>interval</arg> sixtieths of a second.  If
+<arg>body</arg> finishes before that much time elapses, the
+values of the last form in <arg>body</arg> are returned.
+
+If after <arg>interval</arg> has elapsed <arg>body</arg> has not completed, its
+execution is terminated with a <obj>throw</obj> caught by the <obj>with-timeout</obj>
+form.  Then the <arg>timeout-forms</arg> are evaluated and the values of the
+last one of them are returned.
+
+
+<lisp><exdent amount="96"><caption>For example, </caption>(with-timeout ((* 60. 60.) (format *query-io* &quot; ... Yes.&quot;) t)
+  (y-or-n-p &quot;Really do it? (Yes after one minute) &quot;))
+</exdent></lisp>is a convenient way to ask a question and assume an answer if the user does not
+respond promptly.  This is a good thing to do for queries likely to occur when the
+user has walked away from the terminal and expects an operation to finish without
+his attention.
+</description></definition><definition>
+<define key="process-allow-schedule-fun" name="process-allow-schedule" type="fun"></define>
+
+<description>Resumes the scheduler momentarily; all other processes will get a
+chance to run before the current process runs again.
+</description></definition><definition>
+<define key="sys:scheduler-stack-group-var" name="sys:scheduler-stack-group" type="const"></define>
+
+<description>This is the stack group in which the scheduler executes.
+</description></definition><definition>
+<define key="sys:clock-function-list-var" name="sys:clock-function-list" type="var"></define>
+
+<description>This is a list of functions to be called by the scheduler 60 times a second.
+Each function is passed one argument, the number of 60ths of a second
+since the last time that the functions on this list were called.
+These functions implement various
+system overhead operations such as blinking the blinking cursor
+on the screen.  Note that these functions are called inside the
+scheduler, just as are the functions of simple processes (see <ref definition-in-file="proces" key="simple-process" type="page"></ref>).
+The scheduler calls these functions as often as possible, but never
+more often than 60 times a second.  That is, if there are no processes
+ready to run, the scheduler calls the clock functions 60 times a second,
+assuming that, all together, they take less than 1/60 second to run.
+If there are processes continually ready to run, then the scheduler calls
+the clock functions as often as it can; usually this is once a second, since
+usually the scheduler gets control only once a second.
+</description></definition><definition>
+<define key="sys:active-processes-var" name="sys:active-processes" type="var"></define>
+
+<description>This is the scheduler's data-structure.  It is a list of lists, where
+the car of each element is an active process or <obj>nil</obj> and the cdr is information
+about that process.
+</description></definition><definition>
+<define key="sys:all-processes-var" name="sys:all-processes" type="var"></define>
+
+<description>This is a list of all the processes in existence.  It is mainly for
+debugging.
+</description></definition><definition>
+<define key="si:initial-process-var" name="si:initial-process" type="const"></define>
+
+<description>This is the process in which the system starts up when it is booted.
+</description></definition><definition><define key="si:sb-on-fun" name="si:sb-on" type="fun"><args><standard>&amp;optional</standard> when</args>
+</define>
+
+<description>Controls what events cause a sequence break, i.e. when
+rescheduling occurs.  The following keywords are names of events
+which can cause a sequence break.
+
+<table><tbody><tr><td><obj>:clock</obj></td><td>This event happens periodically based on a clock.  The default period
+is one second.  See <obj>sys:%tv-clock-rate</obj>, <ref definition-in-file="fd-sub" key="sys:%tv-clock-rate-meter" title="Meter sys:%tv-clock-rate" type="meter"></ref>.
+</td></tr><tr><td><obj>:keyboard</obj></td><td>Happens when a character is received from the keyboard.
+</td></tr><tr><td><obj>:chaos</obj></td><td>Happens when a packet is received from the Chaosnet,
+or transmission of a packet to the Chaosnet is completed.
+</td></tr></tbody></table>
+Since the keyboard and Chaosnet are heavily buffered, there is no
+particular advantage to enabling the <obj>:keyboard</obj> and <obj>:chaos</obj> events,
+unless the <obj>:clock</obj> event is disabled.
+
+With no argument, <obj>si:sb-on</obj> returns a list
+of keywords for the currently enabled events.
+
+With an argument, the set of enabled events is changed.  The argument
+can be a keyword, a list of keywords, <obj>nil</obj> (which disables sequence
+breaks entirely since it is the empty list), or a number, which is the
+internal mask, not documented here.
+</description></definition></section><a name="Locks"></a>
+
+
+<section chapter-number="30" name="Locks" number="2" title="Locks"><index-entry index="concepts" title="lock"></index-entry>
+
+<p indent="1">        A <arg>lock</arg> is a software construct used for synchronization
+of two processes.  A lock is either held by some process, or is free.
+When a process tries to seize a lock, it waits until the lock is free,
+and then it becomes the process holding the lock.  When it is finished,
+it unlocks the lock, allowing some other process to seize it.
+A lock protects some resource or data structure so that only one
+process at a time can use it.
+</p>
+
+<p indent="1">        In the Lisp Machine, a lock is a locative pointer to a cell.
+If the lock is free, the cell contains <obj>nil</obj>; otherwise it contains
+the process that holds the lock.  The <obj>process-lock</obj> and <obj>process-unlock</obj>
+functions are written in such a way as to guarantee that two processes
+can never both think that they hold a certain lock; only one process
+can ever hold a lock at one time.
+</p>
+<definition><define key="process-lock-fun" name="process-lock" type="fun"><args>locative <standard>&amp;optional</standard> (lock-value <obj>current-process</obj>) (whostate <obj>&quot;Lock&quot;</obj>) timeout</args>
+</define>
+
+<description>This is used to seize the lock that <arg>locative</arg> points to.
+If necessary, <obj>process-lock</obj> waits until the lock becomes free.
+When <obj>process-lock</obj> returns, the lock has been seized.  <arg>lock-value</arg>
+is the object to store into the cell specified by <arg>locative</arg>, and
+<arg>whostate</arg> is passed on to <obj>process-wait</obj>.
+
+If <arg>timeout</arg> is non-<obj>nil</obj>, it should be a fixnum representing a time
+interval in 60ths of a second.  If it is necessary to wait more than that long,
+an error with condition name <obj>sys:lock-timeout</obj> is signaled.
+</description></definition><definition><define key="process-unlock-fun" name="process-unlock" type="fun"><args>locative <standard>&amp;optional</standard> (lock-value <obj>current-process</obj>)</args>
+</define>
+
+<description>This is used to unlock the lock that <arg>locative</arg> points to.
+If the lock is free or was locked by some other process, an
+error is signaled.  Otherwise the lock is unlocked.  <arg>lock-value</arg>
+must have the same value as the <arg>lock-value</arg> parameter to the matching
+call to <obj>process-lock</obj>, or else an error is signaled.
+</description></definition><definition><define key="sys:lock-timeout-condition" name="sys:lock-timeout" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This condition is signaled when <obj>process-lock</obj> waits longer than the
+specified timeout.
+</description></definition>
+<p indent="1">        It is a good idea to use <obj>unwind-protect</obj> to make sure that
+you unlock any lock that you seize.  For example, if you write
+
+<lisp>(unwind-protect
+   (progn (process-lock lock-3)
+          (function-1)
+          (function-2))
+   (process-unlock lock-3))
+</lisp>then even if <obj>function-1</obj> or <obj>function-2</obj> does a <obj>throw</obj>,
+<obj>lock-3</obj> will get unlocked correctly.  Particular programs that use
+locks often define special forms that package this <obj>unwind-protect</obj>
+up into a convenient stylistic device.
+</p>
+
+<p>A higher level locking construct is <obj>with-lock</obj>:
+</p>
+<definition><define key="with-lock-fun" name="with-lock" type="mac"><args>(lock <standard>&amp;key</standard> norecursive) body...</args>
+</define>
+
+<description>Executes the <arg>body</arg> with <arg>lock</arg> locked.
+<arg>lock</arg> should actually be an expression whose value would be the
+status of the lock; it is used inside <obj>locf</obj> to get a locative
+pointer with which the locking and unlocking are done.
+
+It is OK for one process to lock a lock multiple times, recursively,
+using <obj>with-lock</obj>, provided <arg>norecursive</arg> is not <obj>nil</obj>.
+
+<arg>norecursive</arg> should be literally <obj>t</obj> or <obj>nil</obj>; it is not
+evaluated.  If it is <obj>t</obj>, this call to <obj>with-lock</obj> signals
+an error if the lock is already locked by the running process.
+</description></definition>
+<p>A lower level construct which can be used to implement atomic
+operations, and is used in the implementation of <obj>process-lock</obj>,
+is <obj>store-conditional</obj>.
+</p>
+<definition><define key="store-conditional-fun" name="store-conditional" type="fun"><args>location oldvalue newvalue</args>
+</define>
+
+<description>This stores <arg>newvalue</arg> into <arg>location</arg> iff <arg>location</arg> currently
+contains <arg>oldvalue</arg>.  The value is <obj>t</obj> iff the cell was changed.
+
+If <arg>location</arg> is a list, the cdr of the list is tested and stored
+in.  This is in accord with the general principle of how to access the
+contents of a locative properly, and makes 
+<obj>(store-conditional (locf (cdr x)) ...)</obj> work.
+</description></definition>
+<p>An even lower-level construct is the subprimitive
+<obj>%store-conditional</obj>, which is like <obj>store-conditional</obj> with no
+error checking, but is faster.
+</p>
+
+
+
+<subsection name="NIL" title="Process Queues"><p>A process queue is a kind of lock which can record several processes
+which are waiting for the lock and grant them the lock in the order that
+they requested it.  The queue has a fixed size.  If the number of
+processes waiting remains less than that size then they will all get the
+lock in the order of requests.  If too many processes are waiting then
+the order of requesting is not remembered for the extra ones, but proper
+interlocking is still maintained.
+</p>
+<definition><define key="si:make-process-queue-fun" name="si:make-process-queue" type="fun"><args>name size</args>
+</define>
+
+<description>Makes and returns a process queue object named <arg>name</arg>, able to record
+<arg>size</arg> processes.  The count of <arg>size</arg> includes the process that
+owns the lock.
+</description></definition><definition><define key="si:process-enqueue-fun" name="si:process-enqueue" type="fun"><args>process-queue <standard>&amp;optional</standard> lock-value who-state</args>
+</define>
+
+<description>Attempts to lock <arg>process-queue</arg> on behalf of <arg>lock-value</arg>.  If
+<arg>lock-value</arg> is <obj>nil</obj> then the locking is done on behalf of
+<obj>current-process</obj>.
+
+If the queue is locked, then <arg>lock-value</arg> or the current process is
+put on the queue.  Then this function waits for that lock value to reach
+the front of the queue.  When it does so, the lock has been granted, and
+the function returns.  The lock is now locked in the name of <arg>lock-value</arg>
+or the current process, until <obj>si:process-dequeue</obj> is used to unlock it.
+
+<arg>who-state</arg> appears in the who line during the wait.  It defaults to
+<obj>&quot;Lock&quot;</obj>.
+</description></definition><definition><define key="si:process-deqeueue-fun" name="si:process-deqeueue" type="fun"><args>process-queue <standard>&amp;optional</standard> lock-value</args>
+</define>
+
+<description>Unlocks <obj>process-queue</obj>.  <arg>lock-value</arg> (which defaults to the current process)
+must be the value which now owns the lock on the queue, or an error occurs.
+The next process or other object on the queue is granted the lock and its
+call to <obj>si:process-enqueue</obj> will therefore return.
+</description></definition><definition><define key="si:reset-process-queue-fun" name="si:reset-process-queue" type="fun"><args>process-queue</args>
+</define>
+
+<description>Unlocks the queue and clears out the list of things waiting to lock it.
+</description></definition><definition><define key="si:process-queue-locker-fun" name="si:process-queue-locker" type="fun"><args>process-queue</args>
+</define>
+
+<description>Returns the object in whose name the queue is currently locked,
+or <obj>nil</obj> if it is not now locked.
+</description></definition></subsection></section><a name="Creating a Process"></a>
+
+
+<section chapter-number="30" name="Creating a Process" number="3" title="Creating a Process"><p>There are two ways of creating a process.  One is to create a permanent
+process which you will hold on to and manipulate as desired.  The other
+way is to say simply, ``call this function on these arguments in another
+process, and don't bother waiting for the result.''  In the latter case
+you never actually use the process itself as an object.
+</p>
+<definition><define key="make-process-fun" name="make-process" type="fun"><args>name <standard>&amp;key</standard> ...</args>
+</define>
+
+<description>Creates and returns a process named <arg>name</arg>.  The process is not
+capable of running until it has been reset or preset in order to initialize
+the state of its computation.
+
+Usually you do not need to specify any of the keyword arguments.
+The following keyword arguments are allowed:
+
+<table><tbody><tr><td><obj>:simple-p</obj></td><td>Specifying <obj>t</obj> here gives you a simple process (see <ref definition-in-file="proces" key="simple-process" type="page"></ref>).
+</td></tr><tr><td><obj>:flavor</obj></td><td>Specifies the flavor of process to be created.  See <ref chapter="30" definition-in-file="proces" key="process-flavors" section="5" title="Process Flavors" type="section"></ref>, for
+a list of all the flavors of process supplied by the system.
+</td></tr><tr><td><obj>:stack-group</obj></td><td>Specifies the stack group the process is to use.  If this option is not specified,
+a stack group is created according to the relevant options below.
+</td></tr><tr><td><obj>:warm-boot-action</obj></td><td>What to do with the process when the machine is booted.
+See <ref definition-in-file="proces" key="si:process-warm-boot-action-method" title="Method si:process :warm-boot-action" type="method"></ref>.
+</td></tr><tr><td><obj>:quantum</obj></td><td>See <ref definition-in-file="proces" key="si:process-quantum-method" title="Method si:process :quantum" type="method"></ref>.
+</td></tr><tr><td><obj>:priority</obj></td><td>See <ref definition-in-file="proces" key="si:process-priority-method" title="Method si:process :priority" type="method"></ref>.
+</td></tr><tr><td><obj>:run-reasons</obj></td><td>Lets you supply an initial run reason.  The default is <obj>nil</obj>.
+</td></tr><tr><td><obj>:arrest-reasons</obj></td><td>Lets you supply an initial arrest reason.  The default is <obj>nil</obj>.
+</td></tr><tr><td><obj>:sg-area</obj></td><td>The area in which to create the stack group.  The default is
+the value of <obj>default-cons-area</obj>.
+</td></tr><tr><td><obj>:regular-pdl-area</obj></td><td></td></tr><tr><td><obj>:special-pdl-area make-process</obj></td><td></td></tr><tr><td><obj>:regular-pdl-size make-process</obj></td><td></td></tr><tr><td><obj>:special-pdl-size make-process</obj></td><td>These are passed on to <obj>make-stack-group</obj>, <ref definition-in-file="fd-sg" key="make-stack-group-fun" title="Function make-stack-group" type="fun"></ref>.
+</td></tr><tr><td><obj>:swap-sv-on-call-out</obj></td><td></td></tr><tr><td><obj>:swap-sv-of-sg-that-calls-me make-process</obj></td><td></td></tr><tr><td><obj>:trap-enable make-process</obj></td><td>Specify those attributes of the stack group.  You don't want to use
+these.
+</td></tr></tbody></table>
+If you specify <obj>:flavor</obj>, there can be additional options provided
+by that flavor.
+</description></definition>
+<p>The following functions allow you to call a function and have its
+execution happen asynchronously in another process.  This can be used
+either as a simple way to start up a process that will run ``forever'', or
+as a way to make something happen without having to wait for it
+to complete.  When the function returns, the process is returned to a pool
+of free processes for reuse.  The only difference between these three
+functions is in what happens if the machine is booted while the process
+is still active.
+</p>
+
+<p>Normally the function to be run should not do any I/O to the terminal,
+as it does not have a window and terminal I/O will cause it to make a
+notification and wait for user attention.  Refer to
+<ref chapter="14" definition-in-file="fd-sg" key="sg-terminal-io-issues" section="5" title="Input/Output in Stack Groups" type="section"></ref> for a discussion of the issues.
+</p>
+<definition><define key="process-run-function-fun" name="process-run-function" type="fun"><args>name-or-options function <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Creates a process, presets it to apply
+<arg>function</arg> to <arg>args</arg>, and starts it running.
+The value returned is the new process.
+The process is killed if <arg>function</arg> returns; by default,
+it is also killed if it is reset.
+Example:
+
+<lisp>(defun background-print (file)
+  (process-run-function &quot;Print&quot; 'hardcopy-file file))
+</lisp>creates a background process that prints the specified file.
+
+<arg>name-or-options</arg> can be either a string specifying a name for
+the process or a list of alternating keywords and values that can
+specify the name and various other parameters.
+
+<table><tbody><tr><td><obj>:name</obj></td><td>This keyword should be followed by a string which specifies the name
+of the process.  The default is <obj>&quot;Anonymous&quot;</obj>.
+</td></tr><tr><td><obj>:restart-after-reset</obj></td><td>This keyword says what to do to the process if it is reset.  <obj>nil</obj>
+means the process should be killed; anything else means the process
+should be restarted.  <obj>nil</obj> is the default.
+</td></tr><tr><td><obj>:warm-boot-action</obj></td><td>What to do with the process when the machine is booted.
+See <ref definition-in-file="proces" key="si:process-warm-boot-action-method" title="Method si:process :warm-boot-action" type="method"></ref>.
+</td></tr><tr><td><obj>:restart-after-boot</obj></td><td>This is a simpler way of saying what to do with the process when the
+machine is booted.  If the <obj>:warm-boot-action</obj> keyword is not
+supplied or its value is <obj>nil</obj>, then this keyword's value is used
+instead.  <obj>nil</obj> means the process should
+be killed; anything else means the process should be restarted.
+<obj>nil</obj> is the default.
+</td></tr><tr><td><obj>:quantum</obj></td><td>See <ref definition-in-file="proces" key="si:process-quantum-method" title="Method si:process :quantum" type="method"></ref>.
+</td></tr><tr><td><obj>:priority</obj></td><td>See <ref definition-in-file="proces" key="si:process-priority-method" title="Method si:process :priority" type="method"></ref>.
+</td></tr></tbody></table></description></definition><definition><define key="process-run-restartable-function-fun" name="process-run-restartable-function" type="fun"><args>name-or-keywords function <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>This is the same as <obj>process-run-function</obj> except that the default is that
+the process will be restarted if reset or after a warm boot.
+You can get the same effect by using <obj>process-run-function</obj> with
+appropriate keywords.
+</description></definition></section><a name="Process Generic Operations"></a>
+
+<section chapter-number="30" name="Process Generic Operations" number="4" title="Process Generic Operations"><nopara></nopara>
+<p>These are the operations that are defined on all flavors of process.
+Certain process flavors may define additional operations.  Not all possible
+operations are listed here, only those of interest to the user.
+</p>
+
+
+<subsection name="NIL" title="Process Attributes"><definition>
+<define key="si:process-name-method" name="si:process" type="method"></define>
+
+<description>Returns the name of the process, which was the first argument to <obj>make-process</obj>
+or <obj>process-run-function</obj> when the process was created.  The name is
+a string that appears in the printed-representation of the process, stands for
+the process in the who-line and the <obj>peek</obj> display, etc.
+</description></definition><definition>
+<define key="si:process-stack-group-method" name="si:process" type="method"></define>
+
+<description>Returns the stack group currently executing on behalf of this process.
+This can be different from the initial-stack-group if the process contains
+several stack groups that coroutine among themselves,
+or if the process is in the error-handler, which runs in its own stack group.
+
+Note that the stack-group of a <arg>simple</arg> process (see <ref definition-in-file="proces" key="simple-process" type="page"></ref>)
+is not a stack group at all, but a function.
+</description></definition><definition>
+<define key="si:process-initial-stack-group-method" name="si:process" type="method"></define>
+
+<description>Returns the stack group the initial-function is called in when the process starts up
+or is reset.
+</description></definition><definition>
+<define key="si:process-initial-form-method" name="si:process" type="method"></define>
+
+<description>Returns the initial ``form'' of the process.
+This isn't really a Lisp form; it is a cons whose car is the initial-function
+and whose cdr is the list of arguments to which that function is applied
+when the process starts up or is reset.
+
+In a simple process (see <ref definition-in-file="proces" key="simple-process" type="page"></ref>), the initial form is a list of one
+element, the process's function.
+
+To change the initial form, use the <obj>:preset</obj> operation (see <ref definition-in-file="proces" key="si:process-preset-method" title="Method si:process :preset" type="method"></ref>).
+</description></definition><definition>
+<define key="si:process-wait-function-method" name="si:process" type="method"></define>
+
+<description>Returns the process's current wait-function, which is the predicate used
+by the scheduler to determine if the process is runnable.  This is
+<obj>#'true</obj> if the process is running, and <obj>#'false</obj> if the process has
+no current computation (for instance, if it has just been created, its
+initial function has returned) or if the program has decided to wait
+indefinitely.  The wait-function of a flushed process is <obj>si:flushed-process</obj>,
+a function equivalent to <obj>#'false</obj> but recognizably distinct.
+</description></definition><definition>
+<define key="si:process-wait-argument-list-method" name="si:process" type="method"></define>
+
+<description>Returns the arguments to the process's current wait-function.  This is
+frequently the <obj>&amp;rest</obj> argument to <obj>process-wait</obj> in the
+process's stack.  The system always uses it in
+a safe manner, i.e. it forgets about it before <obj>process-wait</obj> returns.
+</description></definition><definition>
+<define key="si:process-whostate-method" name="si:process" type="method"></define>
+
+<description>Returns a string that is the state of the process to go in the who-line at
+the bottom of the screen.  This is <obj>&quot;run&quot;</obj> if the process is running or
+trying to run; otherwise, it is the reason why the process is waiting.  If the
+process is stopped, then this whostate string is ignored and the who-line
+displays <obj>arrest</obj> if the process is arrested or <obj>stop</obj> if the process has
+no run reasons.
+</description></definition><definition>
+<define key="si:process-quantum-method" name="si:process" type="method"></define><define key="si:process-set-quantum-method" name="si:process" type="method"><args>60ths</args>
+</define>
+
+<description>Respectively return and change the number of 60ths of a second this
+process is allowed to run without waiting before the scheduler will run
+someone else.  The quantum defaults to 1 second.
+</description></definition><definition>
+<define key="si:process-quantum-remaining-method" name="si:process" type="method"></define>
+
+<description>Returns the amount of time remaining for this process to run, in 60ths of a second.
+</description></definition><definition>
+<define key="si:process-priority-method" name="si:process" type="method"></define><define key="si:process-set-priority-method" name="si:process" type="method"><args>priority-number</args>
+</define>
+
+<description>Respectively return and change the priority of this process.  The larger the number, the
+more this process gets to run.  Within a priority level the scheduler runs all
+runnable processes in a round-robin fashion.  Regardless of priority a process
+will not run for more than its quantum.  The default priority is 0, and no
+normal process uses other than 0.
+</description></definition><definition>
+<define key="si:process-warm-boot-action-method" name="si:process" type="method"></define><define key="si:process-set-warm-boot-action-method" name="si:process" type="method"><args>action</args>
+</define>
+
+<description>Respectively return and change the process's warm-boot-action, which controls what
+happens if the machine is booted while this process is active.
+(Contrary to the name, this applies to both cold and warm booting.) This
+can be <obj>nil</obj> or <obj>:flush</obj>, which means to <arg>flush</arg> the process (see
+<ref definition-in-file="proces" key="flushed-process" type="page"></ref>), or can be a function to call.  The default is
+<obj>si:process-warm-boot-delayed-restart</obj>, which resets the process,
+causing it to start over at its initial function.  You can also use
+<obj>si:process-warm-boot-reset</obj>, which throws out of the process'
+computation and kills the process, or <obj>si:process-warm-boot-restart</obj>,
+which is like the default but restarts the process at an earlier stage
+of system reinitialization.  This is used for processes like the
+keyboard process and chaos background process, which are needed for
+reinitialization itself.
+
+</description></definition><definition>
+<define key="si:process-simple-p-method" name="si:process" type="method"></define>
+
+<description>Returns <obj>nil</obj> for a normal process, <obj>t</obj> for a simple process.
+See <ref definition-in-file="proces" key="simple-process" type="page"></ref>.
+</description></definition><definition>
+<define key="si:process-idle-time-method" name="si:process" type="method"></define>
+
+<description>Returns the time in seconds since this process last ran, or <obj>nil</obj> if it has never run.
+</description></definition><definition>
+<define key="si:process-total-run-time-method" name="si:process" type="method"></define>
+
+<description>Returns the amount of time this process has run, in 60ths of a second.
+This includes cpu time and disk wait time.
+</description></definition><definition>
+<define key="si:process-disk-wait-time-method" name="si:process" type="method"></define>
+
+<description>Returns the amount of time this process has spent
+waiting for disk I/O, in 60ths of a second.
+</description></definition><definition>
+<define key="si:process-cpu-time-method" name="si:process" type="method"></define>
+
+<description>Returns the amount of time this process has spent actually
+executing instructions, in 60ths of a second.
+</description></definition><definition>
+<define key="si:process-percent-utilization-method" name="si:process" type="method"></define>
+
+<description>Returns the fraction of the machine's time this
+process has been using recently, as a percentage
+(a number between 0 and 100.0).  The value is a weighted
+average giving more weight to more recent history.
+</description></definition><definition>
+<define key="si:process-reset-meters-method" name="si:process" type="method"></define>
+
+<description>Resets the run-time counters of the process to zero.
+</description></definition></subsection>
+
+<subsection name="NIL" title="Run and Arrest Reasons"><definition>
+<define key="si:process-run-reasons-method" name="si:process" type="method"></define>
+
+<description>Returns the list of run reasons, which are the reasons why this process should
+be active (allowed to run).
+</description></definition><definition><define key="si:process-run-reason-method" name="si:process" type="method"><args>object</args>
+</define>
+
+<description>Adds <arg>object</arg> to the process's run reasons.  This can activate the process.
+</description></definition><definition><define key="si:process-revoke-run-reason-method" name="si:process" type="method"><args>object</args>
+</define>
+
+<description>Removes <arg>object</arg> from the process's run reasons.  This can stop the process.
+</description></definition><definition>
+<define key="si:process-arrest-reasons-method" name="si:process" type="method"></define>
+
+<description>Returns the list of arrest reasons, which are the reasons why this process
+should be inactive (forbidden to run).
+</description></definition><definition><define key="si:process-arrest-reason-method" name="si:process" type="method"><args>object</args>
+</define>
+
+<description>Adds <arg>object</arg> to the process's arrest reasons.  This can stop the process.
+</description></definition><definition><define key="si:process-revoke-arrest-reason-method" name="si:process" type="method"><args>object</args>
+</define>
+
+<description>Removes <arg>object</arg> from the process's arrest reasons.  This can activate
+the process.
+</description></definition><definition>
+<define key="si:process-active-p-method" name="si:process" type="method"></define>
+<define key="si:process-runnable-p-method" name="si:process" type="method"></define>
+
+<description>These two operations are the same.  <obj>t</obj> is returned if the process is
+active, i.e. it can run if its wait-function allows.  <obj>nil</obj> is returned
+if the process is stopped.
+</description></definition></subsection>
+
+<subsection name="NIL" title="Bashing the Process"><definition><define key="si:process-preset-method" name="si:process" type="method"><args>function <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Sets the process's initial function to <arg>function</arg> and initial arguments
+to <arg>args</arg>.  The process is then reset so that any computation occuring in it
+is terminated and it begins anew by applying <arg>function</arg> to <arg>args</arg>.
+A <obj>:preset</obj> operation on a stopped process
+returns immediately, but does not activate the process; hence the
+process will not really apply <arg>function</arg> to <arg>args</arg> until it is activated later.
+</description></definition><definition><define key="si:process-reset-method" name="si:process" type="method"><args><standard>&amp;optional</standard> no-unwind kill</args>
+</define>
+
+<description>Forces the process to throw out of its present computation and apply its
+initial function to its initial arguments, when it next runs.  The
+throwing out is skipped if the process has no present computation (e.g.
+it was just created), or if the <arg>no-unwind</arg> option so specifies.  The
+possible values for <arg>no-unwind</arg> are:
+
+<table><tbody><tr><td><obj>:unless-current</obj></td><td></td></tr><tr><td><obj>nil</obj></td><td>Unwind unless the stack group to be unwound is the one currently
+executing, or belongs to the current process.
+
+</td></tr><tr><td><obj>:always</obj></td><td>Unwind in all cases.  This may cause the operation to throw through its
+caller instead of returning.
+
+</td></tr><tr><td><obj>t</obj></td><td>Never unwind.
+</td></tr></tbody></table>
+If <arg>kill</arg> is <obj>t</obj>, the process is to be killed after unwinding it.
+This is for internal use by the <obj>:kill</obj> operation only.
+
+A <obj>:reset</obj> operation on a stopped process returns immediately, but
+does not activate the process; hence the process will not really get
+reset until it is activated later.
+</description></definition><definition>
+<define key="si:process-flush-method" name="si:process" type="method"></define>
+
+<description>Forces the process to wait forever.  A process may not <obj>:flush</obj> itself.
+Flushing a process is different from stopping it, in that it is still active
+and hence if it is reset or preset it will start running again.
+
+A flushed process can be recognized because its wait-function is
+<obj>si:flushed-process</obj>.
+If a process belonging to a window is flushed, exposing or selecting the window
+resets the process.
+</description></definition><definition>
+<define key="si:process-kill-method" name="si:process" type="method"></define>
+
+<description>Gets rid of the process.  It is reset, stopped,
+and removed from <obj>sys:all-processes</obj>.
+</description></definition><definition><define key="si:process-interrupt-method" name="si:process" type="method"><args>function <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Forces the process to <obj>apply</obj> <arg>function</arg> to <arg>args</arg>.  When <arg>function</arg> returns,
+the process continues the interrupted computation.  If the process is waiting,
+it wakes up, calls <arg>function</arg>, then waits again when <arg>function</arg> returns.
+
+If the process is stopped it does not <obj>apply</obj> <arg>function</arg> to <arg>args</arg> 
+immediately, but will later when it is activated.  Normally the <obj>:interrupt</obj> operation
+returns immediately, but if the process's stack group is in an unusual internal
+state <obj>:interrupt</obj> may have to wait for it to get out of that state.
+</description></definition></subsection></section><a name="process-flavors"></a>
+
+
+<section chapter-number="30" name="process-flavors" number="5" title="Process Flavors"><p>These are the flavors of process provided by the system.  It is possible for users
+to define additional flavors of their own.
+</p>
+<definition>
+<define key="si:process-flavor" name="si:process" type="flavor"></define>
+
+<description>This is the standard default kind of process.
+</description></definition><definition>
+<define key="si:simple-process-flavor" name="si:simple-process" type="flavor"></define>
+
+
+<description><index-entry index="concepts" title="simple process"></index-entry>
+A simple process is not a process in the conventional sense.  It has no
+stack group of its own; instead of having a stack group that gets
+resumed when it is time for the process to run, it has a function that
+gets called when it is time for the process to run.  When the
+wait-function of a simple process becomes true, and the scheduler
+notices it, the simple process's function is called in the scheduler's
+own stack group.  Since a simple process does not have any stack group
+of its own, it can't save control state in between calls; any state
+that it saves must be saved in data structure.
+
+The only advantage of simple processes over normal processes is that
+they use up less system overhead, since they can be scheduled without
+the cost of resuming stack-groups.  They are intended as a special,
+efficient mechanism for certain purposes.  For example, packets received
+from the Chaosnet are examined and distributed to the proper receiver by
+a simple process that wakes up whenever there are any packets in the
+input buffer.  However, they are harder to use, because you can't save
+state information across scheduling.  That is, when the simple process
+is ready to wait again, it must return; it can't call <obj>process-wait</obj>
+and continue to do something else later.  In fact, it is an error to
+call <obj>process-wait</obj> from inside a simple process.  Another drawback to
+simple processes is that if the function signals an error, the scheduler
+itself is broken and multiprocessing stops; this situation can be
+repaired only by aborting, which blasts the process.  Also, when a
+simple process is run, no other process is scheduled until it chooses to
+return; so simple processes should never run for a long time without
+returning.
+
+Asking for the stack group of a simple process does not signal an error,
+but returns the process's function instead.
+
+Since a simple process cannot call <obj>process-wait</obj>, it needs some other
+way to specify its wait-function.  To set the wait-function of a simple
+process, use <obj>si:set-process-wait</obj> (see below).  So, when a simple
+process wants to wait for a condition, it should call
+<obj>si:set-process-wait</obj> to specify the condition, then return.
+</description></definition><definition><define key="si:set-process-wait-fun" name="si:set-process-wait" type="fun"><args>simple-process wait-function wait-argument-list</args>
+</define>
+
+<description>Sets the <arg>wait-function</arg> and <arg>wait-argument-list</arg> of <arg>simple-process</arg>.
+See the description of the <obj>si:simple-process</obj> flavor (above) for
+more information.
+</description></definition></section><a name="Other Process Functions"></a>
+
+<section chapter-number="30" name="Other Process Functions" number="6" title="Other Process Functions"><definition><define key="process-enable-fun" name="process-enable" type="fun"><args>process</args>
+</define>
+
+<description>Activates <arg>process</arg> by revoking all its run and arrest reasons,
+then giving it a run reason of <obj>:enable</obj>.
+</description></definition><definition><define key="process-reset-and-enable-fun" name="process-reset-and-enable" type="fun"><args>process</args>
+</define>
+
+<description>Resets <arg>process</arg>, then enables it.
+</description></definition><definition><define key="process-disable-fun" name="process-disable" type="fun"><args>process</args>
+</define>
+
+<description>Stops <arg>process</arg> by revoking all its run reasons.  Also revokes
+all its arrest reasons.
+</description></definition><nopara></nopara>
+<p>The remaining functions in this section are obsolete, since they simply
+duplicate what can be done by sending a message.  They are documented here
+because their names are in the <obj>global</obj> package.
+</p>
+<definition><define key="process-preset-fun" name="process-preset" type="fun"><args>process function <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Sends a <obj>:preset</obj> message.
+</description></definition><definition><define key="process-reset-fun" name="process-reset" type="fun"><args>process</args>
+</define>
+
+<description>Sends a <obj>:reset</obj> message.
+</description></definition><definition><define key="process-name-fun" name="process-name" type="fun"><args>process</args>
+</define>
+
+<description>Gets the name of a process, like the <obj>:name</obj> operation.
+</description></definition><definition><define key="process-stack-group-fun" name="process-stack-group" type="fun"><args>process</args>
+</define>
+
+<description>Gets the current stack group of a process, like the <obj>:stack-group</obj> operation.
+</description></definition><definition><define key="process-initial-stack-group-fun" name="process-initial-stack-group" type="fun"><args>process</args>
+</define>
+
+<description>Gets the initial stack group of a process, like the <obj>:initial-stack-group</obj> operation.
+</description></definition><definition><define key="process-initial-form-fun" name="process-initial-form" type="fun"><args>process</args>
+</define>
+
+<description>Gets the initial form of a process, like the <obj>:initial-form</obj> operation.
+</description></definition><definition><define key="process-wait-function-fun" name="process-wait-function" type="fun"><args>process</args>
+</define>
+
+<description>Gets the current wait-function of a process, like the <obj>:wait-function</obj> operation.
+</description></definition><definition><define key="process-wait-argument-list-fun" name="process-wait-argument-list" type="fun"><args>p</args>
+</define>
+
+<description>Gets the arguments to the current wait-function of a process, like the
+<obj>:wait-argument-list</obj> operation.
+</description></definition><definition><define key="process-whostate-fun" name="process-whostate" type="fun"><args>p</args>
+</define>
+
+<description>Gets the current who-line state string of a process, like the <obj>:whostate</obj> operation.
+</description></definition></section></chapter>
+</document-part>

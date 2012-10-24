@@ -1,0 +1,964 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="io-chapter"></a>
+<chapter name="io-chapter" number="23" title="The I/O System"><index-entry index="concepts" title="input and output"></index-entry>
+
+<index-entry index="concepts" title="stream"></index-entry>
+
+<p indent="1">        Zetalisp provides a powerful and flexible system for performing
+input and output to peripheral devices.  Device independent I/O is
+generalized in the concept of an <arg>I/O stream</arg>.  A stream is a source
+or sink for data in the form of characters or integers; sources are
+called <arg>input streams</arg> and sinks are called <arg>output streams</arg>.  A
+stream may be capable of use in either direction, in which case it is a
+<arg>bidirectional</arg> stream.  In a few unusual cases, it is useful to have
+a `stream' which supports neither input nor output; for example, opening
+a file with direction <obj>:probe</obj> returns one (<ref definition-in-file="files" key="probe-streams" type="page"></ref>).
+Streams on which characters are transferred are called <arg>character
+streams</arg>, and are used more often than <arg>binary streams</arg>, which
+usually transfer integers of type <obj>(unsigned-byte <arg>n</arg>)</obj> for some
+<arg>n</arg>.
+</p>
+
+<p>Streams automatically provide a modular separation between the program
+which implements the stream and the program which uses it, because
+streams obey a standard protocol.  The stream protocol is a special case
+is based on the general message passing protocol: a stream operation is
+invoked by calling the stream as a function, with a first argument that
+is a keyword and identifies the I/O operation desired (such as, <obj>:tyi</obj>
+to read a character) and additional arguments as that operation calls
+for them.  The stream protocol consists of a particular set of operation
+names and calling conventions for them.  It is documented in
+<ref chapter="23" definition-in-file="stream" key="streams" section="3" title="I/O Streams" type="section"></ref>.
+</p>
+
+<p>Many programs do not invoke the stream operations directly; instead, they
+call standard I/O functions which then invoke stream operations.
+This is done for two reasons: the functions may provide useful services,
+and they may be transportable to Common Lisp or Maclisp.  Programs that
+use stream operations directly are not transportable outside Zetalisp.
+The I/O functions are documented in the first sections of this chapter.
+</p>
+
+<p>The generality of the Zetalisp I/O stream comes from the fact that
+I/O operations on it can invoke arbitrary Lisp code.  For example,
+it would be very simple to implement a &quot;morse code&quot; stream that accepted
+character output and used <obj>beep</obj> with appropriate pauses to `display' it.
+How to implement a stream is documented in <ref chapter="23" definition-in-file="stream" key="stream-implementation" section="3" title="I/O Streams" type="section"></ref>,
+and the following sections.
+</p>
+
+<p>The most commonly used streams are windows, which read input from the
+keyboard and dispose of output by drawing on the screen, file streams,
+editor buffer streams which get input from the text in a buffer
+and insert output into the buffer, and string streams which do
+likewise with the contents of a string.
+</p>
+
+<p>Another unusual aspect of Lisp I/O is the ability to input and output
+general Lisp objects, represented as text.  These are done using the
+<obj>read</obj> and related functions and using <obj>print</obj> and related functions.
+They are documented in chapter <ref chapter="24" definition-in-file="rdprt" key="expression-io-chapter" title="Expression Input and Output" type="chapter"></ref>.
+</p>
+<a name="maclisp-input-functions"></a>
+
+
+<section chapter-number="23" name="maclisp-input-functions" number="1" title="Input Functions"><p>The input functions read characters, lines, or bytes from an input
+stream.  This argument is called <arg>stream</arg>.  If omitted or <obj>nil</obj>,
+the current value of <obj>*standard-input*</obj>.  This is the
+``default input stream'', which in simple use reads
+from the terminal keyboard.  If the argument is <obj>t</obj>, the current
+value of <obj>*terminal-io*</obj> is used; this is conventionally supposed to
+access ``the user's terminal'' and nearly always reads from the keyboard
+in processes belonging to windows.
+</p>
+
+<p>If the stream is an interactive one, such as the terminal, the input is
+echoed, and functions which read more than a single character allow
+editing as well.  <obj>peek-char</obj> echoes all of the characters that were
+skipped over if <obj>read-char</obj> would have echoed them; the character not
+removed from the stream is not echoed either.
+</p>
+
+<p>When an input stream has no more data to return, it reports end of file.
+Each stream input operation has a convention for how to do this.
+The input functions accept an argument <arg>eof-option</arg> or two arguments
+<arg>eof-error</arg> and <arg>eof-value</arg> to tell them what to do if end of file
+is encountered instead of any input.  The functions that take two
+<arg>eof-</arg> arguments are the Common Lisp ones.  For them, end of
+file is an error if <arg>eof-error</arg> is non-<obj>nil</obj> or if it is
+unsupplied.  If <arg>eof-error</arg> is <obj>nil</obj>, then the function returns
+<arg>eof-value</arg> at end of file.
+</p>
+
+<p>The functions which have one argument called <arg>eof-option</arg> are from
+Maclisp.  End of file causes an error if the argument is not supplied.
+Otherwise, end of file causes the function to return the argument's
+value.  Note that an <arg>eof-option</arg> of <obj>nil</obj> means to return <obj>nil</obj>
+if the end of the file is reached; it is <arg>not</arg> equivalent to supplying
+no <arg>eof-option</arg>.
+</p>
+<definition><define key="sys:end-of-file-condition" name="sys:end-of-file" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>All errors signaled to report end of file possess this condition name.
+
+The <obj>:stream</obj> operation on the condition instance returns the stream
+on which end of file was reached.
+</description></definition>
+
+<subsection name="NIL" title="String Input Functions"><definition><define key="read-line-fun" name="read-line" type="fun"><args><standard>&amp;optional</standard> stream (eof-errorp <obj>t</obj>) eof-value ignore options</args>
+</define>
+
+<description>Reads a line of text, terminated by a <obj>Return</obj>.  It
+returns the line as a character string, <arg>without</arg> the <obj>Return</obj>
+character that ended the line.  The argument <arg>ignore</arg>
+must be accepted for the sake of the Common Lisp specifications
+but it is not used.
+
+This function is usually used to get a line of input from
+the user.  If rubout processing is happening, then <arg>options</arg> is passed
+as the list of options to the rubout handler (see <ref chapter="23" definition-in-file="ios" key="rubout-handler" section="5" title="Rubout Handling" type="section"></ref>).
+
+There is a second value, <obj>t</obj> if the line was terminated by end of file.
+</description></definition><definition><define key="readline-fun" name="readline" type="fun"><args><standard>&amp;optional</standard> stream eof-option options</args>
+</define>
+
+<description>Like <obj>read-line</obj> but uses the Maclisp convention for specifying
+what to do about end of file.  This function can take its first two
+arguments in the other order, for Maclisp compatibility only; see the
+note in <ref chapter="23" definition-in-file="ios" key="maclisp-input-functions" section="1" title="Input Functions" type="section"></ref>.
+</description></definition><definition><define key="readline-trim-fun" name="readline-trim" type="fun"><args><standard>&amp;optional</standard> stream eof-option options</args>
+</define>
+
+<description>This is like <obj>readline</obj> except that leading and trailing spaces and
+tabs are discarded from the value before it is returned.
+</description></definition><definition><define key="readline-or-nil-fun" name="readline-or-nil" type="fun"><args><standard>&amp;optional</standard> stream eof-option options</args>
+</define>
+
+<description>Like <obj>readline-trim</obj> except that <obj>nil</obj> is returned if the line is empty
+or all blank.
+</description></definition><definition><define key="read-delimited-string-fun" name="read-delimited-string" type="fun"><args><standard>&amp;optional</standard> delimiter stream eof rubout-handler-options buffer-size</args>
+</define>
+
+<description>Reads input from <arg>stream</arg> until a delimiter character is reached, then
+returns as a string all the input up to but not including the delimiter.
+<arg>delimiter</arg> is either a character or a list of characters which all
+serve as delimiters.  It defaults to the character <obj>End</obj>.  <arg>stream</arg>
+defaults to the value of <obj>*standard-input*</obj>.
+
+If <arg>eof</arg> is non-<obj>nil</obj>, then end of file on attempting to read the
+first character is an error.  Otherwise it just causes an empty string
+to be returned.  End of file once at least one character has been read
+is never an error but it does cause the function to return all the input
+so far.
+
+Input is done using rubout handling and echoing if stream supports the
+<obj>:rubout-handler</obj> operation.  In this case, <arg>rubout-handler-options</arg>
+are passed as the options argument to that operation.
+
+<arg>buffer-size</arg> specifies the size of string buffer to allocate initially.
+
+The second value returned is <obj>t</obj> if input ended due to end of file.
+
+The third value is the delimiter character which terminated input,
+or <obj>nil</obj> if input terminated due to end of file.
+This character is currently represented as a fixnum, but perhaps someday
+will be a character object instead.
+</description></definition></subsection>
+
+<subsection name="NIL" title="Character-Level Input Functions"><definition><define key="read-char-fun" name="read-char" type="fun"><args><standard>&amp;optional</standard> stream (eof-errorp <obj>t</obj>) eof-value</args>
+</define>
+
+<description>Reads a character from <arg>stream</arg> and returns it as a character object.
+End of file is an error if <arg>eof-errorp</arg> is non-<obj>nil</obj>; otherwise, it
+causes <obj>read-char</obj> to return <arg>eof-value</arg>.  This uses the <obj>:tyi</obj>
+stream operation.
+</description></definition><definition><define key="read-byte-fun" name="read-byte" type="fun"><args>stream <standard>&amp;optional</standard> (eof-errorp <obj>t</obj>) eof-value</args>
+</define>
+
+<description>Like <obj>read-char</obj> but returns an integer rather than a character
+object.  In strict Common Lisp, only <obj>read-char</obj> can be used
+on character streams and only <obj>read-byte</obj> can be used on binary streams.
+</description></definition><definition><define key="read-char-no-hang-fun" name="read-char-no-hang" type="fun"><args><standard>&amp;optional</standard> stream (eof-errorp <obj>t</obj>) eof-value</args>
+</define>
+
+<description>Similar but returns <obj>nil</obj> immediately when no input is available on an interactive stream.
+Uses the <obj>:tyi-no-hang</obj> stream operation (<ref definition-in-file="stream" key="streams-tyi-no-hang-method" title="Meta-Method streams :tyi-no-hang" type="metamethod"></ref>).
+</description></definition><definition><define key="unread-char-fun" name="unread-char" type="fun"><args>char <standard>&amp;optional</standard> stream</args>
+</define>
+
+<description>Puts <arg>char</arg> back into <arg>stream</arg> so that it will be read again
+as the next input character.  <arg>char</arg> must be the same character that was
+read from stream most recently.  It may not work to unread two characters
+in a row before reading again.
+Uses the <obj>:untyi</obj> stream operation (<ref definition-in-file="stream" key="streams-untyi-method" title="Meta-Method streams :untyi" type="metamethod"></ref>).
+</description></definition><definition><define key="peek-char-fun" name="peek-char" type="fun"><args>peek-type <standard>&amp;optional</standard> stream (eof-errorp <obj>t</obj>) eof-value</args>
+</define>
+
+<description>If <arg>peek-type</arg> is <obj>nil</obj>, this is like <obj>read-char</obj> except leaves the character
+to be read again by the next input operation.
+
+If <arg>peek-type</arg> is <obj>t</obj>, skips whitespace characters and peeks at the
+first nonwhitespace character.  That character is the value, and is also
+left to be reread.
+
+If <arg>peek-type</arg> is a character, reads input until that character is seen.
+That character is unread and also returned.
+</description></definition><definition><define key="listen-fun" name="listen" type="fun"><args><standard>&amp;optional</standard> stream</args>
+</define>
+
+<description><obj>t</obj> if input is now available on <arg>stream</arg>.  Uses the <obj>:listen</obj> operation
+(<ref definition-in-file="stream" key="streams-listen-method" title="Meta-Method streams :listen" type="metamethod"></ref>).
+</description></definition><definition><define key="clear-input-fun" name="clear-input" type="fun"><args><standard>&amp;optional</standard> stream</args>
+</define>
+
+<description>Discards any input now available on <arg>stream</arg>, if it is an interactive stream.
+Uses the <obj>:clear-input</obj> stream operation (<ref definition-in-file="stream" key="streams-clear-input-method" title="Meta-Method streams :clear-input" type="metamethod"></ref>).
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Maclisp Compatibility Input Functions"><p>These functions accept an argument <arg>eof-option</arg> to tell them what to
+do if end of file is encountered instead of any input.  End of file
+signals an error if the argument is not supplied.  Otherwise, end of
+file causes the function to return the argument's value.  Note that an
+<arg>eof-option</arg> of <obj>nil</obj> means to return <obj>nil</obj> if the end of the
+file is reached; it is <arg>not</arg> equivalent to supplying no
+<arg>eof-option</arg>.
+</p>
+
+<p>The arguments <arg>stream</arg> and <arg>eof-option</arg> can also be given in the
+reverse order for compatibility with old Maclisp programs.  The
+functions attempt to figure out which way they were called by seeing
+whether each argument is a plausible stream.  Unfortunately, there is
+an ambiguity with symbols: a symbol might be a stream and it might be
+an eof-option.  If there are two arguments, one being a symbol and the
+other being something that is a valid stream, or only one argument,
+which is a symbol, then these functions interpret the symbol as an
+eof-option instead of as a stream.  To force them to interpret a
+symbol as a stream, give the symbol an <obj>si:io-stream-p</obj> property
+whose value is <obj>t</obj>.
+</p>
+<definition><define key="tyi-fun" name="tyi" type="fun"><args><standard>&amp;optional</standard> stream eof-option</args>
+</define>
+
+<description>Reads one character from <arg>stream</arg> and returns it.
+The character is echoed if <arg>stream</arg> is interactive,
+except that <obj>Rubout</obj> is not echoed.
+The <obj>Control</obj>, <obj>Meta</obj>, etc. shifts echo as <obj>C-</obj>, <obj>M-</obj>, etc.
+
+The <obj>:tyi</obj> stream operation is preferred over the <obj>tyi</obj> function for
+some purposes.  Note that it does not echo.  See <ref definition-in-file="stream" key="general-stream-ops" type="page"></ref>.
+
+(This function can take its arguments in the other order, for Maclisp
+compatibility only; see the note above.)
+</description></definition><definition><define key="readch-fun" name="readch" type="fun"><args><standard>&amp;optional</standard> stream eof-option</args>
+</define>
+
+<description>Like <obj>tyi</obj> except that instead of returning a fixnum character, it
+returns a symbol whose print name is the character.  The symbol is
+interned in the current package.  This is just Maclisp's version of
+character object.  (This function can take its arguments in the other
+order, for Maclisp compatibility only; see the note above.)
+
+This function is provided only for Maclisp compatibility, since
+in Zetalisp never uses symbols to represent characters in this way.
+</description></definition><definition><define key="tyipeek-fun" name="tyipeek" type="fun"><args><standard>&amp;optional</standard> peek-type stream eof-option</args>
+</define>
+
+<description>This function is provided mainly for Maclisp compatibility;
+the <obj>:tyipeek</obj> stream operation is usually clearer (see <ref definition-in-file="stream" key="tyipeek-stream-operation" type="page"></ref>).
+
+What <obj>tyipeek</obj> does depends on the <arg>peek-type</arg>, which
+defaults to <obj>nil</obj>.  With a <arg>peek-type</arg> of <obj>nil</obj>,
+<obj>tyipeek</obj> returns the next character to be read from 
+<arg>stream</arg>, without actually removing it from the input stream.
+The next time input is done from <arg>stream</arg> the character will still
+be there; in general, <obj>(= (tyipeek) (tyi))</obj> is <obj>t</obj>.
+
+If <arg>peek-type</arg> is a fixnum less than 1000 octal, then <obj>tyipeek</obj>
+reads characters from <arg>stream</arg> until it gets one equal to <arg>peek-type</arg>.
+That character is not removed from the input stream.
+
+If <arg>peek-type</arg> is <obj>t</obj>, then <obj>tyipeek</obj> skips over input characters
+until the start of the printed representation of a Lisp object is reached.
+As above, the last character (the one that starts an object)
+is not removed from the input stream.
+
+The form of <obj>tyipeek</obj> supported by Maclisp in which <arg>peek-type</arg>
+is a fixnum not less than 1000 octal is not supported, since the readtable
+formats of the Maclisp reader and the Zetalisp reader are quite different.
+
+Characters passed over by <obj>tyipeek</obj> are echoed if <arg>stream</arg> is interactive.
+</description></definition></subsection>
+
+<subsection name="NIL" title="Interactive Input with Prompting"><definition><define key="prompt-and-read-fun" name="prompt-and-read" type="fun"><args>type-of-parsing format-string <standard>&amp;rest</standard> format-args</args>
+</define>
+
+<description>Reads some sort of object from <obj>*query-io*</obj>, parsing
+it according to <arg>type-of-parsing</arg>, and prompting by calling <obj>format</obj>
+using <arg>format-string</arg> and <arg>format-args</arg>.
+
+<arg>type-of-parsing</arg> is either a keyword or a list starting with a
+keyword and continuing with a list of options and values, whose meanings
+depend on the keyword used.
+
+Most keywords specify reading a line of input and parsing it in some
+way.  The line can be terminated with <obj>Return</obj> or <obj>End</obj>.  Sometimes
+typing just <obj>End</obj> has a special meaning.
+
+The keywords defined are
+
+<table><tbody><tr><td><obj>:eval-sexp</obj></td><td></td></tr><tr><td><obj>:eval-form prompt-and-read</obj></td><td>This keyword directs <obj>prompt-and-read</obj> to accept a Lisp
+expression.  It is evaluated, and the value is returned by <obj>prompt-and-read</obj>.
+
+If the Lisp expression is not a constant or quoted, the user is asked to
+confirm the value it evaluated to.
+
+A default value can be specified with an option, as in
+
+<lisp>(:eval-sexp :default <arg>default</arg>)
+</lisp>Then, if the user types <obj>Space</obj>, <obj>prompt-and-read</obj> returns the
+<arg>default</arg> as the first value and <obj>:default</obj> as the second value.
+
+</td></tr><tr><td><obj>:eval-sexp-or-end</obj></td><td></td></tr><tr><td><obj>:eval-form-or-end prompt-and-read</obj></td><td>Synonymously direct <obj>prompt-and-read</obj> to accept a Lisp expression or
+just the character <obj>End</obj>.  If <obj>End</obj> is typed, <obj>prompt-and-read</obj>
+returns <obj>nil</obj> as its first value and <obj>:end</obj> as its second value.
+Otherwise, things proceed as for <obj>:eval-sexp</obj>.
+
+A default value is allowed, as in <obj>:eval-sexp</obj>.
+
+</td></tr><tr><td><obj>:read</obj></td><td></td></tr><tr><td><obj>:expression prompt-and-read</obj></td><td>Synonymously direct <obj>prompt-and-read</obj> to read an object
+and return it, with no evaluation.
+
+</td></tr><tr><td><obj>:expression-or-end</obj></td><td>Is like <obj>:expression</obj> except that the user is also allowed to type just
+<obj>End</obj>.  If he does so, <obj>prompt-and-read</obj> returns the two values
+<obj>nil</obj> and <obj>:end</obj>.
+
+</td></tr><tr><td><obj>:number</obj></td><td>Directs <obj>prompt-and-read</obj> to read and return a number.
+It insists on getting a number, forcing the user to rub out anything else.
+Additional features can be specified with options:
+
+<lisp>(:number :input-radix <arg>radix</arg> :or-nil <arg>nil-ok-flag</arg>)
+</lisp>parses the number using radix <arg>radix</arg> if the number is a rational.  (By default,
+the ambient radix is used).  If
+<arg>nil-ok-flag</arg> is non-<obj>nil</obj>, then the user is also permitted to type
+just <obj>Return</obj> or <obj>End</obj>, and then <obj>nil</obj> is returned.
+
+</td></tr><tr><td><obj>:decimal-number</obj></td><td></td></tr><tr><td><obj>:number-or-nil prompt-and-read</obj></td><td></td></tr><tr><td><obj>:decimal-number-or-nil prompt-and-read</obj></td><td>Abbreviations for
+
+<lisp>(:number :input-radix 10)
+(:number :or-nil t)
+(:number :input-radix 10 :or-nil t)
+</lisp>
+</td></tr><tr><td><obj>:date</obj></td><td>Directs <obj>prompt-and-read</obj> to read a date and time, terminated
+with <arg>Return</arg> or <obj>End</obj>, and return it
+as a universal time (see <ref definition-in-file="time" key="get-universal-time-fun" title="Function get-universal-time" type="fun"></ref>).  It allows several options:
+
+<lisp>(:date :never-p <arg>never-ok</arg> :past-p <arg>past-required</arg>)
+</lisp>If <arg>past-required</arg> is non-<obj>nil</obj>, the date must be before the
+present time, or the user must rub out and use a different date.  If
+<arg>never-ok</arg> is non-<obj>nil</obj>, the user may also type ``never''; then
+<obj>nil</obj> is returned.
+
+</td></tr><tr><td><obj>:date-or-never</obj></td><td></td></tr><tr><td><obj>:past-date prompt-and-read</obj></td><td></td></tr><tr><td><obj>:past-date-or-never prompt-and-read</obj></td><td>Abbreviations for
+
+<lisp>(:date :never-p t)
+(:date :past-p t)
+(:date :never-p t :past-p t)
+</lisp>
+</td></tr><tr><td><obj>:character</obj></td><td>Directs <obj>prompt-and-read</obj> to read a single character and
+return a character object representing it.
+
+</td></tr><tr><td><obj>:string</obj></td><td>Directs <obj>prompt-and-read</obj> to read a line and return its
+contents as a string, using <obj>readline</obj>.
+
+</td></tr><tr><td><obj>:string-or-nil</obj></td><td>Directs <obj>prompt-and-read</obj> to read a line and return its
+contents as a string, using <obj>readline-trim</obj>.  In addition, if the
+result would be empty, <obj>nil</obj> is returned instead of the empty string.
+
+</td></tr><tr><td><obj>:string-list</obj></td><td>Like <obj>:string-trim</obj> but regards the line as a sequence of input
+strings separated by commas.  Each substring between commas is trimmed,
+and a list of the strings is returned.
+
+</td></tr><tr><td><obj>:keyword-list</obj></td><td>Like <obj>:string-list</obj> but converts each string to a keyword by interning
+it in the <obj>keyword</obj> package.  The value is therefore a list of keywords.
+
+</td></tr><tr><td><obj>:font-list</obj></td><td>Like <obj>:string-list</obj> but converts each string to a font name by interning
+it in the <obj>fonts</obj> package.  The symbols must already exist in that package
+or the user is required to retype the input.
+
+</td></tr><tr><td><obj>:delimited-string</obj></td><td>Directs <obj>prompt-and-read</obj> to read a string terminated by specified delimiters.
+With
+
+<lisp>(:delimited-string :delimiter <arg>delimiter-list</arg>
+                   :buffer-size <arg>size</arg>)
+</lisp>you can specify a list of delimiter characters and an initial size for the
+buffer.  The list defaults to <obj>(#\end)</obj> and the size to 100.
+
+The work is done by <obj>read-delimited-string</obj>
+(<ref definition-in-file="ios" key="read-delimited-string-fun" title="Function read-delimited-string" type="fun"></ref>).  The delimiters and size are passed to
+that function.
+
+</td></tr><tr><td><obj>:delimited-string-or-nil</obj></td><td>Like <obj>:delimited-string</obj> except that <obj>nil</obj> is returned instead
+of the empty string if the first character read is a delimiter.
+
+</td></tr><tr><td><obj>:host</obj></td><td>Directs <obj>prompt-and-read</obj> to read a line and interpret the
+contents as a network host name.  The value returned is the host, looked up
+using <obj>si:parse-host</obj> (<ref definition-in-file="pathnm" key="si:parse-host-fun" title="Function si:parse-host" type="fun"></ref>).  An option is defined:
+
+<lisp>(:host :default <arg>default-name</arg> :chaos-only <arg>chaos-only</arg>)
+</lisp>If the line read is empty, the host named <arg>default-name</arg> is used.
+If <arg>chaos-only</arg> is non-<obj>nil</obj>, only hosts on the Chaosnet are
+permitted input.
+
+</td></tr><tr><td><obj>:host-list</obj></td><td>Like <obj>:host</obj> but regards the line as a sequence of host names
+separated by commas.  Each host name is looked up as in <obj>:host</obj>
+and a list of the resulting hosts is returned.
+
+</td></tr><tr><td><obj>:pathname-host</obj></td><td>Like <obj>:host</obj> but uses <obj>fs:get-pathname-host</obj> to look up the host
+object from its name (<ref definition-in-file="pathnm" key="fs:get-pathname-host-fun" title="Function fs:get-pathname-host" type="fun"></ref>).  Thus, you find
+hosts that can appear in pathnames rather than hosts that are on the
+network.
+
+</td></tr><tr><td><obj>:pathname</obj></td><td>Directs <obj>prompt-and-read</obj> to read a line and parse it as
+a pathname, merging it with the defaults.  If the line is empty,
+the default pathname is used.  These options are defined:
+
+<lisp>(:pathname :defaults <arg>defaults-alist-or-pathname</arg>
+           :version <arg>default-version</arg>)
+</lisp>uses <arg>defaults-alist-or-pathname</arg> as the <arg>defaults</arg> argument to
+<obj>fs:merge-pathname-defaults</obj>, and <arg>default-version</arg> as the
+<arg>version</arg> argument to it.
+
+</td></tr><tr><td><obj>:pathname-or-nil</obj></td><td>Is like <obj>:pathname</obj>, but if the user types just <obj>End</obj> it
+is interpreted as meaning ``no pathname'' rather than ``use the default''.
+Then <obj>nil</obj> is returned.
+
+</td></tr><tr><td><obj>:pathname-list</obj></td><td>Like <obj>:pathname</obj> but regards the line as a sequence of filenames
+separated by commas.  Each filename is parsed and defaulted and a list
+of the resulting pathnames is returned.
+
+</td></tr><tr><td><obj>:fquery</obj></td><td>Directs <obj>prompt-and-read</obj> to query the user for a fixed
+set of alternatives, using <obj>fquery</obj>.  <arg>type-of-parsing</arg> should always
+be a list, whose car is <obj>:fquery</obj> and whose cdr is a list to be passed
+as the list of options (<obj>fquery</obj>'s first argument).
+
+<lisp><exdent amount="96"><caption>Example: </caption>(prompt-and-read `(:fquery 
+                   . ,format:y-or-p-options)
+                 &quot;Eat it? &quot;)
+</exdent><exdent amount="96"><caption>is equivalent to </caption>(y-or-n-p &quot;Eat it? &quot;)
+</exdent></lisp>
+This keyword is most useful as a way to get to <obj>fquery</obj> when going
+through an interface defined to call <obj>prompt-and-read</obj>.
+</td></tr></tbody></table></description></definition></subsection></section><a name="Output Functions"></a>
+
+
+<section chapter-number="23" name="Output Functions" number="2" title="Output Functions"><p>These functions all take an optional argument called <arg>stream</arg>, which is
+where to send the output.  If unsupplied <arg>stream</arg> defaults to the value of
+<obj>*standard-output*</obj>.  If <arg>stream</arg> is <obj>nil</obj>, the value of
+<obj>*standard-output*</obj> (i.e. the default) is used.  If it is <obj>t</obj>, the value of
+<obj>*terminal-io*</obj> is used (i.e. the interactive terminal).  This is all
+more-or-less compatible with Maclisp, except that instead of the
+variable <obj>*standard-output*</obj> Maclisp has several variables and complicated rules.
+For detailed documentation of streams, refer to <ref chapter="23" definition-in-file="stream" key="streams" section="3" title="I/O Streams" type="section"></ref>.
+</p>
+
+<p>For <obj>print</obj> and the other expression output functions, see
+<ref chapter="24" definition-in-file="rdprt" key="expression-output" section="4" title="Expression Output Functions" type="section"></ref>.
+</p>
+<definition><define key="write-char-fun" name="write-char" type="fun"><args>char <standard>&amp;optional</standard> stream</args>
+</define><define key="tyo-fun" name="tyo" type="fun"><args>char <standard>&amp;optional</standard> stream</args>
+</define>
+
+<description>Outputs <arg>char</arg> to <arg>stream</arg> (using <obj>:tyo</obj>).  <arg>char</arg> may be an
+integer or a character object; in the latter case, it is converted to an
+integer before the <obj>:tyo</obj>.
+</description></definition><definition><define key="write-byte-fun" name="write-byte" type="fun"><args>number <standard>&amp;optional</standard> stream</args>
+</define>
+
+<description>Outputs number to stream using <obj>:tyo</obj>.
+In strict Common Lisp, output to binary streams can be done only with
+<obj>write-byte</obj> and output to character streams requires <obj>write-char</obj>.
+In fact, the two functions are identical on the Lisp Machine.
+</description></definition><definition><define key="write-string-fun" name="write-string" type="fun"><args>string <standard>&amp;optional</standard> stream <standard>&amp;key</standard> (start <obj>0</obj>) end</args>
+</define>
+
+<description>Outputs <arg>string</arg> (or the specified portion of it) to <arg>stream</arg>.
+</description></definition><definition><define key="write-line-fun" name="write-line" type="fun"><args>string <standard>&amp;optional</standard> stream <standard>&amp;key</standard> (start <obj>0</obj>) end</args>
+</define>
+
+<description>Outputs <arg>string</arg> (or the specified portion) to <arg>stream</arg>, followed by a <obj>Return</obj> character.
+</description></definition><definition><define key="fresh-line-fun" name="fresh-line" type="fun"><args><standard>&amp;optional</standard> stream</args>
+</define>
+
+<description>Outputs a <obj>Return</obj> character to <obj>stream</obj> unless either
+
+<table><tbody><tr><td><standard>(1)</standard></td><td>nothing has been output to <arg>stream</arg> yet, or
+</td></tr><tr><td><standard>(2)</standard></td><td>the last thing output was a <obj>Return</obj> character, or
+</td></tr><tr><td><standard>(3)</standard></td><td><arg>stream</arg> does not remember what previous output there has been.
+</td></tr></tbody></table>
+This uses the <obj>:fresh-line</obj> stream operation.
+The value is <obj>t</obj> if a <obj>Return</obj> is output, <obj>nil</obj> if nothing is output.
+</description></definition><definition><define key="force-output-fun" name="force-output" type="fun"><args><standard>&amp;optional</standard> stream</args>
+</define>
+
+<description>Causes <arg>stream</arg>'s buffered output, if any, to be transmitted immediately.
+This uses the <obj>:force-output</obj> stream operation.
+</description></definition><definition><define key="finish-output-fun" name="finish-output" type="fun"><args><standard>&amp;optional</standard> stream</args>
+</define>
+
+<description>Causes <arg>stream</arg>'s buffered output, if any, to be transmitted immediately,
+and waits until that is finished.
+This uses the <obj>:finish</obj> stream operation.
+</description></definition><definition><define key="clear-output-fun" name="clear-output" type="fun"><args><standard>&amp;optional</standard> stream</args>
+</define>
+
+<description>Discards any output buffered in <arg>stream</arg>.
+This uses the <obj>:clear-output</obj> stream operation.
+</description></definition><definition><define key="terpri-fun" name="terpri" type="fun"><args><standard>&amp;optional</standard> stream</args>
+</define>
+
+<description>Outputs a <obj>Return</obj> character to <arg>stream</arg>.
+It returns <obj>t</obj> for Maclisp compatibility.
+It is wise not to depend on the value <obj>terpri</obj> returns.
+</description></definition><definition><define key="cli:terpri-fun" name="cli:terpri" type="fun"><args><standard>&amp;optional</standard> stream</args>
+</define>
+
+<description>Outputs a <obj>Return</obj> character to <arg>stream</arg>.
+Returns <obj>nil</obj> to meet Common Lisp specifications.
+It is wise not to depend on the value <obj>cli:terpri</obj> returns.
+</description></definition>
+<p indent="1">        The <obj>format</obj> function (see <ref definition-in-file="fd-fio" key="format-fun" title="Function format" type="fun"></ref>) is very useful for producing
+nicely formatted text.  It can do anything any of the above functions
+can do, and it makes it easy to produce good looking messages and such.
+<obj>format</obj> can generate a string or output to a stream.
+</p>
+<definition><define key="stream-copy-until-eof-fun" name="stream-copy-until-eof" type="fun"><args>from-stream to-stream <standard>&amp;optional</standard> leader-size</args>
+</define>
+
+<description><obj>stream-copy-until-eof</obj> inputs characters from <arg>from-stream</arg>
+and outputs them to <arg>to-stream</arg>, until it reaches the end of file
+on the <arg>from-stream</arg>.  For example, if <obj>x</obj> is bound to a stream
+for a file opened for input, then <obj>(stream-copy-until-eof x *terminal-io*)</obj>
+prints the file on the console.
+
+If <arg>from-stream</arg> supports the <obj>:line-in</obj> operation and <arg>to-stream</arg> 
+supports the <obj>:line-out</obj> operation, then <obj>stream-copy-until-eof</obj>
+uses those operations instead of <obj>:tyi</obj> and <obj>:tyo</obj>, for greater
+efficiency.  <arg>leader-size</arg> is passed as the argument to the
+<obj>:line-in</obj> operation.
+</description></definition><definition><define key="beep-fun" name="beep" type="fun"><args><standard>&amp;optional</standard> beep-type (stream <obj>*terminal-io*</obj>)</args>
+</define>
+
+<description>This function is intended to attract the user's attention by causing
+an audible beep, or flashing the screen, or something similar.  If
+the stream supports the <obj>:beep</obj> operation, then this function sends
+it a <obj>:beep</obj> message, passing <arg>beep-type</arg> along as an argument.  Otherwise
+it just causes an audible beep on the terminal.
+
+<arg>beep-type</arg> is a keyword which explains the significance of this beep.
+Users can redefine <obj>beep</obj> to make different noises depending on the
+beep type.  The defined beep types are:
+
+<table><tbody><tr><td><obj>zwei:converse-problem</obj></td><td>Used for the beep that is done when Converse is unable to send a message.
+</td></tr><tr><td><obj>zwei:converse-message-received</obj></td><td>Used for the beeps done when a Converse message is received.
+</td></tr><tr><td><obj>zwei:no-completion</obj></td><td>Used when you ask for completion in the editor and the string does not complete.
+</td></tr><tr><td><obj>tv:notify</obj></td><td>Used for the beep done when you get a notification that cannot 
+be printed on the selected window.
+</td></tr><tr><td><obj>fquery</obj></td><td>Used for the beep done by <obj>yes-or-no-p</obj> or by <obj>fquery</obj> with the
+<obj>:beep</obj> option specified.
+</td></tr><tr><td><obj>supdup:terminal-bell</obj></td><td>Used for the beep requested by the remote host being used through
+a Supdup window.
+</td></tr><tr><td><obj>nil</obj></td><td>Used whenever no other beep type applies.
+</td></tr></tbody></table>
+The <obj>:beep</obj> operation is described on <ref definition-in-file="stream" key="streams-beep-method" title="Meta-Method streams :beep" type="metamethod"></ref>.
+</description></definition><definition><define key="cursorpos-fun" name="cursorpos" type="fun"><args><standard>&amp;rest</standard> args</args>
+</define>
+
+<description>This function exists primarily for Maclisp compatibility.  Usually it is
+preferable to send the appropriate messages (see the Window System manual).
+
+<obj>cursorpos</obj> normally operates on the <obj>*standard-output*</obj> stream;
+however, if the last argument is a stream or <obj>t</obj> (meaning <obj>*terminal-io*</obj>)
+then <obj>cursorpos</obj> uses that stream and ignores it when doing the operations
+described below.  <obj>cursorpos</obj> only works on streams
+that are capable of these operations, such as windows.
+A stream is taken to be any argument that is not a number and not a symbol,
+or that is a symbol other than <obj>nil</obj> with a name more than one character long.
+
+<obj>(cursorpos) =&gt; (<arg>line</arg> . <arg>column</arg>)</obj>, the current
+cursor position.
+
+<obj>(cursorpos <arg>line</arg> <arg>column</arg>)</obj> moves the cursor to that position.
+It returns <obj>t</obj> if it succeeds and <obj>nil</obj> if it doesn't.
+
+<obj>(cursorpos <arg>op</arg>)</obj> performs a special operation coded by <arg>op</arg>,
+and returns <obj>t</obj> if it succeeds and <obj>nil</obj> if it doesn't.
+<arg>op</arg> is tested by string comparison, it is not a keyword symbol
+and may be in any package.
+
+<table><tbody><tr><td><obj>f</obj></td><td>Moves one space to the right.
+</td></tr><tr><td><obj>b</obj></td><td>Moves one space to the left.
+</td></tr><tr><td><obj>d</obj></td><td>Moves one line down.
+</td></tr><tr><td><obj>u</obj></td><td>Moves one line up.
+</td></tr><tr><td><obj>t</obj></td><td>Homes up (moves to the top left corner).  Note that <obj>t</obj> as the last
+argument to <obj>cursorpos</obj> is interpreted as a stream, so a stream <arg>must</arg>
+be specified if the <obj>t</obj> operation is used.
+</td></tr><tr><td><obj>z</obj></td><td>Home down (moves to the bottom left corner).
+</td></tr><tr><td><obj>a</obj></td><td>Advances to a fresh line.  See the <obj>:fresh-line</obj> stream operation.
+</td></tr><tr><td><obj>c</obj></td><td>Clears the window.
+</td></tr><tr><td><obj>e</obj></td><td>Clear from the cursor to the end of the window.
+</td></tr><tr><td><obj>l</obj></td><td>Clear from the cursor to the end of the line.
+</td></tr><tr><td><obj>k</obj></td><td>Clear the character position at the cursor.
+</td></tr><tr><td><obj>x</obj></td><td><obj>b</obj> then <obj>k</obj>.
+</td></tr></tbody></table></description></definition><page></page><include file="stream"></include><include file="fd-fio"></include></section><a name="rubout-handling"></a>
+
+
+<section chapter-number="23" name="rubout-handling" number="5" title="Rubout Handling"><index-entry index="concepts" title="rubout handler"></index-entry>
+
+<p>The rubout handler is a feature of all interactive streams, that is, streams
+that connect to terminals.  Its purpose is to allow the user to edit
+minor mistakes made during type-in.  At the same time, it is not supposed to
+get in the way; input is to be seen by Lisp as soon as a syntactically complete
+form has been typed.  The definition of `syntactically complete form'
+depends on the function that is reading from the stream; for <obj>read</obj>, it
+is a Lisp expression.
+</p>
+
+<p>Some interactive streams (`editing Lisp listeners') have a rubout handler
+that allows input to be edited with the full power of the ZWEI editor.
+(ZWEI is the general editor implementation on which Zmacs and ZMail are based.)
+Most windows have a rubout handler that apes ZWEI, implementing about twenty
+common ZWEI commands.  The cold load stream has
+a simple rubout handler that allows just rubbing out of single
+characters, and a few simple commands like clearing the screen and
+erasing the entire input typed so far.  All three kinds of rubout
+handler use the same protocol, which is described in this section.  We
+also say a little about the most common of the three rubout handlers.
+<br></br>[Eventually some version of ZWEI will be used for all streams
+except the cold load stream]
+</p>
+
+<p>The tricky thing about the rubout handler is the need for it to figure
+out when you are all done.  The idea of a rubout handler is that you can
+type in characters, and they are saved up in a buffer so that if you
+change your mind, you can rub them out and type different characters.
+However, at some point, the rubout handler has to decide that the time
+has come to stop putting characters into the buffer and to let the
+function parsing the input, such as <obj>read</obj>, return.  This is
+called <arg>activation</arg>.  The right time to activate depends on the function
+calling the rubout handler, and may be very complicated (if the function
+is <obj>read</obj>, figuring out when one Lisp expression has been typed
+requires knowledge of all the various printed representations, what all
+currently-defined reader macros do, and so on).  Rubout handlers should
+not have to know how to parse the characters in the buffer to
+figure out what the caller is reading and when to activate; only the
+caller should have to know this.  The rubout handler interface is
+organized so that the calling function can do all the parsing, while the
+rubout handler does all the handling of editing commands, and the two are kept
+completely separate.
+</p>
+
+<p>The basic way that the rubout handler works is as follows.  When
+an input function that reads characters from a stream, such as <obj>read</obj> or <obj>readline</obj>
+(but not <obj>tyi</obj>), is invoked with a stream which has <obj>:rubout-handler</obj>
+in its <obj>:which-operations</obj> list, that function ``enters'' the rubout handler.
+It then goes ahead <obj>:tyi</obj>'ing characters from the stream.  Because control
+is inside the rubout handler, the stream echoes these characters so the user
+can see what he is typing.  (Normally echoing is considered to be a higher-level
+function outside of the province of streams, but when the higher-level function
+tells the stream to enter the rubout handler it is also handing it the responsibility
+for echoing.)  The rubout handler is also saving all these characters in a buffer,
+for reasons disclosed in the following paragraph.
+When the parsing function decides it has enough
+input, it returns and control ``leaves'' the rubout handler.  This is the easy case.
+</p>
+
+<p>If the user types a rubout, a <obj>throw</obj> is done out of all recursive levels
+of <obj>read</obj>, reader macros, and so forth, back to the point where the rubout
+handler was entered.  Also the rubout is echoed by erasing from the screen
+the character which was rubbed out.  Now the <obj>read</obj> is tried over again,
+re-reading all the characters that have not been rubbed out, not echoing
+them this time.  When the saved characters have been exhausted, additional input is read
+from the user in the usual fashion.
+</p>
+
+<p>The effect of this is a complete separation of the functions of rubout
+handling and parsing, while at the same time mingling the execution of
+these two functions in such a way that input is always activated at
+just the right time.  It does mean that the parsing function (in the
+usual case, <obj>read</obj> and all macro-character definitions) must be
+prepared to be thrown through at any time and should not have
+non-trivial side-effects, since it may be called multiple times.
+</p>
+
+<p>If an error occurs while inside the rubout handler, the error message is printed
+and then additional characters are read.  When the user types a rubout,
+it rubs out the error message as well as the character that caused the error.
+The user can then proceed to type the corrected expression;
+the input will be reparsed from the beginning in the usual fashion.
+</p>
+
+<p>The rubout handler based on the ZWEI editor interprets control
+characters in the usual ZWEI way: as editing commands, allowing you to
+edit your buffered input.
+</p>
+
+<p>The common rubout handler also recognizes a subset of the editor
+commands, including <obj>Rubout</obj>, <obj>Control-F</obj> and <obj>Meta-F</obj> and others.
+Typing <obj>Help</obj> while in the rubout handler displays a list of the
+commands.  The kill and yank commands in the rubout handler use the same
+kill ring as the editor, so you can kill an expression in the editor and
+yank it back into a rubout handler with <obj>Control-Y</obj>, or kill an
+expression in the rubout handler with <obj>Control-K</obj> or <obj>Clear-input</obj>
+and yank it back in the editor.  The rubout processor also keeps a ring
+buffer of most recent input strings (a separate ring for each stream),
+and the commands <obj>Control-C</obj> and <obj>Meta-C</obj> retrieve from this ring
+just as <obj>Control-Y</obj> and <obj>Meta-Y</obj> do from the kill ring.
+</p>
+
+<p>When not inside the rubout handler, and when
+typing at a program that uses control characters for its own purposes,
+control characters are treated the same as ordinary characters.
+</p>
+
+<p>Some programs such as the debugger allow the user to type either a
+control character or an expression.  In such programs, you are really
+not inside the rubout handler unless you have typed the beginning of an
+expression.  When the input buffer is empty, a control character is
+treated as a command for the program (such as, <obj>Control-C</obj> to continue
+in the debugger); when there is text in the rubout handler buffer, the
+same character is treated as a rubout handler command.  Another
+consequence of this is that the message you get by typing <obj>Help</obj>
+varies, being either the rubout handler's documentation or the
+debugger's documentation. 
+</p>
+
+<p>To write a parsing function that reads with rubout handling,
+use <obj>with-input-editing</obj>.
+</p>
+<definition><define key="with-input-editing-fun" name="with-input-editing" type="mac"><args>(stream options) body...</args>
+</define>
+
+<description>Invokes the rubout handler on <arg>stream</arg>, if <arg>stream</arg> supports it,
+and then executes <arg>body</arg>.  <arg>body</arg> is executed in any case,
+within the rubout handler if possible.  <obj>rubout-handler</obj> is
+non-<obj>nil</obj> while in <arg>body</arg> if rubout handling is in use.
+
+<arg>options</arg> are used as the rubout handler options.
+If already within an invocation of the rubout handler, <arg>options</arg> are
+appended to the front of the options already in effect.  This happens if
+a function which reads input using <obj>with-input-editing</obj>, such as
+<obj>read</obj> or <obj>readline</obj>, is called from the body of another
+<obj>with-input-editing</obj>.  The <obj>:norecursive</obj> option can be used
+to cause the outer set of options to be completely ignored even
+when not overridden by new ones.
+
+<arg>body</arg>'s values are returned by <obj>with-input-editing</obj>.
+<arg>body</arg> ought to read input from <arg>stream</arg> and return
+a Lisp object that represents the input.  It should have
+no nontrivial side effects aside from reading input from <arg>stream</arg>
+structure, as it may be aborted at any time it reads input
+and may be executed over and over.
+
+If the <obj>:full-rubout</obj> option is specified, and the user types some input
+and rubs it all out, the <obj>with-input-editing</obj> form returns immediately.
+See <obj>:full-rubout</obj>, below.
+
+If a preemptive command is input by the user, <obj>with-input-editing</obj>
+returns immediately with the values being as specified below
+under the <obj>:command</obj> and <obj>:preemptable</obj> options.  <arg>body</arg>
+is aborted from its call to the <obj>:tyi</obj> operation, and the input
+read so far remains in the rubout handler editing buffer to be read
+later.
+</description></definition><definition>
+<define key="rubout-handler-var" name="rubout-handler" type="var"></define>
+
+<description>If control is inside the rubout handler in this process,
+the value is the stream on which rubout handling is being done.
+Otherwise, the value is <obj>nil</obj>.
+</description></definition><definition><define key="streams-rubout-handler-method" name="streams" type="metamethod"><args>options function <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Invokes the rubout handler on the stream, with <arg>options</arg> as
+the options, and parses by applying <arg>function</arg> to <arg>args</arg>.
+<obj>with-input-editing</obj> uses this operation.
+</description></definition><definition>
+<define key="streams-read-bp-method" name="streams" type="metamethod"></define>
+
+<description>This operation may be used only from within the code for
+parsing input from this stream inside the rubout handler.
+It returns the index within the rubout handler buffer
+which parsing has reached.
+</description></definition><definition>
+<define key="streams-force-rescan-method" name="streams" type="metamethod"></define>
+
+<description>This operation may be used only from within the code for
+parsing input from this stream inside the rubout handler.
+It causes parsing to start again immediately from the beginning of the buffer.
+</description></definition><definition>
+<define key="streams-rescanning-p-method" name="streams" type="metamethod"></define>
+
+<description>This operation may be used only from within the code for
+parsing input from this stream inside the rubout handler.
+It returns <obj>t</obj> if parsing is now being done on input
+already in the buffer, <obj>nil</obj> if parsing has used up all
+the buffered input and the next character parsed will come
+from the keyboard.
+</description></definition>
+<p>Each option in the list of rubout handler options consists of a list
+whose first element is a keyword and whose remaining elements are
+the arguments of that keyword.  Note that this is not the same format as
+the arguments to a typical function that takes keyword arguments; rather
+this is an alist of options.  The standard options are:
+
+<table><tbody><tr><td><obj>(:activation <arg>fn</arg> <arg>args</arg>...) </obj></td><td>Activate if certain characters are typed in.
+When the user types an activation character, the rubout handler
+moves the editing pointer immediately to the end of the buffer
+and inserts the activation character.  This immediately causes
+the parsing function to begin rescanning the input.
+
+<arg>fn</arg> is used to test characters for being activators.  It is called
+with an input character as the first arg (possibly a fixnum, possibly a
+character object) and <arg>args</arg> as additional args.  If <arg>fn</arg> returns
+non-<obj>nil</obj>, the character is an activation.  <arg>fn</arg> is not called
+for blips.
+
+After the parsing function has read the entire contents of the buffer,
+it sees the activation character as a blip <obj>(:activation <arg>char</arg>
+<arg>numeric-arg</arg>)</obj> where <arg>char</arg> is the character that activated and
+<arg>numeric-arg</arg> is the numeric arg that was pending for the next rubout
+handler command.  Normally the parsing function will return at this point.
+Then the activation character does not echo.  But if the parsing function
+continues to read input, the activation character echoes and is inserted
+in the buffer.
+
+</td></tr><tr><td><obj>(:do-not-echo <arg>chars</arg>...) </obj></td><td>Poor man's activation characters.  Like <obj>:activation</obj> except that the
+characters that should activate are listed explicitly, and the character
+itself is returned to the parsing function rather than a blip.
+
+</td></tr><tr><td><obj>(:full-rubout <arg>val</arg>)</obj></td><td>If the user rubs out all the characters he typed, then control is returned
+from the rubout handler immediately.  Two values are returned; the first is
+<obj>nil</obj> and the second is <arg>val</arg>.  (If the user doesn't rub out all the
+characters, then the rubout handler propagates multiple values back
+from the function that it calls, as usual.)  In the absence of this option, the rubout
+handler would simply wait for more characters to be typed in and would ignore
+any additional rubouts.
+
+This is how the debugger knows to remove <obj>Eval:</obj> from the screen
+if you type the beginning of a form and rub it all out.
+
+</td></tr><tr><td><obj>(:pass-through <arg>char1</arg> <arg>char2</arg>...)</obj></td><td>The characters <arg>char1</arg>, <arg>char2</arg>, etc. are not to be treated as special by
+the rubout handler.  They are read as input by the parsing function.
+If the parsing function does not return, they can be rubbed out.
+This works only for characters with no modifier bits.
+
+</td></tr><tr><td><obj>(:preemptable <arg>value</arg>) </obj></td><td>Makes all blips read as input by the rubout handler act as preemptive
+commands.  If this option is specified, the rubout handler returns
+immediately when it reads a blip.  It returns two values: the blip that
+was read, and <arg>value</arg>.  The parsing function is not allowed to finish
+parsing up to a delimiter; instead, any buffered input remains in the
+buffer for the next time input is done.  In the mean time, the
+preemptive command character can be processed by the command loop.
+
+While this applies to all blips, the blips which it is probably intended
+for are mouse blips.
+
+</td></tr><tr><td><obj>(:command <arg>fn</arg> <arg>args</arg>...) </obj></td><td>Makes certain characters preemptive commands.  A preemptive command
+returns instantly to the caller of the <obj>:rubout-handler</obj> operation,
+regardless of the input in the buffer.  It returns two values: a list
+<obj>(:command <arg>char</arg> <arg>numeric-arg</arg>)</obj> and the keyword <obj>:command</obj>.
+The parsing function is not allowed to finish parsing up to a delimiter;
+instead, any buffered input remains in the buffer for the next time
+input is done.  In the mean time, the preemptive command character can
+be processed by the command loop.
+
+The test for whether a character should be a preemptive command
+is done using <arg>fn</arg> and <arg>args</arg> just as in <obj>:activation</obj>.
+
+</td></tr><tr><td><obj>(:editing-command (<arg>char</arg> <arg>doc</arg>)...) </obj></td><td>Defines editing commands to be executed by the parsing function itself.
+This is how <obj>qsend</obj> implements the <obj>Control-Meta-Y</obj> command.
+Each <arg>char</arg> is such a command, and <arg>doc</arg> says what it does.
+(<arg>doc</arg> is printed out by the rubout handler's <obj>Help</obj> command.)
+If any of these characters is read by the rubout handler,
+it is returned immediately to the parsing function
+regardless of where the editing pointer is in the buffer.
+(Normal inserted text is not returned immediately when read unless the editing pointer
+is at the end of the buffer.)
+
+The parsing function should not regard these characters as part of the input.
+There are two reasonable things that the parsing function can do
+when it receives one of the editing command characters:
+print some output, or force some input.
+
+If it prints output, it should invoke the <obj>:refresh-rubout-handler</obj> operation
+afterward before the next <obj>:tyi</obj>.  This causes the rubout handler to redisplay
+so that the input being edited appears after the output that was done.
+
+If the parsing function forces input, the input is read by the rubout
+handler.  This can be used to modify the buffered input.  <obj>qsend</obj>'s
+<obj>Control-Meta-Y</obj> command works by forcing the yanked text as input.
+There is no way to act directly on the buffered input because different
+implementations of the rubout handler store it in different ways.
+
+</td></tr><tr><td><obj>(:prompt <arg>function</arg>)</obj></td><td></td></tr><tr><td><obj>(:reprompt <arg>function</arg>)</obj></td><td>When it is time for the user to be prompted, <arg>function</arg> is called with
+two arguments.  The first is a stream it may print on; the second is the
+character which caused the need for prompting, e.g. <obj>#\clear-input</obj>
+or <obj>#\clear-screen</obj>, or <obj>nil</obj> if the rubout handler was just entered.
+
+The difference between <obj>:prompt</obj> and <obj>:reprompt</obj> is that the latter does
+not call the prompt function when the rubout handler is first entered, but only
+when the input is redisplayed (e.g. after a screen clear).  If both options
+are specified then <obj>:reprompt</obj> overrides <obj>:prompt</obj> except when the rubout
+handler is first entered.
+
+<arg>function</arg> may also be a string.  Then it is simply printed.
+
+If the rubout handler is exited with an empty buffer due to the
+<obj>:full-rubout</obj> option, whatever prompt was printed is erased.
+
+</td></tr><tr><td><obj>(:initial-input <arg>string</arg>)</obj></td><td>Pretends that the user typed <arg>string</arg>.  When the rubout handler is entered,
+<arg>string</arg> is typed out.  The user can input more characters or rub out
+characters from it.
+
+</td></tr><tr><td><obj>(:initial-input-index <arg>index</arg>)</obj></td><td>Positions the editing pointer initially <arg>index</arg> characters into the
+initial input string.  Used only in company with with
+<obj>:initial-input</obj>.
+
+</td></tr><tr><td><obj>(:no-input-save t) </obj></td><td>Don't save this batch of input in the input history when it is done.
+For example, <obj>yes-or-no-p</obj> specifies this option.
+
+</td></tr><tr><td><obj>(:norecursive t)</obj></td><td>If this invocation of the rubout handler is within another one,
+the options specified in the previous call should be completely
+ignored during this one.  Normally, individual options specified
+this time override the previous settings for the same options,
+but any of the previous options not individually overridden
+are still in effect.
+</td></tr></tbody></table></p>
+
+<p>Rubout handlers handle the condition <obj>sys:parse-error</obj> if it is
+signaled by the parsing function.  The handling consists of printing the
+error message, waiting for the user to rub out, erasing the error message,
+and parsing the input again.  All errors signaled by a parsing function
+that signify that the user's input was syntactically invalid should have
+this condition name.  For example, the errors <obj>read</obj> signals have
+condition name <obj>sys:parse-error</obj> since it is is a consequence of <obj>sys:read-error</obj>.
+</p>
+<definition><define key="sys:parse-error-condition" name="sys:parse-error" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>The condition name for syntax errors in input being parsed.
+</description></definition>
+<p>The compiler handles <obj>sys:parse-error</obj> by proceeding with proceed-type
+<obj>:no-action</obj>.  All signalers of <obj>sys:parse-error</obj> should offer
+this proceed type, and respond to its use by continuing to parse,
+ignoring the invalid input.
+</p>
+<definition><define key="sys:parse-ferror-fun" name="sys:parse-ferror" type="fun"><args>format-string <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Signals a <obj>sys:parse-error</obj> error, using <arg>format-string</arg> and <arg>args</arg>
+to print the error message.  The proceed-type <obj>:no-action</obj> is provided,
+and if a handler uses it, this function returns <obj>nil</obj>.
+</description></definition></section></chapter>
+</document-part>

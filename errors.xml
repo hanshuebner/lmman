@@ -1,0 +1,1695 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="error-chapter"></a>
+<chapter name="error-chapter" number="31" title="Errors and Debugging"><index-entry index="concepts" title="error system"></index-entry>
+
+<index-entry index="concepts" title="handling errors"></index-entry>
+
+<p>The first portion of this chapter explains how programs
+can handle errors, by means of condition handlers.  It also explains how
+a program can signal an error if it detects something it doesn't like.
+</p>
+
+<p>The second explains how users can handle errors, by means of an interactive debugger;
+that is, it explains how to recover if you do something wrong.
+A new user of the Lisp Machine, or someone who just wants to know how
+to deal with errors and not how to cause them, should ignore the first
+sections and skip ahead to <ref chapter="31" definition-in-file="debug" key="debugger" section="7" title="The Debugger" type="section"></ref>.
+</p>
+
+<p indent="1">        The remaining sections describe some other debugging facilities.
+Anyone who is going to be writing programs for the Lisp Machine should
+familiarize himself with these.
+</p>
+
+<p indent="1">        The <arg>trace</arg> facility provides the ability to perform certain
+actions at the time a function is called or at the time it returns.  The
+actions may be simple typeout, or more sophisticated debugging functions.
+</p>
+
+<p indent="1">        The <arg>advise</arg> facility is a somewhat similar facility for modifying
+the behavior of a function.
+</p>
+
+<p indent="1">        The <arg>breakon</arg> facility allows you to cause the debugger to be
+entered when a certain function is called.  You can then use the debugger's
+stepping commands to step to the next function call or return.
+</p>
+
+<p indent="1">        The <arg>step</arg> facility allows the evaluation of a form to be
+intercepted at every step so that the user may examine just what is happening
+throughout the execution of the form.  Stepping works only on interpreted code.
+</p>
+
+<p indent="1">        The <arg>MAR</arg> facility provides the ability to cause a trap
+on any memory reference to a word (or a set of words) in memory.  If
+something is getting clobbered by agents unknown, this can help track
+down the source of the clobberage.
+</p>
+<a name="condition"></a>
+
+
+<section chapter-number="31" name="condition" number="1" title="Conditions"><index-entry index="concepts" title="condition names"></index-entry>
+
+<index-entry index="concepts" title="conditions"></index-entry>
+
+<index-entry index="concepts" title="condition instances"></index-entry>
+
+<p indent="1">        Programmers often want to control what action is taken by their programs
+when errors or other exceptional situations occur.  Usually different situations
+are handled in different ways, and in order to express what kind of handling
+each situation should have, each situation must have an associated name.  In
+Zetalisp, noteworthy events are represented by objects called <arg>condition instances</arg>.
+When an event occurs, a condition instance is created; it is then <arg>signaled</arg>, and a
+<arg>handler</arg> for that condition may be invoked.
+</p>
+
+<p>When a condition is signaled, the system (essentially) searches
+up the stack of nested function invocations looking for a handler
+established to handle that condition.  The handler is a function that
+gets called to deal with the condition.  The condition mechanism itself
+is just a convenient way for finding an appropriate handler function
+for a particular exceptional situation.
+</p>
+
+<p>When a condition is signaled, a <arg>condition instance</arg> is created to represent the
+event and hold information about it.  This information includes <arg>condition
+names</arg> then classify the condition and any other data that is likely to be of
+interest to condition handlers.  A condition instance is immutable once it has
+been created.  Some conditions are <arg>errors</arg>, which means that the debugger is
+invoked if they are signaled and not handled.
+</p>
+
+<p>Condition instances are flavor instances.  The flavor <obj>condition</obj> is the
+base flavor from which all flavors of condition are built.  Several
+operations that are defined on condition instances are described below.
+The flavor <obj>error</obj>, which is built on <obj>condition</obj>, is the base flavor for all kinds of
+conditions which are errors. 
+</p>
+
+<p>A <arg>condition name</arg> is a symbol then is used to identify a category of conditions.
+Each condition instance possesses one or more condition names.  Each condition
+handler specifies one or more condition names that it should apply to.  A
+handler applies to a condition if they have any condition names in common.
+This is the sole purpose of condition names: to match condition instances with
+their handlers.  The meaning of every condition name signaled by the system is
+described in this manual.  The condition name index is a directory for them.
+Conditions that are errors possess the condition name <obj>error</obj>.
+</p>
+
+<p>In PL/I, CLU, ADA and most other systems that provide named conditions, each
+condition has only one name.  That is to say, the categories identified by
+condition names are disjoint.  In Zetalisp, each condition instance can have
+multiple condition names, which means that the categories identified by
+condition names can overlap and be subdivided.
+</p>
+
+<p>For example, among the condition names defined by the system are <obj>condition</obj>,
+<obj>error</obj>, <obj>sys:arithmetic-error</obj>, <obj>sys:floating-exponent-underflow</obj> and <obj>sys:divide-by-zero</obj>.
+<obj>condition</obj> is a condition name that all condition instances possess.  <obj>error</obj>
+identifies the category of conditions that are considered errors.
+<obj>sys:arithmetic-error</obj> identifies the category of errors that pertain to arithmetic
+operations.  <obj>sys:floating-exponent-underflow</obj> and <obj>sys:divide-by-zero</obj> are the most specific level
+of categorization.  So, the condition signaled when you evaluate <obj>(* 1s-30 1s-30 1s-30 1s-30)</obj>
+possesses condition names <obj>sys:floating-exponent-underflow</obj>, <obj>sys:arithmetic-error</obj>, <obj>error</obj> and
+<obj>condition</obj>, while the one signaled if you evaluate <obj>(// 1 0)</obj> possesses condition
+names <obj>sys:divide-by-zero</obj>, <obj>sys:arithmetic-error</obj>, <obj>error</obj> and <obj>condition</obj>.  In this
+example, the categories fall into a strict hierarchy, but this does not need to be
+the case.
+</p>
+
+<p>Condition names are documented throughout the manual, with definitions like this:
+</p>
+<definition><define key="sys:divide-by-zero-condition" name="sys:divide-by-zero" no-index="1" type="condition"><args>(<obj>sys:arithmetic-error</obj> <obj>error</obj>)</args>
+</define>
+
+<description>The condition name <obj>sys:divide-by-zero</obj> is always accompanied by
+<obj>sys:arithmetic-error</obj> and <obj>error</obj> (that is, it categorizes a subset of those categories).
+The presence of <obj>error</obj> implies that all <obj>sys:divide-by-zero</obj> conditions are errors.
+</description></definition>
+<p>The condition instance also records additional information about the
+event.  For example, the condition instance signaled by dividing by
+zero handles the <obj>:function</obj> operation by returning the function
+that did the division (it might be <obj>truncate</obj>, <obj>floor</obj>,
+<obj>ceiling</obj> or <obj>round</obj>, as well as <obj>//</obj>).  In general, for each
+condition name there are conventions saying what additional
+information is provided and what operations to use to obtain it.
+</p>
+
+<p>The flavor of the condition instance is always one of the condition names, and so
+are its component flavors (with a few exceptions; <obj>si:vanilla-flavor</obj> and some
+other flavor components are omitted, since they are not useful categories for
+condition handlers to specify).  In our example, the flavor of the condition is
+<obj>sys:arithmetic-error</obj>, and its components include <obj>error</obj> and <obj>condition</obj>.
+Condition names require new flavors only when they require significantly
+different handling by the error system; you will understand in detail after
+finishing this section.
+</p>
+<definition><define key="condition-typep-fun" name="condition-typep" type="fun"><args>condition-instance condition-name</args>
+</define>
+
+<description>Returns <obj>t</obj> if <arg>condition-instance</arg> possesses condition name <arg>condition-name</arg>.
+<arg>condition-name</arg> can also be a combination of condition names using <obj>and</obj>, <obj>or</obj>
+and <obj>not</obj>; then the condition tested for is a boolean combination of the
+presence or absence of various condition names.  Example:
+
+<lisp>(condition-typep error 'fs:file-not-found)
+(condition-typep error 
+   '(or fs:file-not-found fs:directory-not-found))
+</lisp></description></definition><definition><define key="errorp-fun" name="errorp" type="fun"><args>object</args>
+</define>
+
+<description>Returns <obj>t</obj> if <arg>object</arg> is a condition instance and its flavor incorporates <obj>error</obj>.
+This is normally equivalent to <obj>(typep <arg>object</arg> 'error)</obj>.  Some functions such as
+<obj>open</obj> optionally return the condition instance rather than signaling it, if an error
+occurs.  <obj>errorp</obj> is useful in testing the value returned.
+</description></definition><definition>
+<define key="condition-condition-names-method" name="condition" type="method"></define>
+
+<description>Returns a list of all the condition names possesses by this condition instance.
+</description></definition></section><a name="condition-handlers"></a>
+
+
+<section chapter-number="31" name="condition-handlers" number="2" title="Handling Conditions"><index-entry index="concepts" title="condition handlers"></index-entry>
+
+<p>A condition handler is a function that is associated with certain
+condition names (categories of conditions).  The variable
+<obj>eh:condition-handlers</obj> contains a list of the handlers that are current;
+handlers are established using macros which bind this variable.  When a condition is
+signaled, this list is scanned and all the handlers which apply are called,
+one by one, until one of the handlers either throws or returns non-<obj>nil</obj>.
+</p>
+
+<p>Since each new handler is pushed onto the front of <obj>eh:condition-handlers</obj>, the
+innermost-established handler gets the first chance to handle the condition.
+When the handler is run, <obj>eh:condition-handlers</obj> is bound so that the running
+handler (and all the ones that were established farther in) are not in effect.  This
+avoids the danger of infinite recursion due to an error in a handler invoking the
+same handler.
+</p>
+
+<p>One thing a handler can do is throw to a tag.  Often the <obj>catch</obj> for this
+tag is right next to the place where the handler is established, but this
+does not have to be so.  A simple handler that applies to all errors and just
+throws to a tag is established using <obj>ignore-errors</obj>.
+</p>
+<definition><define key="ignore-errors-fun" name="ignore-errors" type="mac"><args>body...</args>
+</define>
+
+<description>An error within the execution of <arg>body</arg> causes control to return
+from the <obj>ignore-errors</obj> form.  In this case, the values are
+<obj>nil</obj>, <obj>t</obj>.  If there is no error inside <arg>body</arg>, the first value
+is that of the last form in the <arg>body</arg> and the second is <obj>nil</obj>.
+
+Errors whose condition instances return true for the <obj>:dangerous-condition-p</obj> operation
+are not handled.  These include such things as running out of virtual memory.
+</description></definition>
+<p>A handler can also signal another condition.  For example, signaling <obj>sys:abort</obj>
+has the effect of pretending that the user typed the <obj>Abort</obj> key.  The following
+function creates a handler which signals <obj>sys:abort</obj>.
+</p>
+<definition><define key="si:eval-abort-trivial-errors-fun" name="si:eval-abort-trivial-errors" type="fun"><args>form</args>
+</define>
+
+<description>Evaluates <arg>form</arg> with a condition handler for many common error conditions such as
+<obj>:wrong-type-argument</obj>, <obj>:unbound-variable</obj> and <obj>:unclaimed-message</obj>.
+The handler asks the user whether to allow the debugger to be entered.
+If the user says `no', the handler signals the <obj>sys:abort</obj> condition.  If the user
+says `yes', the handler does not handle the condition, allowing the debugger
+to do so.
+
+In some cases the handler attempts to determine whether the incorrect variable,
+operation, or argument appeared in <arg>form</arg>; if it did not, the debugger is always
+allowed to run.  The assumption is that <arg>form</arg> was typed in by the user, and
+the intention is to distinguish trivial mistakes from program bugs.
+</description></definition>
+<p>The handler can also ask to proceed from the condition.  This is done by
+returning a non-<obj>nil</obj> value.  See the section on proceeding, <ref definition-in-file="errors" key="proceeding" type="page"></ref>, for
+more information.
+</p>
+
+<p>The handler can also decline to handle the condition, by returning <obj>nil</obj>.
+Then the next applicable handler is called, and so on until either some
+handler does handle the condition or there are no more handlers.
+</p>
+
+<p>The handler function is called in the environment where the condition
+was signaled, and in the same stack group.  All special variables have the
+values they had at the place where the signaling was done, and all catch
+tags that were available at the point of signaling may be thrown to.
+</p>
+
+<p>The handler receives the condition instance as its first argument.  When
+establishing the handler, you can also provide additional arguments to
+pass to the handler when it is called.  This allows the same function to
+be used in varying circumstances.
+</p>
+
+<p>The fundamental means of establishing a condition handler is the macro
+<obj>condition-bind</obj>.
+</p>
+<definition><define key="condition-bind-fun" name="condition-bind" type="mac"><args>(handlers...) body...</args>
+</define><define key="condition-bind-default-fun" name="condition-bind-default" type="mac"><args>(handlers...) body...</args>
+</define>
+
+<description>A <obj>condition-bind</obj> form looks like this:
+
+<lisp>(condition-bind ((<arg>conditions</arg> <arg>handler-form</arg> <arg>additional-arg-forms</arg>...)
+                 (<arg>conditions</arg> <arg>handler-form</arg> <arg>additional-arg-forms</arg>...))
+  <arg>body</arg>...)
+</lisp>
+The purpose is to execute <arg>body</arg> with one or more condition handlers
+established.
+
+Each list of conditions and handler-form establishes one handler.
+<arg>conditions</arg> is a condition name or a list of condition names to which the
+handler should apply.  It is <arg>not</arg> evaluated.  <arg>handler-form</arg> is evaluated to
+produce the function that is the actual handler.  The
+<arg>additional-arg-forms</arg> are evaluated, on entry to the <obj>condition-bind</obj>, to
+produce additional arguments that are passed to the handler
+function when it is called.  The arguments to the handler function are
+the condition instance being signaled, followed by the values of any
+<arg>additional-arg-forms</arg>.
+
+<arg>conditions</arg> can be <obj>nil</obj>; then the handler applies to all conditions that
+are signaled.  In this case it is up to the handler function to decide whether to
+do anything.  It is important for the handler to refrain from handling
+certain conditions that are used for debugging, such as <obj>break</obj> and
+<obj>eh:call-trap</obj>.  The <obj>:debugging-condition-p</obj> operation on condition
+instances returns non-<obj>nil</obj> for these conditions.  Certain other
+conditions such as <obj>sys:virtual-memory-overflow</obj> should be handled only
+with great care.  The <obj>:dangerous-condition-p</obj> operation returns non-<obj>nil</obj>
+for these conditions.  Example:
+
+
+<lisp>(condition-bind ((nil 'myhandler &quot;it happened here&quot; 45))
+  (catch 'x
+    ...))
+
+(defun myhandler (condition string value)
+  (unless (or (condition-typep condition 'fs:file-error)
+              (send condition :dangerous-condition-p)
+              (send condition :debugging-condition-p))
+    (format error-output &quot;~&amp;~A:~%~A~%&quot; string condition)
+    (throw 'x value)))
+</lisp>
+<obj>myhandler</obj> declines to handle file errors, and all debugging conditions and
+dangerous errors.  For all other conditions, it prints the string specified
+in the condition bind and throws to the tag <obj>x</obj> the value specified there (45).
+
+<obj>condition-bind-default</obj> is like <obj>condition-bind</obj> but establishes a <arg>default</arg> <arg>handler</arg>
+instead of an ordinary handler.  Default handlers work like ordinary handlers, but
+they are tried in a different order: first all the applicable ordinary handlers are
+given a chance to handle the condition, and then the default handlers get their
+chance.  A more flexible way of doing things like this is described under
+<obj>signal-condition</obj> (<ref definition-in-file="errors" key="signal-condition-fun" title="Function signal-condition" type="fun"></ref>).
+</description></definition>
+<p>Condition handlers that simply throw to the function that established
+them are very common, so there are special constructs provided for
+defining them.
+</p>
+<definition><define key="condition-case-fun" name="condition-case" type="mac"><args>(variables...) body-form clauses...</args>
+</define>
+
+
+<description><lisp>(condition-case (<arg>variable</arg>)
+    <arg>body-form</arg>
+  (<arg>condition-names</arg> <arg>forms</arg>...)
+  (<arg>condition-names</arg> <arg>forms</arg>...)
+  ...)
+</lisp><arg>body-form</arg> is executed with a condition handler established that will
+throw back to the <obj>condition-case</obj> if any of the specified condition names
+is signaled.
+
+Each list starting with some condition names is a <arg>clause</arg>, and specifies
+what to do if one of those condition names is signaled.  <arg>condition-names</arg>
+is either a condition name or a list of condition names; it is not
+evaluated.
+
+Once the handler per se has done the throw, the clauses are tested in
+order until one is found that applies.  This is almost like a <obj>selectq</obj>,
+except that the signaled condition can have several condition names, so
+the first clause that matches any of them gets to run.  The forms in the
+clause are executed with <arg>variable</arg> bound to the condition instance that
+was signaled.  The values of the last form in the clause are returned
+from the <obj>condition-case</obj> form.
+
+If none of the specified conditions is signaled during the execution of
+<arg>body-form</arg> (or if other handlers, established within <arg>body-form</arg>, handle
+them) then the values of <arg>body-form</arg> are returned from the
+<obj>condition-case</obj> form.
+
+<arg>variable</arg> may be omitted if it is not used.
+
+It is also possible to have a clause starting with <obj>:no-error</obj> in place of a
+condition name.  This clause is executed if <arg>body-form</arg> finishes normally.
+Instead of just one <arg>variable</arg> there can be several variables; during the
+execution of the <obj>:no-error</obj> clause, these are bound to the values returned
+by <arg>body-form</arg>.  The values of the last form in the clause become the
+values of the <obj>condition-case</obj> form.
+
+Here is an example:
+
+<lisp>(condition-case ()
+    (print foo)
+  (error (format t &quot; &lt;&lt;Error in printing&gt;&gt;&quot;)))
+</lisp></description></definition><definition><define key="condition-call-fun" name="condition-call" type="mac"><args>(variables...) body-form clauses...</args>
+</define>
+
+<description><obj>condition-call</obj> is an extension of <obj>condition-case</obj> that allows you to
+give each clause an arbitrary conditional expression instead of just a list
+of condition names.  It looks like this:
+
+<lisp>(condition-call (<arg>variables</arg>...)
+    <arg>body-form</arg>
+  (<arg>test</arg> <arg>forms</arg>...)
+  (<arg>test</arg> <arg>forms</arg>...)
+  ...)
+</lisp>The difference between this and <obj>condition-case</obj> is the <arg>test</arg> in
+each clause.  The clauses in a <obj>condition-call</obj> resemble the clauses of a
+<obj>cond</obj> rather than those of a <obj>selectq</obj>.
+
+When a condition is signaled, each <arg>test</arg> is executed while still within the
+environment of the signaling (that is, within the actual handler function).  The
+condition instance can be found in the first <arg>variable</arg>.  If any <arg>test</arg> returns
+non-<obj>nil</obj>, then the handler throws to the <obj>condition-call</obj> and the corresponding
+clause's <arg>forms</arg> are executed.  If every <arg>test</arg> returns <obj>nil</obj>, the condition is not
+handled by this handler.
+
+In fact, each <arg>test</arg> is computed a second time after the throw has
+occurred in order to decide which clause to execute.  The code for the
+<arg>test</arg> is copied in two different places, once into the handler
+function to decide whether to throw, and once in a <obj>cond</obj> which follows
+the catch.
+
+The last clause can be a <obj>:no-error</obj> clause just as in <obj>condition-case</obj>.
+It is executed if the body returns without error.
+The values returned by the body are stored in the <arg>variables</arg>.
+The values of the last form in the <obj>:no-error</obj> clause are returned by the
+<obj>condition-call</obj>.
+
+Only the first of <arg>variables</arg> is used if there is no <obj>:no-error</obj> clause.
+The <arg>variables</arg> may be omitted entirely in the unlikely event that none is used.
+Example:
+
+<lisp>(condition-call (instance)
+    (do-it)
+  ((condition-typep instance
+     '(and fs:file-error (not fs:no-more-room)))
+   (compute-what-to-return)))
+</lisp>The condition name <obj>fs:no-more-room</obj> is a subcategory of
+<obj>fs:file-error</obj>; therefore, this handles all file errors <arg>except</arg> for
+<obj>fs:no-more-room</obj>.
+</description></definition>
+<p>Each of the four condition handler establishing constructs has a
+conditional version that decides at run time whether to establish the
+handlers.
+</p>
+<definition><define key="condition-bind-if-fun" name="condition-bind-if" type="mac"><args>cond-form (handlers...) body...</args>
+</define>
+
+
+<description><lisp>(condition-bind-if <arg>cond-form</arg>
+                   ((<arg>conditions</arg> <arg>handler-form</arg> <arg>additional-arg-forms</arg>...)
+                    (<arg>conditions</arg> <arg>handler-form</arg> <arg>additional-arg-forms</arg>...))
+  <arg>body</arg>...)
+</lisp>begins by executing <arg>cond-form</arg>.  If it returns non-<obj>nil</obj>, then all proceeds
+as for a regular <obj>condition-bind</obj>.  If <arg>cond-form</arg> returns <obj>nil</obj>, then the <arg>body</arg>
+is still executed but without the condition handler.
+</description></definition><definition><define key="condition-case-if-fun" name="condition-case-if" type="mac"><args>cond-form (variables...) body-form clauses...</args>
+</define>
+
+
+<description><lisp>(condition-case-if <arg>cond-form</arg> (<arg>variables</arg>...)
+    <arg>body-form</arg>
+  (<arg>condition-names</arg> <arg>forms</arg>...)
+  (<arg>condition-names</arg> <arg>forms</arg>...)
+  ...)
+</lisp>begins by executing <arg>cond-form</arg>.  If it returns non-<obj>nil</obj>, then all proceeds
+as for a regular <obj>condition-case</obj>.  If <arg>cond-form</arg> returns <obj>nil</obj>, then the
+<arg>body-form</arg> is still executed but without the condition handler.
+<arg>body-form</arg>'s values are returned, or, if there is a <obj>:no-error</obj> clause, it is
+executed and its values returned.
+</description></definition><definition><define key="condition-call-if-fun" name="condition-call-if" type="mac"><args>cond-form ([variable]) body-form clauses...</args>
+</define>
+
+
+<description><lisp>(condition-call-if <arg>cond-form</arg> (<arg>variables</arg>...)
+    <arg>body-form</arg>
+  (<arg>test</arg> <arg>forms</arg>...)
+  (<arg>test</arg> <arg>forms</arg>...)
+  ...)
+</lisp>begins by executing <arg>cond-form</arg>.  If it returns non-<obj>nil</obj>, then everything proceeds
+as for a regular <obj>condition-call</obj>.  If <arg>cond-form</arg> returns <obj>nil</obj>, then the
+<arg>body-form</arg> is still executed but without the condition handler.
+In that case, <arg>body-form</arg>'s values are returned, or, if there is a <obj>:no-error</obj> clause, it is
+executed and its values returned.
+</description></definition><definition><define key="condition-bind-default-if-fun" name="condition-bind-default-if" type="mac"><args>cond-form (handlers...) body...</args>
+</define>
+
+<description>This is used just like <obj>condition-bind-if</obj>, but establishes a default handler
+instead of an ordinary handler.
+</description></definition><definition>
+<define key="eh:condition-handlers-var" name="eh:condition-handlers" type="var"></define>
+
+<description>This is the list of established condition handlers.  Each element looks
+like this:
+
+<lisp>(<arg>condition-names</arg> <arg>function</arg> <arg>additional-arg-values</arg>...)
+</lisp><arg>condition-names</arg> is a condition name or a list of condition names, or <obj>nil</obj>
+which means all conditions.
+
+<arg>function</arg> is the actual handler function.
+
+<arg>additional-arg-values</arg> are additional arguments to be passed to the
+<arg>function</arg> when it is called.  <arg>function</arg>'s first argument is always the
+condition instance.
+
+Both the links of the value of <obj>eh:condition-handlers</obj> and the elements
+are usually created with <obj>with-stack-list</obj>, so copy them if you want to
+save them for any period of time.
+</description></definition><definition>
+<define key="eh:condition-default-handlers-var" name="eh:condition-default-handlers" type="var"></define>
+
+<description>This is the list of established default condition handlers.  The data
+format is the same as that of <obj>eh:condition-handlers</obj>.
+</description></definition></section><a name="Standard Condition Flavors"></a>
+
+<section chapter-number="31" name="Standard Condition Flavors" number="3" title="Standard Condition Flavors"><definition>
+<define key="condition-flavor" name="condition" type="flavor"></define>
+
+<description>The flavor <obj>condition</obj> is the base flavor of all conditions, and provides default
+definitions for all the operations described in this chapter.
+
+<obj>condition</obj> incorporates <obj>si:property-list-mixin</obj>, which defines operations
+<obj>:get</obj> and <obj>:plist</obj>.  Each property name on the property list is also an operation
+name, so that sending the <obj>:foo</obj> message is equivalent to
+<obj>(send instance :get :foo)</obj>.  In addition, <obj>(send instance :set :foo <arg>value</arg>)</obj> is equivalent
+to <obj>(send instance :set :get :foo <arg>value</arg>)</obj>.
+
+<obj>condition</obj> also provides two instance variables, <obj>eh:format-string</obj> and <obj>eh:format-args</obj>.
+<obj>condition</obj>'s method for the the <obj>:report</obj> operation passes these to <obj>format</obj> to print
+the error message.
+</description></definition><definition>
+<define key="error-flavor" name="error" type="flavor"></define>
+
+<description>The flavor <obj>error</obj> makes a condition an error condition.  <obj>errorp</obj> returns <obj>t</obj> for such
+conditions, and the debugger is entered if they are signaled and not otherwise
+handled.
+</description></definition><definition>
+<define key="sys:no-action-mixin-flavor" name="sys:no-action-mixin" type="flavor"></define>
+
+<description>This mixin provides a definition of the proceed type <obj>:no-action</obj>.
+</description></definition><definition>
+<define key="sys:proceed-with-value-mixin-flavor" name="sys:proceed-with-value-mixin" type="flavor"></define>
+
+<description>This mixin provides a definition of the proceed type <obj>:new-value</obj>.
+</description></definition><definition>
+<define key="ferror-flavor" name="ferror" type="flavor"></define>
+
+<description>This flavor is a mixture of <obj>error</obj>, <obj>sys:no-action-mixin</obj> and
+<obj>sys:proceed-with-value-mixin</obj>.  It is the flavor used by default by the functions
+<obj>ferror</obj> and <obj>cerror</obj>, and is often convenient for users to instantiate.
+</description></definition><definition>
+<define key="sys:warning-flavor" name="sys:warning" type="flavor"></define>
+
+<description>This flavor is a mixture of <obj>sys:no-action-mixin</obj> and <obj>condition</obj>.
+</description></definition><definition>
+<define key="sys:bad-array-mixin-flavor" name="sys:bad-array-mixin" type="flavor"></define>
+
+<description>This mixin provides a definition of the proceed type <obj>:new-array</obj>.
+</description></definition></section><a name="Condition Operations"></a>
+
+
+<section chapter-number="31" name="Condition Operations" number="4" title="Condition Operations"><p>Every condition instance can be asked to print an <arg>error message</arg> which describes
+the circumstances that led to the signaling of the condition.  The easiest way
+to print one is to print the condition instance without escaping (<obj>princ</obj>, or
+<obj>format</obj> operation <obj>~A</obj>).  This actually uses the <obj>:report</obj> operation, which
+implements the printing of an error message.  When a condition instance is
+printed with escaping, it uses the <obj>#⊂</obj> syntax so that it can be read back in.
+This is done using <obj>si:print-readably-mixin</obj>, <ref definition-in-file="flavor" key="si:print-readably-mixin-flavor" title="Flavor si:print-readably-mixin" type="flavor"></ref>.
+</p>
+<definition><define key="condition-report-method" name="condition" type="method"><args>stream</args>
+</define>
+
+<description>Prints on <arg>stream</arg> the condition's error message, a description of the circumstances
+for which the condition instance was signaled.  The output should neither start
+nor end with a carriage return.
+
+If you are defining a new flavor of condition and wish to change the way the
+error message is printed, this is the operation to redefine.  All others use this
+one.
+</description></definition><definition>
+<define key="condition-report-string-method" name="condition" type="method"></define>
+
+<description>Returns a string containing the text that the <obj>:report</obj> operation would
+print.
+</description></definition><nopara></nopara>
+<p>Operations provided specifically for condition handlers to use:
+</p>
+<definition>
+<define key="condition-dangerous-condition-p-method" name="condition" type="method"></define>
+
+<description>Returns <obj>t</obj> if the condition instance is one of those that indicate events
+that are considered extremely dangerous, such as running out of memory.
+Handlers that normally handle all conditions might want to
+make an exception for these.
+</description></definition><definition>
+<define key="condition-debugging-condition-p-method" name="condition" type="method"></define>
+
+<description>Returns <obj>t</obj> if the condition instance is one of those that are signaled as
+part of debugging, such as <obj>break</obj>, which is signaled when you type
+<obj>Meta-Break</obj>.  Although these conditions normally enter the debugger,
+they are not errors; this serves to prevent most condition
+handlers from handling them.  But any condition handler which is
+written to handle <arg>all</arg> conditions should probably make a specific
+exception for these.
+</description></definition>
+<p>See also the operations <obj>:proceed-types</obj> and <obj>:proceed-type-p</obj>, which have to do
+with proceeding (<ref definition-in-file="errors" key="proceeding" type="page"></ref>).
+</p>
+
+
+
+<subsection name="NIL" title="Condition Operations for the Debugger"><p>Some operations are intended for the debugger to use.  They are documented
+because some flavors of condition redefine them so as to cause the debugger to
+behave differently.  This section is of interest only to advanced users.
+</p>
+<definition><define key="condition-print-error-message-method" name="condition" type="method"><args>stack-group brief-flag stream</args>
+</define>
+
+<description>This operation is used by the debugger to print a complete error message.  This
+is done primarily using the <obj>:report</obj> operation.
+
+Certain flavors of condition define a <obj>:after</obj> <obj>:print-error-message</obj> method which,
+when <arg>brief-flag</arg> is <obj>nil</obj>, prints additional helpful information which is not part of
+the error message per se.  Often this requires access to the stack group in
+addition to the data in the condition instance.  The method can assume that if
+<arg>brief-flag</arg> is <obj>nil</obj> then <arg>stack-group</arg> is not the one which is executing.
+
+For example, the <obj>:print-error-message</obj> method of the condition signaled when you call
+an undefined function checks for the case of calling a function such as <obj>bind</obj>
+that is meaningful only in compiled code; if that is what happened, it searches
+the stack to look for the name of the function in which the call appears.  This is
+information that is not considered crucial to the error itself, and is therefore
+not recorded in the condition instance.
+</description></definition><definition><define key="condition-maybe-clear-input-method" name="condition" type="method"><args>stream</args>
+</define>
+
+<description>This operation is used on entry to the debugger to discard input.
+Certain condition flavors, used by stepping redefine this operation to do nothing,
+so that input is not discarded.
+</description></definition><definition>
+<define key="condition-bug-report-recipient-system-method" name="condition" type="method"></define>
+
+<description>The value returned by this operation is used to determine what address to mail
+bug reports to, when the debugger <obj>Control-M</obj> command is used.
+By default, it returns <obj>&quot;LISPM&quot;</obj>.  The value is passed to the function <obj>bug</obj>.
+</description></definition><definition><define key="condition-bug-report-description-method" name="condition" type="method"><args>stream <standard>&amp;optional</standard> numeric-arg</args>
+</define>
+
+<description>This operation is used by the <obj>Control-M</obj> command to print on <arg>stream</arg> the
+information that should go in the bug report.  <arg>numeric-arg</arg> is the numeric
+argument, if any, that the user gave to the <obj>Control-M</obj> command.
+</description></definition><definition><define key="condition-find-current-frame-method" name="condition" type="method"><args>stack-group</args>
+</define>
+
+<description>Returns the stack indices of the stack frames that the debugger should operate
+on.
+
+The first value is the frame ``at which the error occurred.''  This is not the
+innermost stack frame; it is outside the calls to such functions as <obj>ferror</obj> and
+<obj>signal-condition</obj> which were used to signal the error.
+
+The second value is the initial value for the debugger command loop's current
+frame.
+
+The third value is the innermost frame that the debugger should be willing to let the
+user see.  By default this is the innermost active frame, but it is safe to use
+an open but not active frame within it.
+
+The fourth value, if non-<obj>nil</obj>, tells the debugger to consider the innermost frame
+to be ``interesting''.  Normally, frames that are part of the interpreter (calls to
+<obj>si:eval1</obj>, <obj>si:apply-lambda</obj>, <obj>prog</obj>, <obj>cond</obj>, etc.) are considered uninteresting.
+
+This is a flavor operation so that certain flavors of condition can redefine it.
+</description></definition><definition><define key="condition-debugger-command-loop-method" name="condition" type="method"><args>stack-group <standard>&amp;optional</standard> error-object</args>
+</define>
+
+<description>Enters the debugger command loop.  The initial error message and backtrace have
+already been printed.  This message is sent in an error handler stack group;
+<arg>stack-group</arg> is the stack group in which the condition was signaled.  <arg>error-object</arg>
+is the condition object which was signaled; it defaults to the one the message is
+sent to.
+
+This operation uses <obj>:or</obj> method combination (see <ref chapter="22" definition-in-file="flavor" key="method-combination" section="11" title="Method Combination" type="section"></ref>).
+Some condition flavors add methods that perform some other sort of
+processing or enter a different command loop.  For example, unbound variable
+errors look for look-alike symbols in other packages at this point.  If the added
+method returns <obj>nil</obj>, the original method that enters the usual debugger
+command loop is called.
+</description></definition></subsection></section><a name="Signaling Conditions"></a>
+
+
+<section chapter-number="31" name="Signaling Conditions" number="5" title="Signaling Conditions"><index-entry index="concepts" title="signaling conditions"></index-entry>
+
+<p>Signaling a condition has two steps, creating a condition instance and signaling
+the instance.  There are convenience interface functions that combine the two
+steps.  You can also do them separately.  If you just want to signal an error and
+do not want to worry much about condition handling, the function <obj>ferror</obj> is all
+you need to know.
+</p>
+
+
+<subsection name="NIL" title="Convenience Functions for Signaling"><definition><define key="ferror-fun" name="ferror" type="fun"><args><standard>&amp;rest</standard> make-condition-arguments</args>
+</define>
+
+<description>Creates a condition instance using <obj>make-condition</obj> and then signals it
+with <obj>signal-condition</obj>, specifying no local proceed types, and with <obj>t</obj> as the
+<arg>use-debugger</arg> argument so the debugger is always entered if the condition is not
+otherwise handled.
+
+The first argument to <obj>ferror</obj> is always a signal name (often <obj>nil</obj>).  The second
+argument is usually a format string and the remaining arguments are additional
+arguments for <obj>format</obj>; but this is under the control of the definition of the
+signal name.  Example:
+
+<lisp>(ferror 'math:singular-matrix
+        &quot;The matrix ~S cannot be inverted.&quot; matrix)
+</lisp>For compatibility with the Symbolics system, if the first argument to <obj>ferror</obj> is a
+string, then a signal name of <obj>nil</obj> is assumed.  The arguments to <obj>ferror</obj> are passed
+on to <obj>make-condition</obj> with an additional <obj>nil</obj> preceding them.
+
+If you prefer, you can use the formatted output functions
+(<ref definition-in-file="fd-fio" key="format:outfmt-fun" title="Macro format:outfmt" type="mac"></ref>) to generate the error message.  Here is an example,
+though in a simple case like this using <obj>format</obj> is easier:
+
+<lisp>(ferror 'math:singular-matrix
+  (format:outfmt
+    &quot;The matrix &quot;
+    (prin1 matrix)
+    &quot; cannot be inverted.&quot;)
+  number)
+</lisp>In this case, arguments past the second one are not used for printing the error
+message, but the signal name may still expect them to be present so it can put
+them in the condition instance.
+</description></definition><definition><define key="cerror-fun" name="cerror" type="fun"><args>proceed-type ignore signal-name <standard>&amp;rest</standard> signal-name-arguments</args>
+</define>
+
+<description>Creates a condition instance, by passing the <arg>signal-name</arg> and
+<arg>signal-name-arguments</arg> to <obj>make-condition</obj>, and then signals it.
+If <arg>proceed-type</arg> is non-<obj>nil</obj> then it is provided to
+<obj>signal-condition</obj> as a proceed type.  For compatibility with old
+uses of <obj>cerror</obj>, if <arg>proceed-type</arg> is <obj>t</obj>, <obj>:new-value</obj> is
+provided as the proceed type.  If <arg>proceed-type</arg> is <obj>:yes</obj>,
+<obj>:no-action</obj> is provided as the proceed type.
+
+The second argument to <obj>cerror</obj> is not used and is present for historical
+compatibility.  It may be given a new meaning in the future.
+
+If a condition handler or the debugger decides to proceed, the second value it
+returns becomes the value of <obj>cerror</obj>.
+
+Common Lisp defines another calling sequence for this function:
+
+<lisp>(cerror <arg>continue-format-string</arg> <arg>error-format-string</arg> <arg>args</arg>...)
+</lisp>This signals an error of flavor <obj>eh:common-lisp-cerror</obj>, which prints an
+error message using <arg>error-format-string</arg> and <arg>args</arg>.  It allows one proceed type,
+whose documentation is <arg>continue-format-string</arg>, and which proceeds silently,
+returning <obj>nil</obj> from <obj>cerror</obj>.
+<obj>cerror</obj> can tell which calling sequence has been used and behaves accordingly.
+</description></definition><definition><define key="warn-fun" name="warn" type="fun"><args>format-string <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Prints a warning on <obj>*error-output*</obj> by passing the args to <obj>format</obj>,
+starting on a fresh line, and then returns.
+
+If <obj>*break-on-warnings*</obj> is non-<obj>nil</obj>, however, <obj>warn</obj> signals a
+procedable error, using the arguments to make an error message.
+If the user proceeds, <obj>warn</obj> simply returns.
+</description></definition><definition>
+<define key="*break-on-warnings*-fun" name="*break-on-warnings*" type="fun"></define>
+
+<description>If non-<obj>nil</obj>, <obj>warn</obj> signals an error rather than just printing a message.
+</description></definition><definition><define key="check-type-fun" name="check-type" type="mac"><args>place type-spec [description]</args>
+</define><define key="check-arg-type-fun" name="check-arg-type" type="mac"><args>place type-spec [description]</args>
+</define>
+
+
+<description><index-entry index="concepts" title="argument checking"></index-entry>
+Signals a correctable error if the value of <arg>place</arg> does not
+fit the type <arg>type-spec</arg>.  <arg>place</arg> is something that <obj>setf</obj> can store in.
+<arg>type-spec</arg> is a type specifier, a suitable second argument to <obj>typep</obj>,
+and is not evaluated (see <ref chapter="2" definition-in-file="fd-dtp" key="type-specifiers" section="3" title="Type Specifiers" type="section"></ref>).  A simple example is:
+
+<lisp>(check-type foo (integer 0 10))
+</lisp>This signals an error unless <obj>(typep foo '(integer 0 10))</obj>; that is, unless
+<obj>foo</obj>'s value is an integer between zero and ten, inclusive.
+
+If an error is signaled, the error message contains the name of the variable or
+place where the erroneous value was found, and the erroneous value itself.  An
+English description of the type of object that was wanted is computed
+automatically from the type specifier for use in the error message.  For the
+commonly used type specifiers this computed description is adequate.  If it is
+unsatisfactory in a particular case, you can specify <arg>description</arg>, which is used
+instead.  In order to make the error message grammatical, <arg>description</arg> should start
+with an indefinite article.
+
+The error signaled is of condition <obj>sys:wrong-type-argument</obj> (see
+<ref definition-in-file="fd-eva" key="sys:wrong-type-argument-condition" title="Condition sys:wrong-type-argument" type="condition"></ref>).  The proceed type <obj>:argument-value</obj> is
+provided.  If a handler proceeds using this proceed type, it should specify one
+additional argument; that value is stored into <arg>place</arg> with <obj>setf</obj>.  The new value is
+then tested, and so on.  <obj>check-type</obj> returns when a value passes the test.
+
+<obj>check-arg-type</obj> is an older name for this macro.
+</description></definition><definition><define key="check-arg-fun" name="check-arg" type="mac"><args>var-name predicate description [type-symbol]</args>
+</define>
+
+<description><obj>check-arg</obj> is an obsolete variant of <obj>check-type</obj>.
+<arg>predicate</arg> is either a symbol which is predicate (a function of one argument)
+or a list which is a form.  If it is a predicate, it is applied to the
+value of <arg>var-name</arg>, which is valid if the predicate returns non-<obj>nil</obj>.
+If it is a form, it is evaluated, and the value is valid of the form
+returns non-<obj>nil</obj>.  The form ought to make use of <arg>var-name</arg>, but
+nothing checks this.
+
+There is no way to compute an English description of valid values
+from <arg>predicate</arg>, so a <arg>description</arg> string must always be supplied.
+
+<arg>type-symbol</arg> is a symbol that is used by condition handlers to determine what type
+of argument was expected.  If <arg>predicate</arg> is a symbol, you may omit <arg>type-symbol</arg>, and
+<arg>predicate</arg> is used for that purpose as well.  The use of the <arg>type-symbol</arg> is not really
+well-defined, and <obj>check-type</obj>, where a type specifier serves both purposes,
+is superior to <obj>check-arg</obj> for this reason.
+
+
+<lisp><exdent amount="96"><caption>Examples: </caption>
+(check-arg foo stringp &quot;a string&quot;)
+
+(check-arg h
+           (or (stringp h) (typep h 'fs:host))
+           &quot;a host name&quot;
+           fs:host)
+</exdent></lisp></description></definition>
+<p>Other functions that can be used to test for invalid values include
+<obj>ecase</obj> and <obj>ccase</obj> (<ref definition-in-file="fd-flo" key="ecase-fun" title="Macro ecase" type="mac"></ref>), which are error-checking versions of
+<obj>selectq</obj>, and <obj>etypecase</obj> and <obj>ctypecase</obj> (<ref definition-in-file="fd-dtp" key="etypecase-fun" title="Macro etypecase" type="mac"></ref>), error-checking
+versions of <obj>typecase</obj>.
+</p>
+<definition><define key="assert-fun" name="assert" type="mac"><args><arg>test-form</arg> [(<arg>places</arg>...) [<arg>string</arg> <arg>args</arg>...]]</args>
+</define>
+
+<description>Signals an error if <arg>test-form</arg> evaluates to <obj>nil</obj>.  The rest of the <obj>assert</obj> form is
+relevant only if the error happens.
+
+First of all, the <arg>places</arg> are forms that can be stored into with <obj>setf</obj>, and which are used
+(presumably) in <arg>test-form</arg>.  The reason that the <arg>places</arg> are specified again
+in the <obj>assert</obj> is so that the expanded code can arrange for the user to
+be able to specify a new value to be stored into any one of them when
+he proceeds from the error.  When the error is signaled, one proceed-type
+is provided for each <arg>place</arg> that is given.  The condition object has flavor
+<obj>eh:failed-assertion</obj>.
+
+If the user does proceed with a new value in that fashion, the <arg>test-form</arg> is
+evaluated again, and the error repeats until the <arg>test-form</arg> comes out non-<obj>nil</obj>.
+
+The <arg>string</arg> and <arg>args</arg> are used to print the error message.  If they are omitted,
+<obj>&quot;Failed assertion&quot;</obj> is used.  They are evaluated only when an error is signaled,
+and are evaluated again each time an error is signaled.  <obj>setf</obj>'ing the <arg>places</arg> may
+also involve evaluation, which happens each time the user proceeds and sets one.
+
+
+<lisp><exdent amount="96"><caption>Example: </caption>(assert (neq (car a) (car b)) ((car a) (car b))
+        &quot;The CARS of A and B are EQ: ~S and ~S&quot; 
+        (car a) (car b))
+</exdent></lisp>The <arg>places</arg> here are <obj>(car a)</obj> and <obj>(car b)</obj>.  The <arg>args</arg> happen to be the same
+two forms, by not-exactly-coincidence; the current values of the <arg>places</arg> are
+often useful in the error message.
+</description></definition><nopara></nopara>
+<p>The remaining signaling functions are provided for compatibility only.
+</p>
+<definition><define key="error-fun" name="error" type="fun"><args><standard>&amp;rest</standard> make-condition-arguments</args>
+</define>
+
+<description><obj>error</obj> exists for compatibility with Maclisp and the Symbolics version of Zetalisp.
+It takes arguments in three patterns:
+
+<lisp>(error <arg>string</arg> <arg>object</arg> [<arg>interrupt</arg>])
+</lisp>which is used in Maclisp, and
+
+<lisp>(error <arg>condition-instance</arg>)
+(error <arg>flavor-name</arg> <arg>init-options</arg>...)
+</lisp>which are used by Symbolics.  (In fact, the arguments to <obj>error</obj> are simply passed
+along to <obj>make-condition</obj> if they do not appear to fit the Maclisp pattern).
+
+If the Maclisp argument pattern is not used then there is no difference between
+<obj>error</obj> and <obj>ferror</obj>.
+</description></definition><definition><define key="cli:error-fun" name="cli:error" type="fun"><args><arg>format-string</arg> <standard>&amp;rest</standard> <arg>args</arg></args>
+</define>
+
+<description>The Common Lisp version of <obj>error</obj>
+signals an uncorrectable error whose error message is printed by passing
+<arg>format-string</arg> and <arg>args</arg> to <obj>format</obj>.
+</description></definition><definition><define key="fsignal-fun" name="fsignal" type="fun"><args>format-string <standard>&amp;rest</standard> format-args</args>
+</define>
+
+<description>This function is for Symbolics compatibility only, and is equivalent to
+
+<lisp>(cerror :no-action nil nil <arg>format-string</arg> <arg>format-args</arg>...)
+</lisp></description></definition><definition><define key="signal-fun" name="signal" type="fun"><args>signal-name <standard>&amp;rest</standard> remaining-make-condition-arguments</args>
+</define>
+
+<description>The <arg>signal-name</arg> and <arg>remaining-make-condition-arguments</arg> are passed to
+<obj>make-condition</obj>, and the result is signaled with <obj>signal-condition</obj>.
+
+If the <arg>remaining-make-condition-arguments</arg> are keyword arguments and
+<obj>:proceed-types</obj> is one of the keywords, the associated value is used as the list of
+proceed types.  In particular, if <arg>signal-name</arg> is actually a condition instance, so
+that the remaining arguments will be ignored by <obj>make-condition</obj>, it works to
+specify the proceed types this way.
+
+If the proceed types are not specified, a list of all the proceed types that the
+condition instance knows how to prompt the user about is used by default.
+</description></definition><definition><define key="errset-fun" name="errset" type="mac"><args>form [flag]</args>
+</define>
+
+<description>Catches errors during the evaluation of <arg>form</arg>.  If an error occurs, the usual
+error message is printed unless <arg>flag</arg> is <obj>nil</obj>.  Then control is thrown and the
+errset-form returns <obj>nil</obj>.  <arg>flag</arg> is evaluated first and is optional, defaulting to <obj>t</obj>.  If
+no error occurs, the value of the errset-form is a list of one element, the value
+of <arg>form</arg>.
+
+<obj>errset</obj> is an old, Maclisp construct, implemented much like <obj>condition-case</obj>.
+Many uses of <obj>errset</obj> or <obj>errset</obj>-like constructs really ought to be checking for
+more specific conditions instead.
+</description></definition><definition><define key="catch-error-fun" name="catch-error" type="mac"><args>form [flag]</args>
+</define>
+
+<description><obj>catch-error</obj> is a variant of <obj>errset</obj>.  This construct catches errors during the
+evaluation of <arg>form</arg> and returns two values.  If <arg>form</arg> returns normally, the first value is
+<arg>form</arg>'s first value and the second value is <obj>nil</obj>.  If an error occurs, the usual error message
+is printed unless <arg>flag</arg> is <obj>nil</obj>, and then control is thrown out of the <obj>catch-error</obj>
+form, which returns two values, first <obj>nil</obj> and second a non-<obj>nil</obj> value that
+indicates the occurrence of an error.  <arg>flag</arg> is evaluated before <arg>form</arg> and is optional,
+defaulting to <obj>t</obj>.
+</description></definition><definition>
+<define key="errset-var" name="errset" type="var"></define>
+
+<description>If this variable is non-<obj>nil</obj>, <obj>errset</obj> forms are not allowed to trap errors.
+The debugger is entered just as if there were no <obj>errset</obj>.  This is intended mainly
+for debugging.  The initial value of <obj>errset</obj> is <obj>nil</obj>.
+</description></definition><definition>
+<define key="err-fun" name="err" type="mac"></define>
+
+<description>This is for Maclisp compatibility only and should not be used.
+
+<obj>(err)</obj> is a dumb way to cause an error.  If executed inside an <obj>errset</obj>,
+that <obj>errset</obj> returns <obj>nil</obj>, and no message is printed.
+Otherwise an error is signaled with error message just <obj>&quot;ERROR&gt;&gt;&quot;</obj>.
+
+<obj>(err <arg>form</arg>)</obj> evaluates <arg>form</arg> and causes the containing <obj>errset</obj>
+to return the result.  If executed when not inside an <obj>errset</obj>, an error
+is signaled with <arg>form</arg>'s value printed as the error message.
+
+<obj>(err <arg>form</arg> <arg>flag</arg>)</obj>, which exists in Maclisp, is not supported.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Creating Condition Instances"><p>You can create a condition instance quite satisfactorily with <obj>make-instance</obj> if
+you know which instance variables to initialize.  For example,
+
+<lisp>(make-instance 'ferror :condition-names '(foo)
+               :format-string &quot;~S loses.&quot;
+               :format-args losing-object)
+</lisp>creates an instance of <obj>ferror</obj> just like the one that would be signaled if you do
+
+<lisp>(ferror 'foo &quot;~S loses.&quot; losing-object)
+</lisp></p>
+
+<p>Note that the flavor name and its components' names are added in automatically
+to whatever you specify for the <obj>:condition-names</obj> keyword.
+</p>
+
+<index-entry index="concepts" title="signal names"></index-entry>
+
+<p>Direct use of <obj>make-instance</obj> is cumbersome, however, and it is usually handier
+to define a <arg>signal</arg> <arg>name</arg> with <obj>defsignal</obj> or <obj>defsignal-explicit</obj> and then create the
+instance with <obj>make-condition</obj>.
+</p>
+
+<p>A signal name is a sort of abbreviation for all the things that are always the same
+for a certain sort of condition: the flavor to use, the condition names, and what
+arguments are expected.  In addition, it allows you to use a positional syntax for
+the arguments, which is usually more convenient than a keyword syntax in
+simple use.
+</p>
+
+<p>Here is a typical <obj>defsignal</obj>:
+
+<lisp>(defsignal series-not-convergent sys:arithmetic-error (series)
+  &quot;Signaled by limit extractor when SERIES does not converge.&quot;)
+</lisp>This defines a signal name <obj>series-not-convergent</obj>, together with the name of the
+flavor to use (<obj>sys:arithmetic-error</obj>, whose meaning is being stretched a little),
+an interpretation for the arguments (<obj>series</obj>, which is explained below),
+and a documentation string.  The documentation string is not used in printing
+the error message; it is documentation for the signal name.  It becomes accessible
+via <obj>(documentation 'series-not-convergent 'signal)</obj>.
+</p>
+
+<p><obj>series-not-convergent</obj> could then be used to signal an error, or just to create a
+condition instance:
+</p>
+
+<lisp>(ferror 'series-not-convergent
+        &quot;The series ~S went to infinity.&quot; myseries)
+
+(make-condition 'series-not-convergent
+                &quot;The series ~S went to infinity.&quot; myseries)
+</lisp>
+<p>The list <obj>(series)</obj> in the <obj>defsignal</obj> is a list of implicit instance variable
+names.  They are matched against arguments to <obj>make-condition</obj> following the
+format string, and each implicit instance variable name becomes an operation
+defined on the condition instance to return the corresponding argument.  (You
+can imagine that <obj>:gettable-instance-variables</obj> is in effect for all the implicit
+instance variables.)  In this example, sending a <obj>:series</obj> message to the condition
+instance returns the value specified via <obj>myseries</obj> when the condition was
+signaled.  The implicit instance variables are actually implemented using the
+condition instance's property list.
+</p>
+
+<p>Thus, <obj>defsignal</obj> spares you the need to create a new flavor merely in
+order to remember a particular datum about the condition.
+</p>
+<definition><define key="defsignal-fun" name="defsignal" type="mac"><args>signal-name (flavor condition-names...) implicit-instance-variables documentation extra-init-keyword-forms</args>
+</define>
+
+<description>Defines <arg>signal-name</arg> to create an instance of <arg>flavor</arg> with condition names
+<arg>condition-names</arg>, and implicit instance variable whose names are taken from the list
+<arg>implicit-instance-variables</arg> and whose values are taken from the <obj>make-condition</obj> arguments
+following the format string.
+
+Instead of a list <obj>(<arg>flavor</arg></obj> <arg>condition-names<obj>...)</obj></arg> there may appear just a flavor name.
+This is equivalent to using <arg>signal-name</arg> as the sole condition name.
+
+The<arg> extra-init-keyword-forms</arg> are forms to be evaluated to produce additional
+keyword arguments to pass to <obj>make-instance</obj>.  These can be used to initialize
+other instance variables that particular flavors may have.  These expressions can
+refer to the <arg>implicit-instance-variables</arg>.
+
+<arg>documentation</arg> is a string which is recorded so that it can be accessed via
+the function <obj>documentation</obj>, as in <obj>(documentation <arg>signal-name</arg> 'signal)</obj>.
+</description></definition><definition><define key="defsignal-explicit-fun" name="defsignal-explicit" type="mac"><args>signal-name (flavor condition-names...) signal-arglist documentation init-keyword-forms...</args>
+</define>
+
+<description>Like <obj>defsignal</obj>, <obj>defsignal-explicit</obj> defines a signal name.  This signal name is
+used the same way, but the way it goes about creating the condition instance is
+different.
+
+First of all, there is no list of implicit instance variables.  Instead, <arg>signal-arglist</arg> is
+a lambda list which is matched up against all the arguments to <obj>make-condition</obj>
+except for the signal-name itself.  The variables bound by the lambda list can
+be used in the <arg>init-keyword-forms</arg>, which are evaluated to get arguments to pass
+to <obj>make-instance</obj>.  For example:
+
+<lisp>(defsignal-explicit mysignal-3 
+           (my-error-flavor mysignal-3 my-signals-category)
+           (format-string losing-object &amp;rest format-args)
+  &quot;The third kind of thing I like to signal.&quot;
+  :format-string format-string
+  :format-args (cons losing-object (copylist format-args))
+  :losing-object-name (send losing-object :name))
+</lisp>Since implicit instance variables are really just properties on the property list of
+the instance, you can create them by using init keyword <obj>:property-list</obj>.  The
+contents of the property list determines what implicit instance variables exist
+and their values.
+</description></definition><definition><define key="make-condition-fun" name="make-condition" type="fun"><args>signal-name <standard>&amp;rest</standard> arguments</args>
+</define>
+
+<description><obj>make-condition</obj> is the fundamental way that condition instances are created.
+The <arg>signal-name</arg> says how to interpret the <arg>arguments</arg> and come up with a flavor
+and values for its instance variables.  The handling of the <arg>arguments</arg> is
+entirely determined by the <arg>signal-name</arg>.
+
+If <arg>signal-name</arg> is a condition instance, <obj>make-condition</obj> returns it.
+It is not useful to call <obj>make-condition</obj> this way explicitly, but this allows
+condition instances to be passed to the convenience functions <obj>error</obj> and <obj>signal</obj>
+which call <obj>make-condition</obj>.
+
+If the <arg>signal-name</arg> was defined with <obj>defsignal</obj> or <obj>defsignal-explicit</obj>, then that
+definition specifies exactly how to interpret the <arg>arguments</arg> and create the
+instance.  In general, if the <arg>signal-name</arg> has an <obj>eh:make-condition-function</obj>
+property (which is what <obj>defsignal</obj> defines), this property is a function to which
+the <arg>signal-name</arg> and <arg>arguments</arg> are passed, and it does the work.
+
+Alternatively, the <arg>signal-name</arg> can be the name of a flavor.  Then the <arg>arguments</arg>
+are passed to <obj>make-instance</obj>, which interprets them as init keywords and values.
+This mode is not really recommended and exists for compatibility with
+Symbolics software.
+
+If the <arg>signal-name</arg> has no <obj>eh:make-condition-function</obj> property and is not a
+flavor name, then a trivial <obj>defsignal</obj> is assumed as a default.  It looks like this:
+
+<lisp>(defsignal <arg>signal-name</arg> ferror ())
+</lisp>So the value is an instance of <obj>ferror</obj>, with the <arg>signal-name</arg> as a condition name,
+and the <arg>arguments</arg> are interpreted as a format string and args for it.
+
+The <arg>signal-name</arg> <obj>nil</obj> actually has a definition of this form.  <obj>nil</obj> is frequently used
+as a signal name in the function <obj>ferror</obj> when there is no desire to use any
+condition name in particular.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Signaling a Condition Instance"><p>Once you have a condition instance, you are ready to invoke the condition
+handling mechanism by signaling it.  A condition instance can be signaled any number
+of times, in any stack groups.
+</p>
+<definition><define key="signal-condition-fun" name="signal-condition" type="fun"><args>condition-instance <standard>&amp;optional</standard> proceed-types invoke-debugger ucode-error-status inhibit-resume-handlers</args>
+</define>
+
+<description>Invoke the condition handling mechanism on <arg>condition-instance</arg>.
+The list of <arg>proceed-types</arg> says which proceed types (among those conventionally
+defined for the type of condition you have signaled) you are prepared to
+implement, should a condition handler return one (see ``proceeding'').
+These are in addition to any proceed types implemented nonlocally by
+<obj>condition-resume</obj> forms.
+
+<arg>ucode-error-status</arg> is used for internal purposes in signaling errors detected by
+the microcode.
+</description></definition>
+<p><obj>signal-condition</obj> tries various possible handlers for the
+condition.  First <obj>eh:condition-handlers</obj> is scanned for handlers
+that are applicable (according to the condition names they specify) to
+this condition instance.  After this list is exhausted,
+<obj>eh:condition-default-handlers</obj> is scanned the same way.  Each
+handler that is tried can terminate the act of signaling by throwing
+out of <obj>signal-condition</obj>, or it can specify a way to proceed from
+the signal.  The handler can also return <obj>nil</obj> to decline to handle the condition;
+then the next possible handler is offered a chance.
+</p>
+
+<p>If all handlers decline to handle the condition and
+<arg>invoke-debugger</arg> is non-<obj>nil</obj>, the debugger is the handler of
+last resort.  With the debugger, the user can ask to throw or to
+proceed.  The default value of <arg>invoke-debugger</arg> is non-<obj>nil</obj> if
+the <arg>condition-instance</arg> is an error.
+</p>
+
+<p>If all handlers decline to act and <arg>invoke-debugger</arg> is <obj>nil</obj>,
+<obj>signal-condition</obj> proceeds using the first proceed type on the list
+of available ones, provided it is a nonlocal proceed type.  If it is a
+local proceed type, or if there are no proceed types,
+<obj>signal-condition</obj> just returns <obj>nil</obj>.  (It would be slightly
+simpler to proceed using the first proceed type whether it is local or
+not.  But in the case of a local proceed type, this would just mean
+returning the proceed type instead of <obj>nil</obj>.  It is considered
+slightly more useful to return <obj>nil</obj>, allowing the signaler to
+distinguish the case of a condition not handled.  The signaler knows
+which proceed types it specified, and can if it wishes consider <obj>nil</obj> as
+equivalent to the first of them.)
+</p>
+
+<p>Otherwise, by this stage, a proceed type has been chosen from the available list.
+If the proceed type was among those specified by the caller of <obj>signal-condition</obj>,
+then proceeding consists simply of returning to that caller.  The chosen proceed
+type is the first value, and arguments (returned by the handler along with the
+proceed type) may follow it.  If the proceed type was implemented nonlocally
+with <obj>condition-resume</obj> (see <ref definition-in-file="errors" key="condition-resume-fun" title="Macro condition-resume" type="mac"></ref>), then the associated
+proceed handler function on <obj>eh:condition-resume-handlers</obj> is called.
+</p>
+
+<p>If <arg>inhibit-resume-handlers</arg> is non-<obj>nil</obj>, resume handlers are not invoked.  If a
+handler returns a nonlocal proceed type, <obj>signal-condition</obj> just returns to its caller
+as if the proceed type were local.  If the condition is not handled,
+<obj>signal-condition</obj> returns <obj>nil</obj>.
+</p>
+
+<p>The purpose of <obj>condition-bind-default</obj> is so that you can define a
+handler that is allowed to handle a signal only if none of the callers' handlers handle it.
+A more flexible technique for doing this sort of thing is to make an ordinary
+handler signal the same condition instance recursively by calling
+<obj>signal-condition</obj>, like this:
+
+<lisp>(multiple-value-list 
+  (signal-condition <arg>condition-instance</arg>
+                    eh:condition-proceed-types nil nil t))
+</lisp>This passes along the same list of proceed types specified by the original
+signaler, prevents the debugger from being called, and prevents resume handlers
+from being run.  If the first value <obj>signal-condition</obj> returns is non-<obj>nil</obj>, one of
+the outer handlers has handled the condition; your handler's simplest option is to
+return those same values so that the other handler has its way (but it could
+also examine them and return modified values).  Otherwise, you go on to handle
+the condition in your default manner.
+</p>
+<definition>
+<define key="eh:trace-conditions-var" name="eh:trace-conditions" type="var"></define>
+
+<description>This variable may be set to a list of condition names to be
+<arg>traced</arg>.  Whenever a condition possessing a traced condition name
+is signaled, an error is signaled to report the fact.  (Tracing of
+conditions is turned off while this error is signaled and handled).
+Proceeding with proceed type <obj>:no-action</obj> causes the signaling of
+the original condition to continue.
+
+If <obj>eh:trace-conditions</obj> is <obj>t</obj>, all conditions are traced.
+</description></definition></subsection></section><a name="nonlocal-proceed"></a>
+
+
+<section chapter-number="31" name="nonlocal-proceed" number="6" title="Proceeding"><index-entry index="concepts" title="proceed types"></index-entry>
+
+<p>Both condition handlers and the user (through the debugger) have the
+option of proceeding certain conditions.
+</p>
+
+<p>Each condition name can define, as a convention, certain <arg>proceed types</arg>, which are
+keywords that signify a certain conceptual way to proceed.  For example,
+condition name <obj>sys:wrong-type-argument</obj> defines the proceed type
+<obj>:argument-value</obj> which means, ``Here is a new value to use as the argument.''
+</p>
+
+<p>Each signaler may or may not implement all the proceed types which are
+meaningful in general for the condition names being signaled.  For example, it is
+futile to proceed from a <obj>sys:wrong-type-argument</obj> error with <obj>:argument-value</obj>
+unless the signaler knows how to take the associated value and store it into the
+argument, or do something else that fits the conceptual specifications of
+<obj>:argument-value</obj>.  For some signalers, it may not make sense to do this at all.
+Therefore, one of the arguments to <obj>signal-condition</obj> is a list of the proceed
+types that this particular signaler knows how to handle.
+</p>
+
+<p>In addition to the proceed types specified by the individual signaler, other
+proceed types can be provided nonlocally; they are implemented by a <arg>resume
+handler</arg> which is in effect through a dynamic scope.  See below,
+<ref chapter="31" definition-in-file="errors" key="nonlocal-proceed" section="6" title="Proceeding" type="section"></ref>.
+</p>
+
+<p>A condition handler can use the operations <obj>:proceed-types</obj> and <obj>:proceed-type-p</obj>
+on the condition instance to find out which proceed types are available.  It can
+request to proceed by returning one of the available proceed types as a value.
+This value is returned from <obj>signal-condition</obj>, and the condition's signaler can
+take action as appropriate.
+</p>
+
+<p>If the handler returns more than one value, the remaining values are
+considered <arg>arguments</arg> of the proceed type.  The meaning of the
+arguments to a proceed type, and what sort of arguments are expected,
+are part of the conventions associated with the condition name that
+gives the proceed type its meaning.  For example, the <obj>:argument-value</obj>
+proceed type for <obj>sys:wrong-type-argument</obj> errors conventionally takes
+one argument, which is the new value to use.  All the values returned by
+the handler are returned by <obj>signal-condition</obj> to the signaler.
+</p>
+
+<p>Here is an example of a condition handler that proceeds from
+<obj>sys:wrong-type-argument</obj> errors.  It makes any atom effectively equivalent to
+<obj>nil</obj> when used in <obj>car</obj> or any other function that expects a list.  The handler uses
+the <obj>:description</obj> operation, which on <obj>sys:wrong-type-argument</obj> condition
+instances returns a keyword describing the data type that was desired.
+
+<lisp>(condition-bind
+    ((sys:wrong-type-argument
+         #'(lambda (condition)
+               (if (eq (send condition :description) 'cons)
+                   (values :argument-value nil)))))
+<arg>  body</arg>...)
+</lisp><nopara></nopara>Here the argument to the <obj>:argument-value</obj> proceed type is <obj>nil</obj>.
+</p>
+<definition>
+<define key="condition-proceed-types-method" name="condition" type="method"></define>
+
+<description>Returns a list of the proceed types available for this condition instance.
+This operation should be used only within the signaling of the condition
+instance, as it refers to the special variable in which <obj>signal-condition</obj>
+stores its second argument.
+</description></definition><definition><define key="condition-proceed-type-p-method" name="condition" type="method"><args>proceed-type</args>
+</define>
+
+<description><obj>t</obj> if <arg>proceed-type</arg> is one of the proceed types available for this condition instance.
+This operation should be used only within the signaling of the condition
+instance, as it refers to the special variable in which <obj>signal-condition</obj>
+stores its second argument.
+</description></definition>
+
+
+<subsection name="NIL" title="Proceeding and the Debugger"><p>If the condition invokes the debugger, then the user has the
+opportunity to proceed.  When the
+debugger is entered, the available proceed types are assigned
+command characters starting with <obj>Super-A</obj>.  Each character becomes a
+command to proceed using the corresponding proceed type.
+</p>
+
+<p>Three additional facilities are required to make it convenient for the
+user to proceed using the debugger.  Each is provided by methods
+defined on condition flavors.  When you define a new condition flavor,
+you must provide methods to implement these facilities.
+
+<table><tbody><tr><td><standard>Documentation:</standard></td><td>It must be possible to tell the user what each proceed type is <arg>for</arg>.
+</td></tr><tr><td><standard>Prompting for arguments:</standard></td><td>The user must be asked for the arguments for the proceed type.
+Each proceed type may have different arguments to ask for.
+</td></tr><tr><td><standard>Not always the same proceed types:</standard></td><td>Usually the user can choose among the same set of proceed types that a
+handler can, but sometimes it is useful to provide the user with a
+few extra ones, or to suppress some of them for him.
+</td></tr></tbody></table></p>
+
+<p>These three facilities are provided by methods defined on condition
+flavors.  Each proceed type that is provided by signalers should be
+accompanied by suitable methods.  This means that you must normally
+define a new flavor if you wish to use a new proceed type.
+</p>
+
+<p>The <obj>:document-proceed-type</obj> operation is supposed to print
+documentation of what a proceed type is for.  For example, when sent to
+a condition instance describing an unbound variable error, if the
+proceed type specified is <obj>:new-value</obj>, the text printed is something
+like ``Proceed, reading a value to use instead.''
+</p>
+<definition><define key="condition-document-proceed-type-method" name="condition" type="method"><args>proceed-type stream</args>
+</define>
+
+<description>Prints on <arg>stream</arg> a description of the purpose of proceed type <arg>proceed-type</arg>.  This
+operation uses <obj>:case</obj> method combination (see <ref chapter="22" definition-in-file="flavor" key="method-combination" section="11" title="Method Combination" type="section"></ref>), to
+make it convenient to define the way to document an individual proceed type.
+The string printed should start with an imperative verb form, capitalized,
+and end with a period.  Example:
+
+This example is an <obj>:or</obj> method so that it can consider any proceed type.
+If it returns non-<obj>nil</obj>, the system considers that it has handled the proceed type
+and no other methods get a chance.  <obj>eh:places</obj> is an instance variable of
+the flavor <obj>sys:failed-assertion</obj>; its values are the proceed types this method
+understands.
+
+
+<lisp>(defmethod (sys:failed-assertion :or :document-proceed-type)
+           (proceed-type stream ignore)
+  (when (memq proceed-type eh:places)
+    (format stream
+            &quot;Try again, setting ~S.~
+             You type an expression for it.&quot;
+            proceed-type)
+    t))
+</lisp>
+As a last resort, if the condition instance has a <obj>:case</obj> method for
+<obj>:proceed-asking-user</obj> with <arg>proceed-type</arg> as the suboperation, and this
+method has a documentation string, it is printed.  This is in fact the
+usual way that a proceed type is documented.
+</description></definition>
+<p>The <obj>:proceed-asking-user</obj> operation is supposed to ask for suitable
+arguments to pass with the proceed type.  Sending <obj>:proceed-asking-user</obj>
+to an instance of <obj>sys:unbound-variable</obj> with argument <obj>:new-value</obj> would
+read and evaluate one expression, prompting appropriately.
+</p>
+<definition><define key="condition-proceed-asking-user-method" name="condition" type="method"><args>proceed-type continuation read-object-fn</args>
+</define>
+
+<description>The method for <obj>:proceed-asking-user</obj> embodies the knowledge of how to
+prompt for and read the additional arguments that go with <arg>proceed-type</arg>.
+
+<obj>:case</obj> method combination is used (see <ref chapter="22" definition-in-file="flavor" key="method-combination" section="11" title="Method Combination" type="section"></ref>), making it
+possible to define the handling of each proceed type individually in a separate
+function.  The documentation string of the <obj>:case</obj> method for a proceed type is
+also used as the default for <obj>:document-proceed-type</obj> on that proceed type.
+
+The argument <arg>continuation</arg> is an internal function of the debugger which actually
+proceeds from the signaled condition if the <obj>:proceed-asking-user</obj> method calls
+it.  This is the only way to cause proceeding actually to happen.  Call <arg>continuation</arg> with
+<obj>funcall</obj>, giving a proceed type and suitable arguments.  The proceed type passed
+to <arg>continuation</arg> need not be the same as the one given to <obj>:proceed-asking-user</obj>; it should
+be one of the proceed types available for handlers to use.
+
+Alternatively, the <obj>:prompt-and-read</obj> method can return without calling <arg>continuation</arg>; then
+the debugger continues to read commands.  The options which the
+<obj>fs:no-more-room</obj> condition offers in the debugger, to run Dired or expunge a
+directory, work this way.
+
+The argument <arg>read-object-fn</arg> is another internal function of the debugger whose
+purpose is to read arguments from the user or request confirmation.  If you wish
+to do those things, you must <obj>funcall</obj> <arg>read-object-function</arg> to do it.  Use the calling
+sequence documented for the function <obj>prompt-and-read</obj> (see
+<ref definition-in-file="ios" key="prompt-and-read-fun" title="Function prompt-and-read" type="fun"></ref>).  (The <arg>read-object-fn</arg> may or may not actually use
+<obj>prompt-and-read</obj>.)
+</description></definition>
+<p>Here is how <obj>sys:proceed-with-value-mixin</obj> provides for the proceed type
+<obj>:new-value</obj>.  Note the documentation string, which is automatically
+use by <obj>:document-proceed-type</obj> since no <obj>:case</obj> method for that operation
+is provided.
+
+<lisp>(defmethod (proceed-with-value-mixin 
+                 :case :proceed-asking-user :new-value)
+           (continuation read-object-function)
+  &quot;Return a value; the value of an expression you type.&quot;
+  (funcall continuation :new-value
+           (funcall read-object-function
+                    :eval-read
+                    &quot;~&amp;Form whose value to use instead: &quot;)))
+</lisp></p>
+
+<p>The <obj>:user-proceed-types</obj> operation is given the list of proceed types
+actually available and is supposed to return the list of proceed types to
+offer to the user.  By default, this operation returns its argument: all
+proceed types are available to the user through the debugger.
+</p>
+
+<p>For example, the condition name <obj>sys:unbound-variable</obj> conventionally
+defines the proceed types <obj>:new-value</obj> and <obj>:no-action</obj>.  The first
+specifies a new value; the second attempts to use the variable's current
+value and gets another error if the variable is still unbound.  These are
+clean operations for handlers to use.  But it is more convenient for the
+user to be offered only one choice, which will use the variable's new
+value if it is bound now, but otherwise ask for a new value.  This is
+implemented with a <obj>:user-proceed-types</obj> method that replaces the two
+proceed types with a single one.
+</p>
+
+<p>Or, you might wish to offer the user two different proceed types
+that differ only in how they ask the user for additional information.
+For handlers, there would be only one proceed type.
+</p>
+
+<p>Finally, there may be proceed types intended only for the debugger
+which do not actually proceed; these should be inserted into the list
+by the <obj>:user-proceed-types</obj> method.
+</p>
+<definition><define key="condition-user-proceed-types-method" name="condition" type="method"><args>proceed-types</args>
+</define>
+
+<description>Assuming that <arg>proceed-types</arg> is the list of proceed types available for
+condition handlers to return, this operation returns the list of
+proceed types that the debugger should offer to the user.
+
+Only the proceed types offered to the user need to be handled
+by <obj>:document-proceed-type</obj> and <obj>:proceed-asking-user</obj>.
+
+The flavor <obj>condition</obj> itself defines this to return its argument.
+Other condition flavors may redefine this to filter the argument
+in some appropriate fashion.
+
+<obj>:pass-on</obj> method combination is used (see <ref chapter="22" definition-in-file="flavor" key="method-combination" section="11" title="Method Combination" type="section"></ref>), so
+that if multiple mixins define methods for <obj>:user-proceed-types</obj>, each method
+gets a chance to add or remove proceed types.  The methods should not
+actually modify the argument, but should cons up a new list in which certain
+keywords are added or removed according to the other keywords that are there.
+
+Elements should be removed only if they are specifically recognized.
+This is to say, the method should make sure that any unfamiliar elements
+present in the argument are also present in the value.  Arranging to omit
+certain specific proceed types is legitimate; returning only
+the intersection with a constant list is not legitimate.
+</description></definition>
+<p>Here is an example of nontrivial use of <obj>:user-proceed-types</obj>:
+
+<lisp>(defflavor my-error () (error))
+
+(defmethod (my-error :user-proceed-types) (proceed-types)
+  (if (memq :foo proceed-types)
+      (cons :foo-two-args proceed-types)
+    proceed-types))
+
+(defmethod (my-error :case :proceed-asking-user :foo) 
+               (cont read-object-fn)
+  &quot;Proceeds, reading a value to foo with.&quot;
+  (funcall cont :foo
+           (funcall read-object-fn :eval-read
+                    &quot;Value to foo with: &quot;)))
+
+(defmethod (my-error :case :proceed-asking-user :foo-two-args)
+               (cont read-object-fn)
+  &quot;Proceeds, reading two values to foo with.&quot;
+  (funcall cont :foo
+           (funcall read-object-fn :eval-read
+                    &quot;Value to foo with: &quot;)
+           (funcall read-object-fn :eval-read
+                    &quot;Value to foo some more with: &quot;)))
+</lisp></p>
+
+<p>In this example, if the signaler provides the proceed type <obj>:foo</obj>, then it is
+described for the user as ``proceeds, reading a value to foo with''; and if
+the user specifies that proceed type, he is asked for a single value,
+which is used as the argument when proceeding.  In addition, the
+user is offered the proceed type <obj>:foo-two-args</obj>, which has its own
+documentation and which reads two values.  But for condition handlers
+there is really only one proceed type, <obj>:foo</obj>.  <obj>:foo-two-args</obj> is just an
+alternate interface for the user to proceed type <obj>:foo</obj>, and this is why the
+<obj>:user-proceed-types</obj> method offers <obj>:foo-two-args</obj> only if the signaler
+is willing to accept <obj>:foo</obj>.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="How Signalers Provide Proceed Types"><p>Each condition name defines a conceptual meaning for certain
+proceed types, but this does not mean that all of those proceed types
+may be used every time the condition is signaled.  The signaler must
+specifically implement the proceed types in order to make them do what
+they are conventionally supposed to do.  For some signalers it may be
+difficult to do, or may not even make sense.  For example, it is no use
+having a proceed type <obj>:store-new-value</obj> if the signaler does not have a
+suitable place to store, permanently, the argument the handler supplies.
+</p>
+
+<p>Therefore, we require each signaler to specify just which proceed types
+it implements.  Unless the signaler explicitly specifies proceed types
+one way or another, no proceed types are allowed (except for nonlocal ones,
+described in the following section).
+</p>
+
+<p>One way to specify the proceed types allowed is to call <obj>signal-condition</obj> and
+pass the list of proceed types as the second argument.
+</p>
+
+<p>Another way that is less general but more convenient is
+<obj>signal-proceed-case</obj>.
+</p>
+<definition><define key="signal-proceed-case-fun" name="signal-proceed-case" type="mac"><args>((variables...) make-condition-arguments...) clauses...</args>
+</define>
+
+<description>Signals a condition, providing proceed types and code to implement them.  Each
+clause specifies a proceed type to provide, and also contains code to be run if a
+handler should proceed with that proceed type.
+
+<lisp>(signal-proceed-case ((<arg>argument</arg>-<arg>vars...</arg>)
+                     <arg>signal-name</arg> <arg>signal-name-arguments</arg>...)
+  (<arg>proceed-type</arg> <arg>forms</arg>...)
+  (<arg>proceed-type</arg> <arg>forms</arg>...)
+  ...)
+</lisp>
+A condition-object is created with <obj>make-condition</obj> using the
+<arg>signal-name</arg> and <arg>signal-name-arguments</arg>; then it is signaled giving a list
+of the proceed types from all the clauses as the list of proceed types
+allowed.
+
+The variables <arg>argument-vars</arg> are bound to the values
+returned by <obj>signal-condition</obj>, except for the first value, which is tested
+against the <arg>proceed-type</arg> from each clause, using a <obj>selectq</obj>.  The clause that
+matches is executed.
+</description></definition>
+<lisp><exdent amount="96"><caption>Example: </caption>(defsignal my-wrong-type-arg 
+           (eh:wrong-type-argument-error sys:wrong-type-argument)
+  (old-value arg-name description)
+  &quot;Wrong type argument from my own code.&quot;)
+
+(signal-proceed-case
+         ((newarg)
+          'my-wrong-type-arg
+          &quot;The argument ~A was ~S, which is not a cons.&quot;
+          'foo foo 'cons)
+  (:argument-value (car newarg)))
+</exdent></lisp><nopara></nopara>
+<p>The signal name <obj>my-wrong-type-arg</obj> creates errors with condition name
+<obj>sys:wrong-type-argument</obj>.  The <obj>signal-proceed-case</obj> shown signals such an
+error, and handles the proceed type <obj>:argument-value</obj>.  If a handler proceeds
+using that proceed type, the handler's value is put in <obj>newarg</obj>, and then its car is
+returned from the <obj>signal-proceed-case</obj>.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Nonlocal Proceed Types"><index-entry index="concepts" title="resume handlers"></index-entry>
+
+<index-entry index="concepts" title="nonlocal proceed types"></index-entry>
+
+<p>When the caller of <obj>signal-condition</obj> specifies proceed types, these are called
+<arg>local proceed types</arg>.  They are implemented at the point of signaling.  There are
+also <arg>nonlocal proceed types</arg>, which are in effect for all conditions (with appropriate
+condition names) signaled during the execution of the body of the establishing
+macro.  We say that the macro establishes a <arg>resume handler</arg> for the proceed type.
+</p>
+
+<p>The most general construct for establishing a resume handler is <obj>condition-resume</obj>.
+For example, in
+
+<lisp>(condition-resume
+    '(fs:file-error :retry-open t
+                    (&quot;Proceeds, opening the file again.&quot;)
+                    (lambda (ignore) (throw 'tag nil)))
+  (do-forever
+    (catch 'tag (return (open pathname)))))
+</lisp>the proceed type <obj>:retry-open</obj> is available for all <obj>fs:file-error</obj> conditions signaled
+within the call to <obj>open</obj>.
+</p>
+<definition><define key="condition-resume-fun" name="condition-resume" type="mac"><args>handler-form <standard>&amp;body</standard> body</args>
+</define><define key="condition-resume-if-fun" name="condition-resume-if" type="mac"><args>cond-form handler-form <standard>&amp;body</standard> body</args>
+</define>
+
+<description>Both execute <arg>body</arg> with a resume handler in effect for a nonlocal proceed type according to
+the value of <arg>handler-form</arg>.  For <obj>condition-resume-if</obj>, the resume handler is in
+effect only if <arg>cond-form</arg>'s value is non-<obj>nil</obj>.
+
+
+<lisp><exdent amount="96"><caption>The value of the <arg>handler-form</arg> should be a list with at least five elements: </caption>(<arg>condition-names</arg> <arg>proceed-type</arg> <arg>predicate</arg> <arg>format-string-and-args</arg> 
+ <arg>handler-function</arg> <arg>additional-args</arg>...)
+</exdent></lisp>
+<arg>condition-names</arg> is a condition name or a list of them.  The resume handler
+applies to these conditions only.
+
+<arg>proceed-type</arg> is the proceed type implemented by this resume handler.
+
+<arg>predicate</arg> is either <obj>t</obj> or a function that is applied to a condition instance and
+determines whether the resume handler is in effect for that condition instance.
+
+<arg>format-string-and-args</arg> is a list of a string and additional arguments that can be
+passed to <obj>format</obj> to print a description of what this proceed type is for.
+These are needed only for anonymous proceed types.
+
+<arg>handler-function</arg> is the function called to do the work of proceeding, once this
+proceed type has been returned by a condition handler or the debugger.
+</description></definition>
+<p><obj>catch-error-restart-explicit-if</obj> makes it easy to establish a particular
+simple kind of resume handler.
+</p>
+<definition><define key="catch-error-restart-explicit-if-fun" name="catch-error-restart-explicit-if" type="mac"><args>cond-form (condition-names proceed-type format-string format-args...) body...</args>
+</define>
+
+<description>Executes <arg>body</arg> with (if <arg>cond-form</arg> produces a non-<obj>nil</obj> value) a resume handler for
+proceed type <arg>proceed-type</arg> and condition(s) <arg>condition-names</arg>.  <arg>condition-names</arg>
+should be a symbol or a list of symbols; it is not evaluated.  <arg>proceed-type</arg> should be
+a symbol.
+
+If proceeding is done using this resume handler, control returns from the
+<obj>catch-error-restart-explicit-if</obj> form.  The first value is <obj>nil</obj> and the second is
+non-<obj>nil</obj>.
+
+<arg>format-string</arg> and the <arg>format-args</arg>, all of which are evaluated, are used by the
+<obj>:document-proceed-type</obj> operation to describe the proceed type, if it is
+anonymous.
+</description></definition>
+<p>For condition handlers there is no distinction between local and nonlocal
+proceed types.  They are both included in the list of available proceed types
+returned by the <obj>:proceed-types</obj> operation (all the local proceed types come
+first), and the condition handler selects one by returning the proceed type and
+any conventionally associated arguments.  The debugger's <obj>:user-proceed-types</obj>,
+<obj>:document-proceed-type</obj> and <obj>:proceed-asking-user</obj> operations are also make
+no distinction.
+</p>
+
+<p>The difference comes after the handler or the debugger returns
+to <obj>signal-condition</obj>.  If the proceed type is a local one (one of those in the
+second argument to <obj>signal-condition</obj>), <obj>signal-condition</obj> simply returns.
+If the proceed type is not among those the caller handles, <obj>signal-condition</obj> looks for
+a resume handler
+associated with the proceed type, and calls its handler function.  The arguments to the handler
+function are the condition instance, the <arg>additional-args</arg> specified in the resume
+handler, and any arguments returned by the condition handler in addition to
+the proceed type.  The handler function is supposed to do a throw.  If it returns
+to <obj>signal-condition</obj>, an error is signaled.
+</p>
+
+<p>You are allowed to use ``anonymous'' nonlocal proceed types, which have no
+conventional meaning and are not specially known to the
+<obj>:document-proceed-type</obj> and <obj>:proceed-asking-user</obj> operations.  The anonymous
+proceed type may be any Lisp object.  The default definition of
+<obj>:proceed-asking-user</obj> handles an anonymous proceed type by simply calling the
+continuation passed to it, reading no arguments.  The default definition of
+<obj>:document-proceed-type</obj> handles anonymous proceed types by passing <obj>format</obj>
+the <arg>format-string-and-args</arg> list found in the resume handler (this is what that list
+is for).
+</p>
+
+<p>Anonymous proceed types are often lists.  Such proceed types are usually made by some variant
+of <obj>error-restart</obj>, and they are treated a little bit specially.  For one
+thing, they are all put at the end of the list returned by the <obj>:proceed-types</obj>
+operation.  For another, the debugger command <obj>Control-C</obj> or <obj>Resume</obj> never uses
+a proceed type which is a list.  If no atomic proceed type is available, <obj>Resume</obj> or
+<obj>Control-C</obj> is not allowed.
+</p>
+<definition><define key="error-restart-fun" name="error-restart" type="mac"><args>(condition-names format-string format-args...) body...</args>
+</define>
+<define key="error-restart-loop-fun" name="error-restart-loop" type="mac"></define>
+<define key="catch-error-restart-fun" name="catch-error-restart" type="mac"></define><define key="catch-error-restart-if-fun" name="catch-error-restart-if" type="mac"><args>cond-form (condition-names format-string format-args...) body...</args>
+</define>
+
+<description>All execute body with an anonymous resume handler for <arg>condition-names</arg>.
+The proceed type for this resume handler is a list, so the <obj>Resume</obj> key will not use it.
+<arg>condition-names</arg> is either a single condition name or a list of them, or <obj>nil</obj>
+meaning all conditions; it is not evaluated.
+
+<arg>format-string</arg> and the <arg>format-args</arg>, all of which are evaluated, are used by the
+<obj>:document-proceed-type</obj> operation to describe the anonymous proceed type.
+
+If the resume handler made by <obj>error-restart</obj> is invoked by proceeding from a
+signal, the automatically generated resume handler function does a throw back to
+the <obj>error-restart</obj> and the body is executed again from the beginning.  If body
+returns, the values of the last form in it are returned from the <obj>error-restart</obj>
+form.
+
+<obj>error-restart-loop</obj> is like <obj>error-restart</obj> except that it loops to the beginning of
+body even if body completes normally.  It is like enclosing an <obj>error-restart</obj> in an
+iteration.
+
+<obj>catch-error-restart</obj> is like <obj>error-restart</obj> except that it never loops back to the
+beginning.  If the anonymous proceed type is used for proceeding, the
+<obj>catch-error-restart</obj> form returns with <obj>nil</obj> as the first value and a non-<obj>nil</obj> second
+value.
+
+<obj>catch-error-restart-if</obj> is like <obj>catch-error-restart</obj> except that the resume
+handler is only in effect if the value of the <arg>cond-form</arg> is non-<obj>nil</obj>.
+
+All of these variants of <obj>error-restart</obj> can be written in terms of
+<obj>condition-resume-if</obj>.
+</description></definition>
+<p>These forms are typically used by any sort of command loop, so that aborting
+within the command loop returns to it and reads another command.
+<obj>error-restart-loop</obj> is often right for simple command loops.  <obj>catch-error-restart</obj>
+is useful when aborting should terminate execution rather than retry, or with an
+explicit conditional to test whether a throw was done.
+</p>
+
+<p><obj>error-restart</obj> forms often specify <obj>(error sys:abort)</obj> as the <arg>condition-names</arg>.
+The presence of <obj>error</obj> causes them to be listed (and assigned command
+characters) by the debugger, for all errors, and the presence of <obj>sys:abort</obj> causes
+the <obj>Abort</obj> key to use them.  If you would like a procede type to be offered as an option
+by the debugger, but do not want the <obj>Abort</obj> key to use it, specify just <obj>error</obj>.
+</p>
+<definition><define key="eh:invoke-resume-handler-fun" name="eh:invoke-resume-handler" type="fun"><args>condition-instance proceed-type <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Invokes the innermost applicable resume handler for <arg>proceed-type</arg>.
+Applicability of a resume handler is determined by matching its condition names
+against those possessed by <arg>condition-instance</arg> and by applying its predicate, if not
+<obj>t</obj>, to <arg>condition-instance</arg>.
+
+If <arg>proceed-type</arg> is <obj>nil</obj>, the innermost applicable resume handler is invoked
+regardless of its proceed type.  However, in this case, the scan stops if <obj>t</obj> is
+encountered as an element of <obj>eh:condition-resume-handlers</obj>.
+</description></definition><definition>
+<define key="eh:condition-resume-handlers-var" name="eh:condition-resume-handlers" type="var"></define>
+
+<description>The current list of resume handlers for nonlocal proceed types.
+<obj>condition-resume</obj> works by binding this variable.  Elements are usually lists
+that have the format described above under <obj>condition-resume</obj>.  The symbol <obj>t</obj>
+is also meaningful as an element of this list.  It terminates the scan for a resume
+handler when it is made by <obj>signal-condition</obj> for a condition that was not
+handled.  <obj>t</obj> is pushed onto the list by break loops and the debugger to shield the
+evaluation of your type-in from automatic invocation of resume handlers
+established outside the break loop or the error.
+
+The links of this list, and its elements, are often created using <obj>with-stack-list</obj>.
+so be careful if you try to save the value outside the context in which you
+examine it.
+</description></definition><definition><define key="sys:abort-condition" name="sys:abort" type="condition"><args>(<obj>condition</obj>)</args>
+</define>
+
+<description>This condition is signaled by the <obj>Abort</obj> key; it is how that key is implemented.
+Most command loops use some version of <obj>error-restart</obj> to set up a resume
+handler for <obj>sys:abort</obj> so that it will return to the innermost command loop if (as
+is usually the case) no handler handles it.  These resume handlers usually apply
+to <obj>error</obj> as well as <obj>sys:abort</obj>, so that the debugger will offer a specific command
+to return to the command loop even if it is not the innermost one.
+</description></definition><include file="debug"></include><include file="db-aid"></include></subsection></section></chapter>
+</document-part>

@@ -1,0 +1,1849 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="macros-chapter"></a>
+<chapter name="macros-chapter" number="19" title="Macros"><index-entry index="concepts" title="macros"></index-entry>
+<a name="Introduction to Macros"></a>
+
+
+<section chapter-number="19" name="Introduction to Macros" number="1" title="Introduction to Macros"><p>If <obj>eval</obj> is handed a list whose car is a symbol, then <obj>eval</obj>
+inspects the definition of the symbol to find out what to do.  If the
+definition is a cons, and the car of the cons is the symbol
+<obj>macro</obj>, then the definition (i.e. that cons) is called a <arg>macro</arg>.
+The cdr of the cons should be a function of two arguments.
+<obj>eval</obj> applies the function to the form it was originally given,
+takes whatever is returned, and evaluates that in lieu of the
+original form.
+</p>
+
+<p indent="1">        Here is a simple example.  Suppose the definition of the symbol <obj>first</obj> is
+
+<lisp>(macro lambda (x ignore) 
+         (list 'car (cadr x)))
+</lisp>This thing is a macro: it is a cons whose car is the symbol
+<obj>macro</obj>.  What happens if we try to evaluate a form <obj>(first '(a b
+c))</obj>?  Well, <obj>eval</obj> sees that it has a list whose car is a symbol
+(namely, <obj>first</obj>), so it looks at the definition of the symbol and
+sees that it is a cons whose car is <obj>macro</obj>; the definition is
+a macro.
+</p>
+
+<p><obj>eval</obj> takes the cdr of the cons, which is supposed to be the macro's
+<arg>expander function</arg>, and calls it providing as arguments the original
+form that <obj>eval</obj> was handed, and an environment data structure that
+this macro does not use.  So it calls <obj>(lambda (x ignore) (list 'car
+(cadr x)))</obj> and the first argument is <obj>(first '(a b c))</obj>.  Whatever
+this returns is the <arg>expansion</arg> of the macro call.  It will be
+evaluated in place of the original form.
+</p>
+
+<p>In this case, <obj>x</obj> is bound to <obj>(first '(a b c))</obj>, <obj>(cadr x)</obj>
+evaluates to <obj>'(a b c)</obj>, and <obj>(list 'car (cadr x))</obj> evaluates to
+<obj>(car '(a b c))</obj>, which is the expansion.  <obj>eval</obj> now evaluates the
+expansion.  <obj>(car '(a b c))</obj> returns <obj>a</obj>, and so the result is that
+<obj>(first '(a b c))</obj> returns <obj>a</obj>.
+</p>
+
+<p indent="1">        What have we done?  We have defined a macro called <obj>first</obj>.  What
+the macro does is to <arg>translate</arg> the form to some other form.  Our
+translation is very simple--it just translates forms that look like
+<obj>(first <arg>x</arg>)</obj> into <obj>(car <arg>x</arg>)</obj>, for any form <arg>x</arg>.
+We can do much more
+interesting things with macros, but first we show how
+to define a macro.
+</p>
+<definition>
+<define key="macro-fun" name="macro" type="spec"></define>
+
+<description>The primitive special form for defining macros is <obj>macro</obj>.
+A macro definition looks like this:
+
+<lisp>(macro <arg>name</arg> (<arg>form-arg</arg> <arg>env-arg</arg>)
+    <arg>body</arg>)
+</lisp><arg>name</arg> can be any function spec.  <arg>form-arg</arg> and <arg>env-arg</arg> must be
+variables.  <arg>body</arg> is a sequence of Lisp forms that expand the macro;
+the last form should return the expansion.
+</description></definition>
+<p>To define our <obj>first</obj> macro, we would say
+
+<lisp>(macro first (x ignore)
+    (list 'car (cadr x)))
+</lisp>Only sophisticated macros need to use value passed for the <arg>env-arg</arg>;
+this one does not need it, so the argument variable <obj>ignore</obj> is used for it.
+See <ref definition-in-file="macros" key="&amp;environment" type="page"></ref> for information on it.
+</p>
+
+<p>Here are some more simple examples of macros.  Suppose we want
+any form that looks like <obj>(addone <arg>x</arg>)</obj> to be translated into
+<obj>(plus 1 <arg>x</arg>)</obj>.  To define a macro to do this we would say
+
+<lisp>(macro addone (x ignore)
+   (list 'plus '1 (cadr x)))
+</lisp></p>
+
+<p indent="1">        Now say we wanted a macro which would translate <obj>(increment <arg>x</arg>)</obj>
+into <obj>(setq <arg>x</arg> (1+ <arg>x</arg>)</obj>.  This would be:
+
+<lisp>(macro increment (x ignore)
+    (list 'setq (cadr x) (list '1+ (cadr x))))
+</lisp>Of course, this macro is of limited usefulness.  The reason is that the
+form in the cadr of the <obj>increment</obj> form had better be a symbol.
+If you tried <obj>(increment (car x))</obj>, it would be translated into
+<obj>(setq (car x) (1+ (car x)))</obj>, and <obj>setq</obj> would complain.
+(If you're interested in how to fix this problem, see <obj>setf</obj> (<ref definition-in-file="fd-eva" key="setf-fun" title="Macro setf" type="mac"></ref>);
+but this is irrelevant to how macros work.)
+</p>
+
+<p indent="1">        You can see from this discussion that macros are very different
+from functions.  A function would not be able to tell what kind of
+subforms are present in a call to it; they get evaluated before the
+function ever sees them.  However, a macro gets to look at the whole
+form and see just what is going on there.  Macros are <arg>not</arg> functions;
+if <obj>first</obj> is defined as a macro, it is not meaningful to apply
+<obj>first</obj> to arguments.  A macro does not take arguments at all; its
+expander function takes a <arg>Lisp form</arg> and turns it into another <arg>Lisp
+form</arg>.
+</p>
+
+<p indent="1">        The purpose of functions is to <arg>compute</arg>; the purpose of
+macros is to <arg>translate</arg>.  Macros are used for a variety of purposes, the
+most common being extensions to the Lisp language.  For example, Lisp
+is powerful enough to express many different control structures, but it
+does not provide every control structure anyone might ever possibly
+want.  Instead, if a user wants some kind of control structure with a
+syntax that is not provided, he can  translate it into some form that
+Lisp <arg>does</arg> know about.
+</p>
+
+<p indent="1">        For example, someone might want a limited iteration construct
+which increments a variable by one until it exceeds a limit (like the
+FOR statement of the BASIC language).  He might want it to look like
+
+<lisp>(for a 1 100 (print a) (print (* a a)))
+</lisp>To get this, he could write a macro to translate it into
+
+<lisp>(do ((a 1 (1+ a))) ((&gt; a 100)) (print a) (print (* a a)))
+</lisp>A macro to do this could be defined with
+
+<lisp>(macro for (x ignore)
+  (list* 'do
+         (list (list (second x) (third x)
+                     (list '1+ (second x))))
+         (list (list '&gt; (second x) (fourth x)))
+         (cddddr x)))
+</lisp><obj>for</obj> can now be used as if it were a built-in Lisp control construct.
+</p>
+</section><a name="backquote"></a>
+
+
+<section chapter-number="19" name="backquote" number="2" title="Aids for Defining Macros"><p indent="1">        The main problem with the definition for the <obj>for</obj> macro is
+that it is verbose and clumsy.  If it is that hard to write a macro
+to do a simple specialized iteration construct, one would wonder how
+anyone could write macros of any real sophistication.
+</p>
+
+<p indent="1">        There are two things that make the definition so inelegant.
+One is that the programmer must write things like <obj>(second x)</obj>
+and <obj>(cddddr x)</obj> to refer to the parts of the form he wants
+to do things with.  The other problem is that the long chains of calls
+to the <obj>list</obj> and <obj>cons</obj> functions are very hard to read.
+</p>
+
+<p indent="1">        Two features are provided to solve these two problems.
+The <obj>defmacro</obj> macro solves the former, and the ``backquote'' (<obj> ` </obj>)
+reader macro solves the latter.
+</p>
+
+
+
+<subsection name="NIL" title="Defmacro"><index-entry index="concepts" title="macro-defining macros"></index-entry>
+
+<index-entry index="concepts" title="defmacro"></index-entry>
+
+<p indent="1">        Instead of referring to the parts of our form by <obj>(second x)</obj>
+and such, we would like to give names to the various pieces of the form,
+and somehow have the <obj>(second x)</obj> automatically generated.  This is done
+by a macro called <obj>defmacro</obj>.  It is easiest to explain what <obj>defmacro</obj> does
+by showing an example.  Here is how you would write the <obj>for</obj> macro
+using <obj>defmacro</obj>:
+</p>
+
+<lisp>(defmacro for (var lower upper . body)
+  (list* 'do
+         (list (list var lower (list '1+ var)))
+         (list (list '&gt; var upper))
+         body))
+</lisp>
+<p indent="1">        The <obj>(var lower upper . body)</obj> is a <arg>pattern</arg> to match against
+the body of the form (to be more precise, to match against the cdr
+of the argument to the macro's expander function).  If <obj>defmacro</obj> tries to match the two
+lists
+
+<lisp>(var lower upper . body)
+<exdent amount="96"><caption><standard>and</standard> </caption>(a 1 100 (print a) (print (* a a)))
+</exdent></lisp><obj>var</obj> is bound to the symbol <obj>a</obj>, <obj>lower</obj> to the fixnum <obj>1</obj>,
+<obj>upper</obj> to the fixnum <obj>100</obj>, and <obj>body</obj> to the list
+<obj>((print a) (print (* a a)))</obj>.
+<obj>var, lower, upper,</obj> and <obj>body</obj> are then used by the body
+of the macro definition.
+</p>
+<definition>
+<define key="defmacro-fun" name="defmacro" type="mac"></define>
+
+<description><obj>defmacro</obj> is a general purpose macro-defining macro.  A <obj>defmacro</obj>
+form looks like 
+
+<lisp>(defmacro <arg>name</arg> <arg>pattern</arg> . <arg>body</arg>)
+</lisp><arg>name</arg> is the name of the macro
+to be defined; it can be any function spec (see <ref chapter="12" definition-in-file="fd-fun" key="function-spec" section="2" title="Function Specs" type="section"></ref>).
+Normally it is not useful to define anything but a symbol,
+since that is the only place that the evaluator looks for macro
+definitions.  However, sometimes it is useful to define a <obj>:property</obj>
+function spec as a macro, when some part of the system (such as <obj>locf</obj>)
+will look for an expander function on a property.
+
+The <arg>pattern</arg> may be anything made up out of symbols and conses.
+When the macro is called, <arg>pattern</arg>
+is matched against the body of the macro form; both <arg>pattern</arg>
+and the form are car'ed and cdr'ed identically, and whenever
+a non-<obj>nil</obj> symbol is hit in <arg>pattern</arg>, the symbol is bound to the corresponding
+part of the form.  All of the symbols in <arg>pattern</arg> can be used
+as variables within <arg>body</arg>.
+<arg>body</arg> is evaluated with these bindings in effect,
+and its result is returned to the evaluator as the expansion of the macro.
+</description></definition>
+<p indent="1">        Note that the pattern need not be a list the way a lambda-list must.
+In the above example, the pattern was a dotted list, since the symbol
+<obj>body</obj> was supposed to match the cddddr of the macro form.
+If we wanted a new iteration form, like <obj>for</obj> except that
+our example would look like
+
+<lisp>(for a (1 100) (print a) (print (* a a)))
+</lisp>(just because we thought that was a nicer syntax), then we could
+do it merely by modifying the pattern of the <obj>defmacro</obj> above;
+the new pattern would be <obj>(var (lower upper) . body)</obj>.
+</p>
+
+<p indent="1">        Here is how we would write our other examples using <obj>defmacro</obj>:
+</p>
+
+<lisp>(defmacro first (the-list)
+    (list 'car the-list))
+
+(defmacro addone (form)
+   (list 'plus '1 form))
+
+(defmacro increment (symbol)
+   (list 'setq symbol (list '1+ symbol)))
+</lisp>
+<p>All of these were very simple macros and have very simple patterns,
+but these examples show that we can replace the <obj>(cadr x)</obj> with a
+readable mnemonic name such as <obj>the-list</obj> or <obj>symbol</obj>, which
+makes the program clearer, and enables documentation facilities such
+as the <obj>arglist</obj> function to describe the syntax of the special form
+defined by the macro.
+</p>
+
+<p>The pattern in a <obj>defmacro</obj> is more like the lambda list
+of a normal function than revealed above.  It is allowed to
+contain certain <obj>&amp;</obj>-keywords.  Subpatterns of the lambda list pattern
+can also use <obj>&amp;</obj>-keywords, a usage not allowed in functions.
+</p>
+
+<p><obj>&amp;optional</obj> is followed by <arg>variable</arg>, <obj>(<arg>variable</arg>)</obj>,
+<obj>(<arg>variable</arg> <arg>default</arg>)</obj>, or <obj>(<arg>variable</arg> <arg>default</arg>
+<arg>present-p</arg>)</obj>, exactly the same as in a function.  Note that
+<arg>default</arg> is still a form to be evaluated, even though <arg>variable</arg>
+is not being bound to the value of a form.  <arg>variable</arg> does not have
+to be a symbol; it can be a pattern.  In this case the first form is
+disallowed because it is syntactically ambigous.  The pattern must at least be
+enclosed in a singleton list.  If <arg>variable</arg> is a pattern, <arg>default</arg>
+can be evaluated more than once.  Example:
+
+<lisp>(defmacro foo (&amp;optional ((x &amp;optional y) '(a)))
+  ...)
+</lisp>Here the first argument of <obj>foo</obj> is optional, and should
+be a list of one or two elements which become <obj>x</obj> and <obj>y</obj>.
+If <obj>foo</obj> is given no arguments, the list <obj>(a)</obj> is decomposed
+to get <obj>x</obj> and <obj>y</obj>, so that <obj>x</obj>'s value is <obj>a</obj> and
+<obj>y</obj>'s value is <obj>nil</obj>.
+</p>
+
+<p>Using <obj>&amp;rest</obj> is the same as using a dotted list as the pattern,
+except that it may be easier to read and leaves a place to put <obj>&amp;aux</obj>.
+</p>
+
+<p>When <obj>&amp;key</obj> is used in a defmacro pattern, the keywords are decoded
+at macro expansion time.  Therefore, they must be constants.  Example:
+</p>
+
+<lisp>(defmacro l1 (&amp;key a b c) 
+  (list 'list a b c))
+
+(l1 :b 5 :c (car d))
+  ==&gt; (list nil 5 (car d))
+</lisp>
+<p><obj>&amp;aux</obj> is the same in a macro as in a function, and has nothing to do
+with pattern matching.
+</p>
+
+<p><obj>defmacro</obj> implements a few additional keywords not allowed in functions.
+</p>
+
+<p><obj>&amp;body</obj> is identical to <obj>&amp;rest</obj> except that it informs the editor and the grinder
+that the remaining subforms constitute a ``body'' rather than ordinary arguments
+and should be indented accordingly.  Example:
+
+<lisp>(defmacro with-open-file 
+          ((streamvar filename &amp;rest options)
+           &amp;body body)
+  ...)
+</lisp></p>
+
+<p><obj>&amp;whole</obj> causes the variable that follows it to be bound to the entire
+macro call, just as the <arg>form-arg</arg> variable in <obj>macro</obj> would be.
+<obj>&amp;whole</obj> exists to make <obj>defmacro</obj> able to do anything that <obj>macro</obj>
+can be used for, for the sake of Common Lisp, in which <obj>defmacro</obj>
+is the primitive and <obj>macro</obj> does not exist.  <obj>&amp;whole</obj> is
+also useful in <obj>macrolet</obj>.
+</p>
+
+<p><obj>&amp;environment</obj> causes the variable that follows it to be bound to
+the <arg>local macros environment</arg> of the macro call being expanded.
+This is useful if the code for expanding this macro needs to
+invoke <obj>macroexpand</obj> on subforms of the macro call.  Then, to
+achieve correct interaction with <obj>macrolet</obj>, this local macros
+environment should be passed to <obj>macroexpand</obj> as its second argument.
+</p>
+
+<p><obj>&amp;list-of</obj> <arg>pattern</arg> requires that the corresponding position of the
+form being translated must contain a list (or <obj>nil</obj>).  It
+matches <arg>pattern</arg> against each element of that list.  Each variable
+in <arg>pattern</arg> is bound to a list of the corresponding values in each element
+of the list matched by the <obj>&amp;list-of</obj>.  This may be clarified by an
+example.  Suppose we want to be able to say things like:
+</p>
+
+<lisp>(send-commands (aref turtle-table i)
+  (forward 100)
+  (beep)
+  (left 90)
+  (pen 'down 'red)
+  (forward 50)
+  (pen 'up))
+</lisp><need amount="2000"></need>
+<p>We could define a <obj>send-commands</obj> macro as follows:
+</p>
+
+<lisp>(defmacro send-commands (object
+                &amp;body &amp;list-of (command . arguments))
+  `(let ((o ,object))
+     . ,(mapcar #'(lambda (com args) `(send o ',com . ,args))
+                command arguments)))
+</lisp><nopara></nopara>
+<p>Note that this example uses <obj>&amp;body</obj> together with <obj>&amp;list-of</obj>, so you
+don't see the list itself; the list is just the rest of the macro-form.
+</p>
+
+<p>You can combine <obj>&amp;optional</obj> and <obj>&amp;list-of</obj>.  Consider the following example:
+</p>
+
+<lisp>(defmacro print-let (x &amp;optional &amp;list-of
+                     ((vars vals)
+                      '((*print-base* 10.)
+                        (*print-radix* nil))))
+  `((lambda (,@vars) (print ,x))
+    ,@vals))
+
+(print-let foo)  ==&gt;
+((lambda (*print-base* *print-radix*)
+   (print foo))
+ 10 nil)
+
+(print-let foo ((bar 3)))  ==&gt;
+((lambda (bar)
+   (print foo))
+ 3)
+</lisp><nopara></nopara>
+<p>In this example we aren't using <obj>&amp;body</obj> or anything like it, so you do see
+the list itself; that is why you see parentheses around the <obj>(bar 3)</obj>.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Backquote"><index-entry index="concepts" title="backquote"></index-entry>
+
+<p indent="1">        Now we deal with the other problem: the long strings of calls to
+<obj>cons</obj> and <obj>list</obj>.  This problem is relieved by introducing some new
+characters that are special to the Lisp reader.  Just as the
+single-quote character makes it easier to type things of the form
+<obj>(quote <arg>x</arg>)</obj>, so backquote and comma make it easier to type forms
+that create new list structure.  They allow you to create a list from a
+template including constant and variable parts.
+</p>
+
+<p indent="1">        The backquote facility is used by giving a backquote character
+(<obj> ` </obj>), followed by a list or vector.  If the comma character does not
+appear within the text for the list or vector, the backquote acts just
+like a single quote: it creates a form which, when evaluated, produces
+the list or vector specified.  For example,
+
+<lisp> '(a b c) =&gt; (a b c)
+ `(a b c) =&gt; (a b c)
+ `#(a b) =&gt; #(a b)
+</lisp>So in the simple cases, backquote is just like the regular single-quote
+macro.  The way to get it to do interesting things is to include a
+comma somewhere inside of the form following the backquote.
+The comma is followed by a form, and that form gets evaluated even
+though it is inside the backquote.  For example,
+
+<lisp>(setq b 1)
+`(a b c)  =&gt; (a b c)
+`(a ,b c) =&gt; (a 1 c)
+`(abc ,(+ b 4) ,(- b 1) (def ,b)) =&gt; (abc 5 0 (def 1))
+`#(a ,b) =&gt; #(a 1)
+</lisp>In other words, backquote quotes everything <arg>except</arg> expressions preceded by
+a comma; those get evaluated.
+</p>
+
+<p indent="1">        The list or vector following a backquote can be thought of as a template for
+some new data structure.  The parts of it that are preceded by
+commas are forms that fill in slots in the template; everything else is
+just constant structure that appears as written in the result.  This is usually
+what you want in the body of a macro.  Some of the form generated by the macro
+is constant, the same thing on every invocation of the macro.  Other parts
+are different every time the macro is called, often being functions of
+the form that the macro appeared in (the <arg>arguments</arg> of the macro).  The
+latter parts are the ones for which you would use the comma.  Several examples
+of this sort of use follow.
+</p>
+
+<p indent="1">        When the reader sees the <obj>`(a ,b c)</obj> it is actually generating
+a form such as <obj>(list 'a b 'c)</obj>.  The actual form generated may use
+<obj>list</obj>, <obj>cons</obj>, <obj>append</obj>, or whatever might be a good idea; you
+should never have to concern yourself with what it actually turns into.
+All you need to care about is what it evaluates to.  Actually, it
+doesn't use the regular functions <obj>cons</obj>, <obj>list</obj>, and so forth, but
+uses special ones instead so that the grinder can recognize a form which
+was created with the backquote syntax, and print it using backquote so
+that it looks like what you typed in.  You should never write any
+program that depends on this, anyway, because backquote makes no
+guarantees about how it does what it does.  In particular, in some
+circumstances it may decide to create constant forms, which will cause
+sharing of list structure at run time, or it may decide to create forms
+that will create new list structure at run time.
+For example, if the reader sees <obj>`(r . ,nil)</obj>,
+it may produce the same thing as <obj>(cons 'r nil)</obj>, or <obj>'(r . nil)</obj>.
+Be careful that your program does not depend on which of these it does.
+</p>
+
+<p indent="1">        This is generally found to be pretty confusing by most people; the best way
+to explain further seems to be with examples.  Here is how we would write our
+three simple macros using both the <obj>defmacro</obj> and backquote facilities.
+</p>
+
+<lisp>(defmacro first (the-list)
+    `(car ,the-list))
+
+(defmacro addone (form)
+   `(plus 1 ,form))
+
+(defmacro increment (symbol)
+   `(setq ,symbol (1+ ,symbol)))
+</lisp>
+<p>To demonstrate finally how easy it is to define macros with these two facilities,
+here is the final form of the <obj>for</obj> macro.
+
+<lisp>(defmacro for (var lower upper . body)
+  `(do ((,var ,lower (1+ ,var))) ((&gt; ,var ,upper)) . ,body))
+</lisp>Look at how much simpler that is than the original definition.  Also,
+look how closely it resembles the code it is producing.  The functionality
+of the <obj>for</obj> really stands right out when written this way.
+</p>
+
+<p indent="1">        If a comma inside a backquote form is followed by an at-sign
+character (`<obj>@</obj>'), it has a special meaning.  The `<obj>,@</obj>' should
+be followed by a form whose value is a list; then each of the elements
+of the list is put into the list being created by the backquote.  In other
+words, instead of generating a call to the <obj>cons</obj> function, backquote
+generates a call to <obj>append</obj>.  For example, if <obj>a</obj> is bound to
+<obj>(x y z)</obj>, then <obj>`(1 ,a 2)</obj> would evaluate to <obj>(1 (x y z) 2)</obj>,
+but <obj>`(1 ,@a 2)</obj> would evaluate to <obj>(1 x y z 2)</obj>.
+</p>
+
+<p indent="1">        Here is an example of a macro definition that uses the `<obj>,@</obj>'
+construction.  One way to define <obj>do-forever</obj> would be for it to expand
+
+<lisp>(do-forever <arg>form1</arg> <arg>form2</arg> <arg>form3</arg>)
+</lisp>into
+
+<lisp>(tagbody
+    a <arg>form1</arg>
+      <arg>form2</arg>
+      <arg>form3</arg>
+      (go a))
+</lisp></p>
+
+<p indent="1">        You could define the macro by
+
+<lisp>(defmacro do-forever (&amp;body body)
+  `(tagbody
+       a ,@body
+         (go a)))
+</lisp>(This definition has the disadvantage of interfering with use of the
+<obj>go</obj> tag <obj>a</obj> to go from the body of the <obj>do-forever</obj> to a tag
+defined outside of it.  A more robust implementation would construct a
+new tag each time, using <obj>gensym</obj>.)
+</p>
+
+<p>A similar construct is `<obj>,.</obj>' (comma, dot).  This means the same thing
+as `<obj>,@</obj>' except that the list which is the value of the following form
+may be modified destructively; backquote uses <obj>nconc</obj> rather than <obj>append</obj>.
+This should, of course, be used with caution.
+</p>
+
+<p>Backquote does not make any guarantees about what parts of the structure it
+shares and what parts it copies.  You should not do destructive operations
+such as <obj>nconc</obj> on the results of backquote forms such as
+
+<lisp>`(,a b c d)
+</lisp>since backquote might choose to implement this as
+
+<lisp>(cons a '(b c d))
+</lisp>and <obj>nconc</obj> would smash the constant.  On the other hand, it would be
+safe to <obj>nconc</obj> the result of
+
+<lisp>`(a b ,c ,d)
+</lisp>since any possible expansion of this would make a new list.
+One possible expansion is
+
+<lisp>(list 'a 'b c d)
+</lisp></p>
+
+<p>Backquote of course guarantees not to do any destructive operations
+(<obj>rplaca</obj>, <obj>rplacd</obj>, <obj>nconc</obj>) on the components of the
+structure it builds, unless the `<obj>,.</obj>' syntax is used.
+</p>
+
+<p indent="1">        Advanced macro writers sometimes write macro-defining macros:
+forms which expand into forms which, when evaluated, define macros.  In
+such macros it is often useful to use nested backquote constructs.  For
+example, here is a very simple version of <obj>defstruct</obj> (see
+<ref definition-in-file="defstr" key="defstruct-fun" title="Macro defstruct" type="mac"></ref>) which does not allow any options and only the simplest
+slot descriptors.  Its invocation looks like:
+
+<lisp>(defstruct (<arg>name</arg>)
+     <arg>item1</arg> <arg>item2</arg> ...)
+</lisp>We would like this form to expand into
+
+<lisp>(progn
+ (defmacro <arg>item1</arg> (x) `(aref ,x 0))
+ (defmacro <arg>item2</arg> (x) `(aref ,x 1))
+ (defmacro <arg>item3</arg> (x) `(aref ,x 2))
+ (defmacro <arg>item4</arg> (x) `(aref ,x 3))
+ ...)
+</lisp></p>
+
+<p>Here is the macro to perform the expansion:
+
+<lisp>(defmacro defstruct ((name) . items)
+     (do ((item-list items (cdr item-list))
+          (ans nil)
+          (i 0 (1+ i)))
+         ((null item-list)
+          `(progn . ,(nreverse ans)))
+       (push `(defmacro ,(car item-list) (x)
+                        `(aref ,x ,',i))
+             ans)))
+</lisp></p>
+
+<p indent="1">        The interesting part of this definition is the body of
+the (inner) <obj>defmacro</obj> form:
+
+<lisp>`(aref ,x ,',i)
+</lisp>Instead of using this backquote construction, we could have written
+
+<lisp>(list 'aref x ,i)
+</lisp>That is, the <obj>,',</obj>
+acts like a comma that matches the outer backquote, while
+the comma preceding the <obj>x</obj> matches with the inner
+backquote.  Thus, the symbol <obj>i</obj> is evaluated when the
+<obj>defstruct</obj> form is expanded, whereas the symbol <obj>x</obj> is
+evaluated when the accessor macros are expanded.
+</p>
+
+<p indent="1">        Backquote can be useful in situations other than the writing
+of macros.  Whenever there is a piece of list structure to be consed
+up, most of which is constant, the use of backquote can make the
+program considerably clearer.
+</p>
+</subsection></section><a name="Local Macro Definitions"></a>
+
+
+<section chapter-number="19" name="Local Macro Definitions" number="3" title="Local Macro Definitions"><p><obj>defmacro</obj> or <obj>macro</obj> defines a macro whose name has global scope;
+it can be used in any function anywhere (subject to separation of
+name spaces by packages).  You can also make local macro definitions
+which are in effect only in one piece of code.  This is done with
+<obj>macrolet</obj>.  Like lexical variable bindings made by <obj>let</obj> or the
+local function definitions made by <obj>flet</obj>, <obj>macrolet</obj> macro
+definitions are in effect only for code contained lexically within
+the body of the <obj>macrolet</obj> construct.
+</p>
+<definition><define key="macrolet-fun" name="macrolet" type="spec"><args>(local-macros...) body...</args>
+</define>
+
+<description>Executes <arg>body</arg> and returns the values of the last form in it,
+with local macro definitions in effect according to <arg>local-macros</arg>.
+
+Each element of <arg>local-macros</arg> looks like the cdr of a <obj>defmacro</obj> form:
+
+<lisp>(<arg>name</arg> <arg>lambda-list</arg> <arg>macro-body</arg>...)
+</lisp>and it is interpreted just the same way.  However, <arg>name</arg> is only
+thus defined for expressions appearing within <arg>body</arg>.
+
+
+<lisp>(macrolet ((ifnot (x y . z) `(if (not ,x) ,y . ,z)))
+  (ifnot foo (print bar) (print t)))
+
+ ==&gt; (if (not foo) (print bar) (print t))
+</lisp>
+It is permissible for <arg>name</arg> to have a global definition also, as a macro
+or as a function.  The global definition is shadowed within <arg>body</arg>.
+
+<lisp>(macrolet ((car (x) `(cdr (assq ,x '((a . ferrari)
+                                     (b . ford))))))
+  ...(print (car symbol))...)
+</lisp>makes <obj>car</obj> have an unusual meaning for its explicit use,
+but due to lexical scoping it has no effect on what happens if <obj>print</obj>
+calls <obj>car</obj>.
+
+<obj>macrolet</obj> can also hide other local definitions made by <obj>macrolet</obj>,
+<obj>flet</obj> or <obj>labels</obj> (<ref definition-in-file="fd-eva" key="labels-fun" title="Special Form labels" type="spec"></ref>).
+</description></definition></section><a name="Substitutable Functions"></a>
+
+
+<section chapter-number="19" name="Substitutable Functions" number="4" title="Substitutable Functions"><index-entry index="concepts" title="subst"></index-entry>
+
+<index-entry index="concepts" title="substitutable function"></index-entry>
+
+<p>A substitutable function is a function that is open coded by the
+compiler.  It is like any other function when applied, but it can be
+expanded instead, and in that regard resembles a macro.
+</p>
+<definition>
+<define key="defsubst-fun" name="defsubst" type="spec"></define>
+
+<description><obj>defsubst</obj> is used for defining substitutable functions.  It is used just
+like <obj>defun</obj>.
+
+<lisp>(defsubst <arg>name</arg> <arg>lambda-list</arg> . <arg>body</arg>)
+</lisp>and does almost the same thing.  It defines a function that executes
+identically to the one that a similar call to <obj>defun</obj> would define.  The
+difference comes when a function that <arg>calls</arg> this one is compiled.  Then,
+the call is open-coded by substituting the substitutable function's
+definition into the code being compiled.  The function itself
+looks like <obj>(named-subst <arg>name</arg> <arg>lambda-list</arg> . <arg>body</arg>)</obj>.  Such a function
+is called a subst.  For example, if
+we define
+
+<lisp>(defsubst square (x) (* x x))
+(defun foo (a b) (square (+ a b)))
+</lisp>then if <obj>foo</obj> is used interpreted, <obj>square</obj> works just as if it had
+been defined by <obj>defun</obj>.  If <obj>foo</obj> is compiled, however, the squaring
+is substituted into it and it produces the same code as
+
+<lisp>(defun foo (a b) (let ((tem (+ a b))) (* tem tem)))
+</lisp><obj>square</obj>'s definition would be
+
+<lisp>(named-subst square (x) (* x x))
+</lisp>(The internal formats of substs are explained in <ref chapter="12" definition-in-file="fd-fun" key="subst" section="5" title="Kinds of Functions" type="section"></ref>.)
+
+A similar <obj>square</obj> could be defined as a macro, but the simple way
+
+<lisp>(defmacro square (x) `(* ,x ,x))
+</lisp>has a bug: it causes the argument to be computed twice.
+The simplest correct definition as a macro is
+
+<lisp>(defmacro square (x)
+  (once-only (x)
+    `(* ,x ,x)))
+</lisp>See <ref definition-in-file="macros" key="once-only-fun" title="Macro once-only" type="mac"></ref> for information on <obj>once-only</obj>.
+
+In general, anything that is implemented as a subst can be
+re-implemented as a macro, just by changing the <obj>defsubst</obj> to a
+<obj>defmacro</obj> and putting in the appropriate backquote and commas, using
+<obj>once-only</obj> or creating temporary variables to make sure the arguments
+are computed once and in the proper order.  The disadvantage of macros
+is that they are not functions, and so cannot be applied to arguments.
+Also, the effort required to guarantee the order of evaluation is a
+disadvantage.  Their advantage is that they can do much more powerful
+things than substs can.  This is also a disadvantage since macros
+provide more ways to get into trouble.  If something can be implemented
+either as a macro or as a subst, it is generally better to make it a
+subst.
+
+The <arg>lambda-list</arg> of a subst may contain <obj>&amp;optional</obj> and
+<obj>&amp;rest</obj>, but no other lambda-list keywords.  If there is a
+rest argument, it is replaced in the body with an explicit call to
+<obj>list</obj>:
+
+<lisp>(defsubst append-to-foo (&amp;rest args) 
+  (setq foo (append args foo)))
+
+(append-to-foo x y z)
+</lisp>expands to
+
+<lisp>(setq foo (append (list x y z) foo))
+</lisp>
+Rest arguments in substs are most useful with
+<obj>apply</obj>.  Because of an optimization, if
+
+<lisp>(defsubst xhack (&amp;rest indices) 
+  (apply 'xfun xarg1 indices))
+</lisp>has been done then
+
+<lisp>(xhack a (car b))
+</lisp>is equivalent to
+
+<lisp>(xfun xarg1 a (car b))
+</lisp>If <obj>xfun</obj> is itself a subst, it is expanded in turn.
+
+When a <obj>defsubst</obj> is compiled, its list structure definition is kept
+around so that calls can still be open-coded by the compiler.  But
+non-open-coded calls to the function run at the speed of compiled code.
+The interpreted definition is kept in the compiled definition's
+debugging info alist (see <ref definition-in-file="fd-fun" key="debugging-info-fun" title="Function debugging-info" type="fun"></ref>).  Undeclared free
+variables used in a <obj>defsubst</obj> being compiled do not get any warning,
+because this is a common practice that works properly with nonspecial
+variables when calls are open coded.
+
+If you are using a <obj>defsubst</obj> from outside the program to which it belongs,
+you might sometimes be better off if it is not open-coded.
+The decrease in speed might not be significant, and you would
+have the advantage that you would not need to recompile your program
+if the definition is changed.  You can prevent open-coding by putting
+<obj>dont-optimize</obj> around the call to the <obj>defsubst</obj>.
+
+<lisp>(dont-optimize (xhack a (car b)))
+</lisp>See <ref definition-in-file="compil" key="dont-optimize-fun" title="Special Form dont-optimize" type="spec"></ref>.
+
+Straightforward substitution of the arguments could cause arguments to
+be computed more than once, or in the wrong order.  For instance, the
+functions
+
+<lisp>(defsubst reverse-cons (x y) (cons y x))
+(defsubst in-order (a b c) (and (&lt; a b) (&lt; b c)))
+</lisp>would present problems.  When compiled, because of the substitution
+a call to <obj>reverse-cons</obj> would evaluate its arguments in the
+wrong order, and a call to <obj>in-order</obj> could evaluate its second
+argument twice.  In fact, a more complicated form of substitution
+(implemented by <obj>si:sublis-eval-once</obj>, <ref definition-in-file="macros" key="si:sublis-eval-once-fun" title="Function si:sublis-eval-once" type="fun"></ref>)
+is used so that local variables are introduced as necessary to prevent
+such problems.
+
+Note that all occurrences of the argument names in the body are replaced
+with the argument forms, wherever they appear.  Thus an argument name
+should not be used in the body for anything else, such as a function
+name or a symbol in a constant.
+
+As with <obj>defun</obj>, <arg>name</arg> can be any function spec.
+</description></definition></section><a name="compiler-let-discussion"></a>
+
+
+<section chapter-number="19" name="compiler-let-discussion" number="5" title="Hints to Macro Writers"><p>There are many useful techniques for writing macros.  Over the years,
+Lisp programmers have discovered techniques that most programmers find
+useful, and have identified pitfalls that must be avoided.  This
+section discusses some of these techniques and illustrates them with
+examples.
+</p>
+
+<p>The most important thing to keep in mind as you learn to write macros
+is that the first thing you should do is figure out what the macro form
+is supposed to expand into, and only then should you start to actually
+write the code of the macro.  If you have a firm grasp of what the
+generated Lisp program is supposed to look like, you
+will find the macro much easier to write.
+</p>
+
+<p>In general any macro that can be written as a substitutable
+function (see <ref definition-in-file="macros" key="defsubst-fun" title="Special Form defsubst" type="spec"></ref>) should be written as one, not as a macro,
+for several reasons: substitutable functions are easier to write and to
+read; they can be passed as functional arguments (for example, you can
+pass them to <obj>mapcar</obj>); and there are some subtleties that can occur
+in macro definitions that need not be worried about in substitutable
+functions.  A macro can be a substitutable function only if it has
+exactly the semantics of a function, rather than of a special form.  The
+macros we will see in this section are not semantically like functions;
+they must be written as macros.
+</p>
+
+
+
+<subsection name="NIL" title="Name Conflicts"><p>One of the most common errors in writing macros is best illustrated by
+example.  Suppose we wanted to write <obj>dolist</obj> (see <ref definition-in-file="fd-flo" key="dolist-fun" title="Macro dolist" type="mac"></ref>) as
+a macro that expanded into a <obj>do</obj> (see <ref definition-in-file="fd-flo" key="do-fun" title="Special Form do" type="spec"></ref>).  The first step,
+as always, is to figure out what the expansion should look like.  Let's
+pick a representative example form, and figure out what its expansion
+should be.  Here is a typical <obj>dolist</obj> form.
+</p>
+
+<lisp>(dolist (element (append a b))
+  (push element *big-list*)
+  (foo element 3))
+</lisp>
+<p>We want to create a <obj>do</obj> form that does the thing that the above
+<obj>dolist</obj> form says to do.  That is the basic goal of the macro: it
+must expand into code that does the same thing that the original code
+says to do, but it should be in terms of existing Lisp constructs.
+The <obj>do</obj> form might look like this:
+</p>
+
+<lisp>(do ((list (append a b) (cdr list))
+     (element))
+    ((null list))
+  (setq element (car list))
+  (push element *big-list*)
+  (foo element 3))
+</lisp>
+<p>Now we could start writing the macro that would generate this code, and
+in general convert any <obj>dolist</obj> into a <obj>do</obj>, in an analogous way.
+However, there is a problem with the above scheme for expanding the
+<obj>dolist</obj>.  The above example's expansion works fine.  But what if the input
+form had been the following:
+</p>
+
+<lisp>(dolist (list (append a b))
+  (push list *big-list*)
+  (foo list 3))
+</lisp>
+<p>This is just like the form we saw above, except that the programmer happened
+to decide to name the looping variable <obj>list</obj> rather than
+<obj>element</obj>.  The corresponding expansion would be:
+</p>
+
+<lisp>(do ((list (append a b) (cdr list))
+     (list))
+    ((null list))
+  (setq list (car list))
+  (push list *big-list*)
+  (foo list 3))
+</lisp>
+<p>This doesn't work at all!  In fact, this is not even a valid program,
+since it contains a <obj>do</obj> that uses the same variable in two different
+iteration clauses.
+</p>
+<need amount="2000"></need>
+<p>Here's another example that causes trouble:
+</p>
+
+<lisp>(let ((list nil))
+  (dolist (element (append a b))
+    (push element list)
+    (foo list 3)))
+</lisp>
+<p>If you work out the expansion of this form, you will see that there are
+two variables named <obj>list</obj>, and that the programmer meant to refer to the
+outer one but the generated code for the <obj>push</obj> actually uses
+the inner one.
+</p>
+
+<p>The problem here is an accidental name conflict.  This can happen in
+any macro that has to create a new variable.  If that variable ever
+appears in a context in which user code might access it, then you have
+to worry that it might conflict with some other name that the user is
+using for his own program.
+</p>
+
+<p>One way to avoid this problem is to choose a name that is very unlikely
+to be picked by the user, simply by choosing an unusual name, in a
+package which only you will write code in.  This will probably work, but
+it is inelegant since there is no guarantee that the user won't just
+happen to choose the same name.  The way to avoid the name
+conflict reliably is to use an uninterned symbol as the variable in the generated
+code.  The function <obj>gensym</obj> (see <ref definition-in-file="fd-sym" key="gensym-fun" title="Function gensym" type="fun"></ref>) is useful for
+creating such symbols.
+</p>
+
+<p>Here is the expansion of the original form, using an uninterned
+symbol created by <obj>gensym</obj>.
+</p>
+
+<lisp>(do ((#:g0005 (append a b) (cdr #:g0005))
+     (element))
+    ((null #:g0005))
+  (setq element (car #:g0005))
+  (push element *big-list*)
+  (foo element 3))
+</lisp>
+<p>This is the right kind of thing to expand into.  (This is how the
+expression would print; this text would not read in properly because a
+new uninterned symbol would be created by each use of <example>#:</example>.)  Now that
+we understand how the expansion works, we are ready to actually write
+the macro.  Here it is:
+</p>
+
+<lisp>(defmacro dolist ((var form) . body)
+  (let ((dummy (gensym)))
+    `(do ((,dummy ,form (cdr ,dummy))
+          (,var))
+         ((null ,dummy))
+       (setq ,var (car ,dummy))
+       . ,body)))
+</lisp>
+<index-entry index="concepts" title="dot, in symbols"></index-entry>
+
+<index-entry index="concepts" title="period, in symbols"></index-entry>
+
+<p>Many system macros do not use <obj>gensym</obj> for the internal variables in their
+expansions.  Instead they use symbols whose print names begin and end with a dot.
+This provides meaningful names for these variables when looking at the generated
+code and when looking at the state of a computation in the error-handler.
+These symbols are in the <obj>si</obj> package; as a result, a name conflict is possible
+only in code which uses variables in the <obj>si</obj> package.  This would not normally
+happen in user code, which resides in other packages.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Block-Name Conflicts"><p>A related problem occurs when you write a macro that expands into a
+<obj>prog</obj> or <obj>do</obj> (or anything equivalent) behind the user's back
+(unlike <obj>dolist</obj>, which is documented to be like <obj>do</obj>).  Consider
+the <obj>error-restart</obj> special form (see <ref definition-in-file="errors" key="error-restart-fun" title="Macro error-restart" type="mac"></ref>).  Suppose
+we wanted to implement it as a macro that expands into a <obj>do-forever</obj>,
+which becomes a <obj>prog</obj>.  Then the following (contrived) Lisp program
+would not behave correctly:
+</p>
+
+<lisp>(dolist (a list)
+  (error-restart ((sys:abort error) &quot;Return from FOO.&quot;)
+    (cond ((&gt; a 10)
+           (return 5))
+          ((&gt; a 4)
+           (ferror 'lose &quot;You lose.&quot;)))))
+</lisp><nopara></nopara>
+<p>The problem is that the <obj>return</obj> would return from the
+<obj>error-restart</obj> instead of the <obj>prog</obj>.
+</p>
+
+<p>There are two possible ways to avoid this.  The best is to make the expanded
+code use only explicit <obj>block</obj>'s with obscure or gensymmed block names,
+and never a <obj>prog</obj> or <obj>do</obj>.
+</p>
+
+<p>The other is to give any <obj>prog</obj> or <obj>do</obj> the name <obj>t</obj>.  <obj>t</obj> as a
+<obj>prog</obj> name is special; it causes the <obj>prog</obj> to generate only a
+<obj>block</obj> named <obj>t</obj>, omitting the usual <obj>block</obj> named <obj>nil</obj> which
+is normally generated as well.  Because only <obj>block</obj>s named <obj>nil</obj>
+affect <obj>return</obj>, the problem is avoided.
+</p>
+
+<p>When <obj>error-restart</obj>'s expansion is supposed to return from the
+<obj>prog</obj> named <obj>t</obj>, it uses <obj>return-from</obj> <obj>t</obj>.
+</p>
+
+<p>Macros like <obj>dolist</obj> specifically should expand into an ordinary <obj>do</obj>,
+because the user expects to be able to exit them with <obj>return</obj>.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Macros Expanding into Many Forms"><p>Sometimes a macro wants to do several different things when its expansion
+is evaluated.  Another way to say this is that sometimes a macro wants to
+expand into several things, all of which should happen sequentially at run
+time (not macro-expand time).  For example, suppose you wanted to implement
+<obj>defconst</obj> (see <ref definition-in-file="fd-eva" key="defconst-fun" title="Macro defconst" type="mac"></ref>) as a macro.  <obj>defconst</obj> must do two
+things, declare the variable to be special and set the variable to its
+initial value.  (Here we implement a simplified <obj>defconst</obj> that does only
+these two things, and doesn't have any options.)  What should a
+<obj>defconst</obj> form expand into?  Well, what we would like is for an
+appearance of
+
+<lisp>(defconst a (+ 4 b))
+</lisp>in a file to be the same thing as the appearance of the following two forms:
+
+<lisp>(proclaim '(special a))
+(setq a (+ 4 b))
+</lisp>However, because of the way that macros work, they only expand into one
+form, not two.  So we need to have a <obj>defconst</obj> form expand into
+one form that is just like having two forms in the file.
+</p>
+
+<p>There is such a form.  It looks like this:
+
+<lisp>(progn (proclaim '(special a))
+       (setq a (+ 4 b)))
+</lisp>In interpreted Lisp, it is easy to see what happens here.  This is a
+<obj>progn</obj> special form, and so all its subforms are evaluated, in turn.
+The <obj>proclaim</obj> form and the <obj>setq</obj> form are evaluated.
+The compiler recognizes <obj>progn</obj> specially and treats each argument
+of the <obj>progn</obj> form as if it had been encountered at top level.
+Here is the macro definition:
+</p>
+
+<lisp>(defmacro defconst (variable init-form)
+  `(progn (proclaim '(special ,variable))
+          (setq ,variable ,init-form)))
+</lisp>
+<p>Here is another example of a form that wants to expand into several
+things.  We implement a special form called <obj>define-command</obj>,
+which is intended to be used in order to define commands in some
+interactive user subsystem.  For each command, there are two things
+provided by the <obj>define-command</obj> form: a function that executes the
+command, and a character that should invoke the function in this subsystem.
+Suppose that in
+this subsystem, commands are always functions of no arguments,
+and characters are used to index a vector called <obj>dispatch-table</obj>
+to find the function to use.
+A typical call to <obj>define-command</obj> would look like:
+</p>
+
+<lisp>(define-command move-to-top #\meta-&lt;
+  (do () ((at-the-top-p))
+    (move-up-one)))
+
+<exdent amount="96"><caption>Expanding into: </caption>
+(progn (setf (aref dispatch-table #\meta-&lt;)
+             'move-to-top)
+       (push 'move-to-top *command-name-list*)
+       (defun move-to-top ()
+         (do ()
+             ((at-the-top-p))
+           (move-up-one)))
+       )
+</exdent></lisp>
+<p>The <obj>define-command</obj> expands into three forms.  The first one sets up
+the specified character to invoke this command.  The second one puts the
+command name onto the list of all command names.  The third one is the
+<obj>defun</obj> that actually defines the function itself.  Note that the
+<obj>setf</obj> and <obj>push</obj> happen at load-time (when the file is loaded);
+the function, of course, also gets defined at load time.  (See the
+description of <obj>eval-when</obj> (<ref definition-in-file="compil" key="eval-when-fun" title="Special Form eval-when" type="spec"></ref>) for more discussion of
+the differences between compile time, load time, and eval time.)
+</p>
+
+<p>This technique makes Lisp a powerful language in which to implement
+your own language.  When you write a large system in Lisp, frequently
+you can make things much more convenient and clear by using macros to
+extend Lisp into a customized language for your application.  In the
+above example, we have created a little language extension: a new
+special form that defines commands for our system.  It lets the writer
+of the system attach the code for a command character to the
+character itself.  Macro expansion allows the function definitions
+and the command dispatch table to be made from the same source code.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Macros that Surround Code"><p>There is a particular kind of macro that is very useful for many
+applications.  This is a macro that you place ``around'' some Lisp code,
+in order to make the evaluation of that code happen in a modified context.
+For a very simple example, we could define a macro called
+<obj>with-output-in-base</obj>, that executes the forms within its body
+with any output of numbers that is done defaulting to a specified base.
+
+<lisp>(defmacro with-output-in-base ((base-form) &amp;body body)
+   `(let ((*print-base* ,base-form))
+      . ,body))
+</lisp>A typical use of this macro might look like:
+
+<lisp>(with-output-in-base (*default-base*)
+   (print x) (print y))
+</lisp>which would expand into
+
+<lisp>(let ((*print-base* *default-base*))
+  (print x) (print y))
+</lisp></p>
+
+<p>This example is too trivial to be very useful; it is intended to
+demonstrate some stylistic issues.  There are standard Zetalisp
+constructs that are similar to this macro; see
+<obj>with-open-file</obj> (<ref definition-in-file="files" key="with-open-file-fun" title="Macro with-open-file" type="mac"></ref>) and <obj>with-input-from-string</obj>
+(<ref definition-in-file="stream" key="with-input-from-string-fun" title="Macro with-input-from-string" type="mac"></ref>), for example.
+The really interesting thing, of course, is that you can define your
+own such constructs for your applications.  One very
+powerful application of this technique was used in a system that
+manipulates and solves the Rubik's cube puzzle.  The system heavily
+uses a construct called <obj>with-front-and-top</obj>, whose meaning is
+``evaluate this code in a context in which this specified face of the
+cube is considered the front face, and this other specified face is
+considered the top face''.
+</p>
+
+<p>The first thing to keep in mind when you write this sort of macro is
+that you can make your macro much clearer to people who might read your
+program if you conform to a set of loose standards of syntactic style.
+By convention, the names of such constructs start with ``<obj>with-</obj>''.
+This seems to be a clear way of expressing the concept that we are
+setting up a context; the meaning of the construct is ``do this stuff
+<arg>with</arg> the following things true''.  Another convention is that any
+``parameters'' to the construct should appear in a list that is the
+first subform of the construct, and that the rest of the elements
+should make up a body of forms that are evaluated sequentially with the
+last one returned.  All of the examples cited above work this way.  In
+our <obj>with-output-in-base</obj> example, there was one parameter (the
+base), which appears as the first (and only) element of a list that is
+the first subform of the construct.  The extra level of parentheses
+in the printed representation serves to separate the ``parameter'' forms
+from the ``body'' forms so that it is textually apparent which is which;
+it also provides a convenient way to provide default parameters (a good
+example is the <obj>with-input-from-string</obj> construct
+(<ref definition-in-file="stream" key="with-input-from-string-fun" title="Macro with-input-from-string" type="mac"></ref>), which takes two required and two
+optional parameters).  Another convention/technique is to use the
+<obj>&amp;body</obj> keyword in the <obj>defmacro</obj> to tell the editor how to
+indent the elements of the body (see <ref definition-in-file="macros" key="&amp;body" type="page"></ref>).
+</p>
+
+<p>The other thing to keep in mind is that control can leave the construct
+either by the last form's returning, or by a non-local exit
+(<obj>go</obj>, <obj>return</obj> or <obj>throw</obj>).  You should write the definition
+in such a way that everything is cleaned up appropriately no
+matter how control exits.  In our <obj>with-output-in-base</obj>
+example, there is no problem, because non-local exits undo
+lambda-bindings.  However, in even slightly more complicated cases, an
+<obj>unwind-protect</obj> form (see <ref definition-in-file="fd-flo" key="unwind-protect-fun" title="Special Form unwind-protect" type="spec"></ref>) is needed: the
+macro must expand into an <obj>unwind-protect</obj> that surrounds the body,
+with ``cleanup'' forms that undo the context-setting-up that the macro
+did.  For example, <obj>using-resource</obj> (see <ref definition-in-file="resour" key="using-resource-fun" title="Macro using-resource" type="mac"></ref>)
+expands
+
+<lisp>(using-resource (window menu-resource) <arg>body</arg>...)
+<exdent amount="96"><caption>into </caption>(let ((window nil))
+  (unwind-protect
+      (progn (setq window
+                   (allocate-resource 'menu-resource))
+             <arg>body</arg>...)
+    (and window
+         (deallocate-resource 'menu-resource window))))
+</exdent></lisp>This way the allocated resource item is deallocated whenever control
+leaves the <obj>using-resource</obj> special form.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Multiple and Out-of-Order Evaluation"><p>In any macro, you should always pay attention to the problem of
+multiple or out-of-order evaluation of user subforms.  Here is an
+example of a macro with such a problem.  This macro defines a special
+form with two subforms.  The first is a reference, and the second is a
+form.  The special form is defined to create a cons whose car and cdr
+are both the value of the second subform, and then to set the reference
+to be that cons.  Here is a possible definition:
+
+<lisp>(defmacro test (reference form)
+   `(setf ,reference (cons ,form ,form)))
+</lisp>Simple cases work all right:
+
+<lisp>(test foo 3) ==&gt;
+  (setf foo (cons 3 3))
+</lisp>But a more complex example, in which the subform has side effects,
+can produce surprising results:
+
+<lisp>(test foo (setq x (1+ x))) ==&gt;
+  (setf foo (cons (setq x (1+ x))
+                  (setq x (1+ x))))
+</lisp>The resulting code evaluates the <obj>setq</obj> form twice, and so <obj>x</obj>
+is increased by two instead of by one.  A better definition of <obj>test</obj>
+that avoids this problem is:
+
+<lisp>(defmacro test (reference form)
+   (let ((value (gensym)))
+     `(let ((,value ,form))
+         (setf ,reference (cons ,value ,value)))))
+</lisp>With this definition, the expansion works as follows:
+
+<lisp>(test foo (setq x (1+ x))) ==&gt;
+  (let ((#:g0005 (setq x (1+ x))))
+     (setf foo (cons #:g0005 #:g0005)))
+</lisp>Once again, the expansion would print this way, but this text
+would not read in as a valid expression due to the inevitable
+problems of <example>#:</example>.
+</p>
+
+<p>In general, when you define a new construct which contains
+one or more argument forms, you must be careful that the expansion
+evaluates the argument forms the proper number of times and in the
+proper order.  There's nothing
+fundamentally wrong with multiple or out-of-order evalation if that is
+really what you want and if it is what you document your special form
+to do.  But if this happens unexpectedly, it can make invocations
+fail to work as they appear they should.
+</p>
+
+<p><obj>once-only</obj> is a macro that can be used to avoid multiple evaluation.
+It is most easily explained by example.  You would write <obj>test</obj> using
+<obj>once-only</obj> as follows:
+
+<lisp>(defmacro test (reference form)
+  (once-only (form)
+    `(setf ,reference (cons ,form ,form))))
+</lisp>This defines <obj>test</obj> in such a way that the <obj>form</obj> is only evaluated
+once, and references to <obj>form</obj> inside the macro body refer to that
+value.  <obj>once-only</obj> automatically introduces a lambda-binding of a
+generated symbol to hold the value of the form.  Actually, it is more
+clever than that; it avoids introducing the lambda-binding for forms
+whose evaluation is trivial and may be repeated without harm or cost,
+such as numbers, symbols, and quoted structure.  This is just an
+optimization that helps produce more efficient code.
+</p>
+
+<p>The <obj>once-only</obj> macro makes it easier to follow the principle, but it
+does not completely or automatically solve the problems of multiple and
+out-of-order evaluation.  It is just a tool that can solve some of the
+problems some of the time; it is not a panacea.
+</p>
+
+<p>The following description attempts to explain what <obj>once-only</obj> does,
+but it is a lot easier to use <obj>once-only</obj> by imitating the example
+above than by trying to understand <obj>once-only</obj>'s rather tricky
+definition.
+</p>
+<definition><define key="once-only-fun" name="once-only" type="mac"><args>var-list body...</args>
+</define>
+
+<description><arg>var-list</arg> is a list of variables.  The <arg>body</arg> is a Lisp program
+that presumably uses the values of those variables.  When the form
+resulting from the expansion of the <obj>once-only</obj> is evaluated, the first
+thing it does is to inspect the values of each of the variables in
+<arg>var-list</arg>; these values are assumed to be Lisp forms.  For each of the
+variables, it binds that variable either to its current value, if the
+current value is a trivial form, or to a generated symbol.  Next,
+<obj>once-only</obj> evaluates the <arg>body</arg> in this new binding environment and,
+when they have been evaluated, it undoes the bindings.  The result of the
+evaluation of the last form in <arg>body</arg> is presumed to be a Lisp form, typically
+the expansion of a macro.  If all of the variables have been bound to
+trivial forms, then <arg>once-only</arg> just returns that result.  Otherwise,
+<obj>once-only</obj> returns the result wrapped in a lambda-combination that binds
+the generated symbols to the result of evaluating the respective
+non-trivial forms.
+
+The effect is that the program produced by evaluating the <obj>once-only</obj>
+form is coded in such a way that, each of the forms which was the value
+of one of the variables in <arg>var-list</arg> is evaluated only once,
+unless the form is such as to have no side effects.  At the same time,
+no unnecessary temporary variables appear in the generated code, but the
+body of the <obj>once-only</obj> is not cluttered up with extraneous code to
+decide whether temporary variables are needed.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Nesting Macros"><p>A useful technique for building language extensions is to define
+programming constructs that employ two special forms, one of which is
+used inside the body of the other.  Here is a simple example.  There
+are two special forms.  The outer one is called <obj>with-collection</obj>,
+and the inner one is called <obj>collect</obj>.  <obj>collect</obj> takes one
+subform, which it evaluates; <obj>with-collection</obj> just has a body, whose
+forms it evaluates sequentially.  <obj>with-collection</obj> returns a list of
+all of the values that were given to <obj>collect</obj> during the evaluation
+of the <obj>with-collection</obj>'s body.  For example,
+
+<lisp>(with-collection (dotimes (i 5) (collect i)))
+  =&gt; (1 2 3 4 5)
+</lisp>Remembering the first piece of advice we gave about macros, the
+next thing to do is to figure out what the expansion looks like.
+Here is how the above example could expand:
+</p>
+
+<lisp>(let ((#:g0005 nil))
+  (dotimes (i 5)
+     (push i #:g0005))
+  (nreverse #:g0005))
+</lisp>
+<p>Now, how do we write the definition of the macros?  Well,
+<obj>with-collection</obj> is pretty easy:
+</p>
+
+<lisp>(defmacro with-collection (&amp;body body)
+  (let ((var (gensym)))
+     `(let ((,var nil))
+        ,@body
+        (nreverse ,var))))
+</lisp>
+<p>The hard part is writing <obj>collect</obj>.  Let's try it:
+
+<lisp>(defmacro collect (argument) `(push ,argument ,var))
+</lisp></p>
+
+<p>Note that something unusual is going on here: <obj>collect</obj> is using the
+variable <obj>var</obj> freely.  It is depending on the binding that takes
+place in the body of <obj>with-collection</obj> in order to get access to the
+value of <obj>var</obj>.  Unfortunately, that binding took place when
+<obj>with-collection</obj> got expanded; <obj>with-collection</obj>'s expander
+function bound <obj>var</obj>, and the binding of <obj>var</obj> was unmade when the expander function
+was done.  By the time the <obj>collect</obj> form gets expanded, the binding
+is long gone.  The macro definitions above do not work.
+Somehow the expander function of <obj>with-collection</obj> has to communicate
+with the expander function of <obj>collect</obj> to pass over the generated
+symbol.
+</p>
+
+<p>The only way for <obj>with-collection</obj> to convey information to the
+expander function of <obj>collect</obj> is for it to expand into something
+that passes that information.
+</p>
+
+<p>One way to write these macros is using <obj>macrolet</obj>:
+</p>
+
+<lisp>(defmacro with-collection (&amp;body body)
+   (let ((var (gensym)))
+     `(macrolet ((collect (argument)
+                   `(push ,argument ,',var)))
+        (let ((,var nil))
+          ,@body
+          (nreverse ,var)))))
+</lisp>
+<p>Here <obj>with-collection</obj> expands into code which defines <obj>collect</obj>
+specially to know about which variable to collect into.  <obj>,',</obj> causes
+<obj>var</obj>'s value to be substituted when the outer backquote, the one
+around the <obj>macrolet</obj>, is executed.  <obj>argument</obj>, however, is
+substituted in when the inner backquote is executed, which happens
+when <obj>collect</obj> is expanded.
+</p>
+
+<p>This technique has the interesting consequence that <obj>collect</obj> is
+defined only within the body of a <obj>with-collection</obj>.  It would simply
+not be recognized elsewhere; or it could have another definition, for
+some other purpose, globally.  This has both advantages and
+disadvantages.
+</p>
+
+<p>Another technique is to communicate through local declarations.
+The code generated by <obj>with-collection</obj> can contain a
+<obj>local-declare</obj>.  The expansion of <obj>collect</obj> can examine the declararion
+with <obj>getdecl</obj> to decide what to do.  Here is the code:
+</p>
+
+<lisp>(defmacro with-collection (&amp;body body)
+   (let ((var (gensym)))
+     `(let ((,var nil))
+        (local-declare ((collection-var nil ,var))
+          ,@body
+          (nreverse ,var)))))
+
+(defmacro collect (argument)
+  (let ((var ,(getdecl nil 'collection-var)))
+    (unless var 
+      (ferror nil &quot;COLLECT not within a WITH-COLLECTION&quot;))
+    `(push ,argument var)))
+</lisp>
+<p>Another way, used before <obj>getdecl</obj> existed, was with <obj>compiler-let</obj>
+(see <ref definition-in-file="compil" key="compiler-let-fun" title="Macro compiler-let" type="mac"></ref>).  <obj>compiler-let</obj> is identical to <obj>let</obj> as
+far as the interpreter is concerned, so the macro continues to work in
+the interpreter with this change.  When the compiler encounters a
+<obj>compiler-let</obj>, however, it actually performs the bindings that the
+<obj>compiler-let</obj> specifies and proceeds to compile the body of the
+<obj>compiler-let</obj> with all of those bindings in effect.  In other words,
+it acts as the interpreter would.
+</p>
+
+<p>Here's the right way to write these macros in this fashion:
+</p>
+
+<lisp>(defvar *collect-variable*)
+
+(defmacro with-collection (&amp;body body)
+  (let ((var (gensym)))
+     `(let ((,var nil))
+        (compiler-let ((*collect-variable* ',var))
+           . ,body)
+        (nreverse ,var))))
+
+(defmacro collect (argument)
+  `(push ,argument ,*collect-variable*))
+</lisp></subsection>
+
+
+<subsection name="NIL" title="Functions Used During Expansion"><p>The technique of defining functions to be used during macro expansion
+deserves explicit mention here.  It may not occur to you, but a macro
+expander function is a Lisp program like any other Lisp program, and it
+can benefit in all the usual ways by being broken down into a
+collection of functions that do various parts of its work.  Usually
+macro expander functions are pretty simple Lisp programs that take
+things apart and put them together slightly differently, but
+some macros are quite complex and do a lot of work.  Several features
+of Zetalisp, including flavors, <obj>loop</obj>, and <obj>defstruct</obj>,
+are implemented using very complex macros, which, like any complex
+well-written Lisp program, are broken down into modular functions.  You should
+keep this in mind if you ever invent an advanced language extension
+or ever find yourself writing a five-page expander function.
+</p>
+
+<p>A particular thing to note is that any functions used by macro-expander
+functions must be available at compile-time.  You can make a function
+available at compile time by surrounding its defining form with an
+<obj>(eval-when (compile load eval) ...)</obj>; see <ref definition-in-file="compil" key="eval-when-fun" title="Special Form eval-when" type="spec"></ref> for more
+details.  Doing this means that at compile time the definition of the
+function is interpreted, not compiled, and hence runs more
+slowly.
+</p>
+
+<p>Another approach is to separate macro definitions and the functions they
+call during expansion into a separate file, often called a ``defs''
+(definitions) file.  This file defines all the macros, and also all
+functions that the macros call.  It can be separately compiled and
+loaded up before compiling the main part of the program, which uses the
+macros.  The <arg>system</arg> facility (see <ref chapter="29" definition-in-file="maksys" key="system-system" section="0" title="Maintaining Large Systems" type="section"></ref>) helps keep these
+various files straight, compiling and loading things in the right order.
+</p>
+</subsection></section><a name="Aids for Debugging Macros"></a>
+
+<section chapter-number="19" name="Aids for Debugging Macros" number="6" title="Aids for Debugging Macros"><definition><define key="mexp-fun" name="mexp" type="fun"><args><standard>&amp;optional</standard> form</args>
+</define>
+
+<description><obj>mexp</obj> goes into a loop in which it reads forms and sequentially
+expands them, printing out the result of each expansion (using the
+grinder (see <ref definition-in-file="rdprt" key="grind" type="page"></ref>) to improve readability).  When the form itself
+has been expanded until it is no longer a macro call,
+<obj>macroexpand-all</obj> is used to expand all its subforms, and the result
+is printed if it is different from what preceded.  This allows you to
+see what your macros are expanding into, without actually evaluating
+the result of the expansion.
+
+If the form you type is an atom, <obj>mexp</obj> returns.  Usually one simply
+uses <obj>Abort</obj> to exit it.
+
+If the form you type is a list that not a macro call, nothing is printed.
+You are prompted immediately for another form.
+
+If the argument <arg>form</arg> is given, it is expanded and printed as usual,
+and then <obj>mexp</obj> returns immediately.
+
+
+<lisp><exdent amount="96"><caption>If you type </caption>(mexp)
+</exdent><exdent amount="96"><caption>followed by </caption>(rest (first x))
+</exdent><exdent amount="96"><caption>then <obj>mexp</obj> will print </caption>(cdr (first x))
+</exdent><exdent amount="96"><caption>and then </caption>(cdr (car x))
+</exdent></lisp>You would then type <obj>Abort</obj> to exit <obj>mexp</obj>.
+</description></definition></section><a name="displacing-macro"></a>
+
+
+<section chapter-number="19" name="displacing-macro" number="7" title="Displacing Macro Calls"><index-entry index="concepts" title="displacing macros"></index-entry>
+
+<p indent="1">        Every time the the evaluator sees a macro form, it must call the
+macro to expand the form.  This is time consuming.  To speed things up,
+the expansion of the macro is recorded automatically by modifying the
+form using <obj>rplaca</obj> and <obj>rplacd</obj> so that it no longer appears to
+need expansion.  If the same form is evaluated again, it can be processed
+straight away.  This is done using the function <obj>displace</obj>.
+</p>
+
+<p>A consequence of the evaluator's policy of displacing macro calls is
+that if you change the definition of a macro, the new definition does
+not take effect in any form that has already been displaced.  An
+existing form which calls the macro will use the new definition only if the
+form has never been evaluated.
+</p>
+<definition><define key="displace-fun" name="displace" type="fun"><args>form expansion</args>
+</define>
+
+<description><arg>form</arg> must be a list.
+<obj>displace</obj> replaces the car and cdr of <arg>form</arg> so
+that it looks like:
+
+<lisp>(si:displaced <arg>form</arg> <arg>expansion</arg>)
+</lisp>When a form whose car is <obj>si:displaced</obj> is evaluated, the evaluator
+simply extracts the expansion and evaluates it.  <arg>old-form-copy</arg> is a
+newly consed pair whose car and cdr are the same as the original car and
+cdr of the form; thus, it records the macro call which was expanded.
+<obj>grindef</obj> uses this information to print the code as it was, rather
+than as it has been expanded.
+
+<obj>displace</obj> returns <arg>expansion</arg>.
+
+The precise format of a displaced macro call may be changed in the
+future to facilitate the implementation of automatic reexpansion if the
+called macro changes.
+</description></definition></section><a name="Functions to Expand Macros"></a>
+
+
+<section chapter-number="19" name="Functions to Expand Macros" number="8" title="Functions to Expand Macros"><p indent="1">        The following two functions are provided to allow the user to
+control expansion of macros; they are often useful for the writer of
+advanced macro systems, and in tools that want to examine and understand
+code that may contain macros.
+</p>
+<definition><define key="macroexpand-1-fun" name="macroexpand-1" type="fun"><args>form <standard>&amp;optional</standard> local-macros-environment</args>
+</define>
+
+<description>If <arg>form</arg> is a macro form, this expands it (once)
+and returns the expanded form.  Otherwise it just
+returns <arg>form</arg>.  The second value is <obj>t</obj> if
+<arg>form</arg> has been expanded.
+
+<arg>local-macros-environment</arg> is a data structure which specifies the
+local macro definitions (made by <obj>macrolet</obj>) to be used for this
+expansion in addition to the global macro definitions (made by
+<obj>defmacro</obj> and recorded in function cells of symbols).  When
+<obj>macroexpand-1</obj> is called by the evaluator, this argument comes from
+the evaluator's own data structures set up by any <obj>macrolet</obj> forms
+which <arg>form</arg> was found within.  When <obj>macroexpand-1</obj> is called by
+the compiler, this argument comes from data structures kept by the
+compiler in its handling of <obj>macrolet</obj>.
+
+Sometimes macro definitions
+call <obj>macroexpand-1</obj>; in that case, if <arg>form</arg> was a subform of the
+macro call, a <obj>&amp;environment</obj> argument in the macro definition can be
+used to obtain a value to pass as <arg>local-macros-environment</arg>.  See
+<ref definition-in-file="macros" key="&amp;environment" type="page"></ref>.  <obj>setf</obj> is one example of a macro that needs to use
+<obj>&amp;environment</obj> since it expands some of its subforms in deciding
+what code to expand into.  See <obj>setf</obj>, <ref definition-in-file="fd-eva" key="setf-fun" title="Macro setf" type="mac"></ref>.
+
+If <arg>local-macros-environment</arg> is omitted or <obj>nil</obj>, only global
+macro definitions are used.
+
+<obj>macroexpand-1</obj> expands <obj>defsubst</obj>
+function forms as well as macro forms.
+</description></definition><definition><define key="macroexpand-fun" name="macroexpand" type="fun"><args>form <standard>&amp;optional</standard> local-macros-environment</args>
+</define>
+
+<description>If <arg>form</arg> is a macro form, this expands it repeatedly
+until it is not a macro form and returns the final expansion.
+Otherwise, it just returns <arg>form</arg>.  The second value is <obj>t</obj>
+if one or more expansions have take place.
+Everything said about <arg>local-macros-environment</arg> under
+<obj>macroexpand-1</obj> applies here too.
+
+<obj>macroexpand</obj> expands <obj>defsubst</obj>
+function forms as well as macro forms.
+</description></definition><definition><define key="macroexpand-all-fun" name="macroexpand-all" type="fun"><args>form <standard>&amp;optional</standard> local-macros-environment</args>
+</define>
+
+<description>Expands all macro calls in <arg>form</arg>, including those which are
+its subforms, and returns the result.  By contrast, <obj>macroexpand</obj>
+would not expand the subforms.  This function knows the syntax
+of all Lisp special forms, so the result is completely accurate.
+Note, however, that quoted list structure within <arg>form</arg> is not
+altered; there is no way to know whether you intend such list
+structure to be code or to be used in constructing code.
+</description></definition><definition>
+<define key="*macroexpand-hook*-var" name="*macroexpand-hook*" type="var"></define>
+
+<description>The value is a function which is used by <obj>macroexpand-1</obj> to invoke the
+expander function of a macro.  It receives arguments just like <obj>funcall</obj>:
+the expander function, and the arguments for it.
+
+In fact, the default value of this variable <arg>is</arg> <obj>funcall</obj>.  The
+variable exists so that the user can set it to some other function,
+which performs the <obj>funcall</obj> and possibly other associated
+record-keeping.
+
+<obj>*macroexpand-hook*</obj> is not used when a macro is expanded by the
+interpreter.
+</description></definition></section><a name="Definitions of Macros"></a>
+
+
+<section chapter-number="19" name="Definitions of Macros" number="9" title="Definitions of Macros"><p>The definition of a macro is a list whose car is the symbol <obj>macro</obj>.
+The cdr of the list is the macro's <arg>expander function</arg>.  This expander
+function contains the code written in the <obj>defmacro</obj> or other construct
+which was used to define the macro.  It may be a <obj>lambda</obj> expression,
+or it may be a compiled function object (FEF).  Expanding the macro is done
+by invoking the expander function.
+</p>
+
+<p>When an expander function is called, it receives two arguments: the
+macro call to be expanded, and the local macros environment.  If the
+expansion is being done by <obj>macroexpand-1</obj> then the local macros
+environment passed is the one that was given to <obj>macroexpand-1</obj>.  In a
+macro defined with <obj>defmacro</obj>, the local macros environment can be
+accessed by writing an <obj>&amp;environment</obj> parameter (see <ref definition-in-file="macros" key="&amp;environment" type="page"></ref>).
+</p>
+
+<p>Expander functions used to be given only one argument.  For compatibility,
+it is useful to define expander functions so that the second argument
+is optional; <obj>defmacro</obj> does so.  In addition, old macro definitions
+still work, because <obj>macroexpand-1</obj> actually checks the number of
+arguments which the expander function is ready to receive, and passes
+only one argument if the expander function expects only one.  This is
+done using <obj>call</obj> (see <ref definition-in-file="fd-eva" key="call-fun" title="Function call" type="fun"></ref>).
+</p>
+<definition><define key="macro-function-fun" name="macro-function" type="fun"><args>function-spec</args>
+</define>
+
+<description>If <arg>function-spec</arg> is defined as a macro, then this returns its expander-function:
+the function which should be called, with a macro call as its sole argument,
+to produce the macro expansion.  For certain special forms, <obj>macro-function</obj>
+returns the ``alternate macro definition'' (see below).
+Otherwise, <obj>macro-function</obj> returns <obj>nil</obj>.
+
+Since a definition as a macro is really a list of the form
+<obj>(macro . <arg>expander-function</arg>)</obj>, you can get the expander function using
+<obj>(cdr (fdefinition <arg>function-spec</arg>))</obj>.  But it is cleaner to use
+<obj>macro-function</obj>.
+
+
+<lisp>(setf (macro-function <arg>function-spec</arg>) <arg>expander</arg>)
+<exdent amount="96"><caption>is permitted, and is equivalent to </caption>(fdefine <obj>function-spec</obj> (cons 'macro <obj>expander</obj>))
+</exdent></lisp>
+Certain constructs which Common Lisp specifies as macros are actually
+implemented as special forms (<obj>cond</obj>, for example).  These special
+forms have ``alternate macro definitions'' which are the definitions
+they might have if they were implemented as macros.  This is so that the
+caller of <obj>macro-function</obj>, if it is a portable Common Lisp program,
+need not know about any special forms except the standard Common Lisp
+ones in order to make deductions about all valid Common Lisp programs.
+It can instead regard as a macro any symbol on which <obj>macro-function</obj>
+returns a non-<obj>nil</obj> value, and treat that value as the macro expander
+function.
+
+The alternate macro definition of a symbol such as <obj>cond</obj> is not actually
+its function definition.  It exists only for <obj>macro-function</obj> to return.
+The existence of alternate macro definitions means that <obj>macro-function</obj>
+is not useful for testing whether a symbol really is defined as a macro.
+</description></definition></section><a name="setf-extension"></a>
+
+
+<section chapter-number="19" name="setf-extension" number="10" title="Extending setf and locf"><p>This section would logically belong within <ref chapter="3" definition-in-file="fd-eva" key="setf" section="2" title="Generalized Variables" type="section"></ref>, but it is too
+advanced to go there.  It is placed in this chapter because it
+deals with concepts related to macro-expansion.
+</p>
+
+<p>There are three ways to tell the system how to <obj>setf</obj> a function:
+simple <obj>defsetf</obj> when it is trivial, general <obj>defsetf</obj> which
+handles most other cases, and <obj>define-setf-method</obj> which provides
+the utmost generality.
+</p>
+<definition>
+<define key="defsetf-fun" name="defsetf" type="mac"></define>
+
+<description>The simple way to use <obj>defsetf</obj> is useful when there is a setting
+function which does all the work of storing a value into the appropriate place
+and has the proper calling conventions.
+
+<lisp>(defsetf <arg>function</arg> <arg>setting-function</arg>)
+</lisp>says that the way to store into <obj>(<arg>function</arg> <arg>args</arg>...)</obj> is to do
+<obj>(<arg>setting-function</arg> <arg>args</arg>... <arg>new-value</arg>)</obj>.  For example,
+
+<lisp>(defsetf car sys:setcar)
+</lisp>is the way <obj>setf</obj> of <obj>car</obj> is defined.  Its meaning is that <obj>(setf
+(car <arg>x</arg>) <arg>y</arg>)</obj> should expand into <obj>(sys:setcar <arg>x</arg> <arg>y</arg>)</obj>.
+(<obj>setcar</obj> is like <obj>rplaca</obj> except that <obj>setcar</obj> returns its second
+argument).
+
+The more general form of <obj>defsetf</obj> is used when there is no
+setting function with exactly the right calling sequence.  Thus,
+
+<lisp>(defsetf <arg>function</arg> (<arg>function-args</arg>...) (<arg>value-arg</arg>) <arg>body</arg>...)
+</lisp>tells <obj>setf</obj> how to store into <obj>(<arg>function</arg> <arg>args</arg>...)</obj> by
+providing something like a macro defininition to expand into code to do
+the storing.  <arg>body</arg> computes the code; the last form in <arg>body</arg>
+returns a suitable expression.  <arg>function-args</arg> should be a lambda
+list, which can have optional and rest args.  <arg>body</arg> can substitute
+the values of the variables in this lambda list, to refer to the
+arguments in the form being <obj>setf</obj>'ed.  Likewise, it can substitute in
+<arg>value-arg</arg> to refer to the value to be stored.
+
+In fact, the <arg>function-args</arg> and <arg>value-arg</arg> are not actually
+the subforms of the form being <obj>setf</obj>d and the value to be stored;
+they are gensyms.  After the <arg>body</arg> returns, the corresponding
+expressions may be substituted for the gensyms, or the gensyms may
+remain as local variables with a suitable <obj>let</obj> provided to bind them.
+This is how <obj>setf</obj> ensures a correct order of evaluation.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(defsetf car (list) (value) `(sys:setcar ,list ,value))
+</exdent></lisp>is how one could define the <obj>setf</obj>'ing of <obj>car</obj> using the general
+form of <obj>defsetf</obj>.  The simple form of <obj>defsetf</obj> can be regarded
+as an abbreviation for something like this.
+
+Since <obj>setf</obj> automatically expands macros, if you define a macro whose
+expansion is usable in <obj>setf</obj> then the macro is usable there also.
+Sometimes this is not desirable.  For example, the accessor subst for a slot
+in a <obj>defstruct</obj> structure probably expands into <obj>aref</obj>, but if the
+slot is declared <obj>:read-only</obj> this should not be allowed.
+It is prevented by means of a <obj>defsetf</obj> like this:
+
+<lisp>(defsetf <arg>accessor-function</arg>)
+</lisp>This means that <obj>setf</obj> is explicitly prohibited on that function.
+</description></definition><definition><define key="define-setf-method-fun" name="define-setf-method" type="mac"><args>function (function-args...) (value-arg) body...</args>
+</define>
+
+<description>Defines how to do <obj>setf</obj> on <arg>place</arg>'s starting with <arg>function</arg>, with
+more power and generality than <obj>defsetf</obj> provides, but more
+complexity of use.
+
+The <obj>define-setf-method</obj> form receives its arguments almost like an
+analogous <obj>defsetf</obj>.  However, the values it receives are the actual
+subforms, and the actual form for the value, rather than gensyms which
+stand for them.
+The <arg>function-args</arg> are the actual subforms of the place to be <obj>setf</obj>'ed,
+and the full power of <obj>defmacro</obj> arglists can be used to match against it.
+<arg>value-arg</arg> is the actual form used as the second argument to <obj>setf</obj>.
+
+<arg>body</arg> is once again evaluated, but it does not return an expression
+to do the storing.  Instead, it returns five values which contain
+sufficient information to enable anyone to examine and modify the
+contents of the place.  This information tells the caller which subforms
+of the place need to be evaluated, and how to use them to examine or set
+the value of the place.  (Generally the function-args arglist is
+arranged to make each arg get one subform.)  A temporary variable must
+be found or made (usually with <obj>gensym</obj>) for each of them.  Another
+temporary variable should be made to correspond to the value to be
+stored.
+
+Then the five values to be returned are:
+
+<table><tbody><tr><td><standard>0</standard></td><td>A list of the temporary variables for the subforms of the place.
+</td></tr><tr><td><standard>1</standard></td><td>A list of the subforms that they correspond to.
+</td></tr><tr><td><standard>2</standard></td><td>A list of the temporary variables for the values to be stored.
+Currently there can only be one value to be stored, so there is
+only one variable in this list, always.
+</td></tr><tr><td><standard>3</standard></td><td>A form to do the storing.  This form refers to some or all of the temporary
+variables listed in value 1.
+</td></tr><tr><td><standard>4</standard></td><td>A form to get the value of the place.  <obj>setf</obj> does not need to do
+this, but <obj>push</obj> and <obj>incf</obj> do.  This too should refer only to the
+temporary variables.  No expression of contained it it should be a
+subexpression of the place being stored in.
+</td></tr></tbody></table>
+This information is everything that the macro (<obj>setf</obj> or something
+more complicated) needs to know to decide what to do.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(define-setf-method car (function-spec)
+  (let ((tempvars (list (gensym)))
+        (tempargs (list (list-form)))
+        (storevar (gensym)))
+    (values tempvars tempargs (list storevar)
+            `(sys:setcar ,(first tempvars) ,storevar)
+            `(car ,(first tempvars)))))
+</exdent></lisp>is how one could define the <obj>setf</obj>'ing of <obj>car</obj> using <obj>define-setf-method</obj>.
+This definition is equivalent to the other two definitions using the
+simpler techniques.
+</description></definition><definition><define key="get-setf-method-fun" name="get-setf-method" type="fun"><args>form</args>
+</define>
+
+<description>Invokes the <obj>setf</obj> method for form (which must be a list) and returns the
+five values produced by the body of the <obj>define-setf-method</obj> for the symbol
+which is the car of form.  The meanings of these five values are given
+immediately above.  If the way to <obj>setf</obj> that symbol was defined with <obj>defsetf</obj>
+you still get five values, which you can interpret in the same ways; thus,
+<obj>defsetf</obj> is effectively an abbreviation for a suitable <obj>define-setf-method</obj>.
+
+There are two ways to use <obj>get-setf-method</obj>.  One is in a macro which,
+like <obj>setf</obj> or <obj>incf</obj> or <obj>push</obj>, wants to store into a place.  The
+other is in a <obj>define-setf-method</obj> for something like <obj>ldb</obj>, which
+is <obj>setf</obj> by setting one of its arguments.  You would append your new
+tempvars and tempargs to the ones you got from <obj>get-setf-method</obj> to
+get the combined lists which you return.  The forms returned by the
+<obj>get-setf-method</obj> you would stick into the forms you return.
+
+An example of a macro which uses <obj>get-setf-method</obj> is <obj>pushnew</obj>.
+(The real <obj>pushnew</obj> is a little hairier than this, to handle the
+<arg>test</arg>, <arg>test-not</arg> and <arg>key</arg> arguments).
+
+
+<lisp>(defmacro pushnew (value place)
+  (multiple-value-bind
+      (tempvars tempargs storevars storeform refform)
+      (get-setf-method place)
+    (si:sublis-eval-once
+      (cons `(-val- . ,value) (pairlis tempvars tempargs))
+      `(if (memq -val- ,refform)
+           ,refform
+         ,(sublis (list (cons (car storevars)
+                              `(cons -val- ,refform)))
+                  storeform))
+      t t)))
+</lisp>
+
+<lisp><exdent amount="96"><caption>An example of a <obj>define-setf-method</obj> that uses <obj>get-setf-method</obj> is that for <obj>ldb</obj>: </caption>
+(define-setf-method ldb (bytespec int)
+  (multiple-value-bind 
+          (temps vals stores store-form access-form)
+      (get-setf-method int)
+    (let ((btemp (gensym))
+          (store (gensym))
+          (itemp (first stores)))
+      (values (cons btemp temps)
+              (cons bytespec vals)
+              (list store)
+              `(progn 
+                 ,(sublis
+                    (list (cons itemp
+                                `(dpb ,store ,btemp
+                                      ,access-form)))
+                    store-form)
+                ,store)
+              `(ldb ,btemp ,access-form)))))
+</exdent></lisp>
+<nopara></nopara>What this says is that the way to <obj>setf</obj> <obj>(ldb <arg>byte</arg> (foo))</obj>
+is computed based on the way to <obj>setf</obj> <obj>(foo)</obj>.
+</description></definition><definition><define key="si:sublis-eval-once-fun" name="si:sublis-eval-once" type="fun"><args>alist form <standard>&amp;optional</standard> reuse-tempvars sequential-flag</args>
+</define>
+
+<description>Replaces temporary variables in <arg>form</arg> with corresponding values
+according to <arg>alist</arg>, but generates local variables when necessary to
+make sure that the corresponding values are evaluated exactly once and
+in same order that they appear in <arg>alist</arg>.  (This complication is
+skipped when the values are constant).  <arg>alist</arg> should be a list of
+elements <obj>(<arg>tempvar</arg> . <arg>value</arg>)</obj>.  The result is a form equivalent
+to
+
+<lisp>`(let ,(mapcar #'(lambda (elt) (list (car elt) (cdr elt)))
+               alist)
+  ,form)
+</lisp>but it usually contains fewer temporary variables and executes faster.
+
+If <arg>reuse-tempvars</arg> is non-<obj>nil</obj>, the temporary variables which
+appear as the cars of the elements of <arg>alist</arg> are allowed to appear in
+the resulting form.  Otherwise, none of them appears in the resulting
+form, and if any local variables turn out to be needed, they are made
+afresh with <obj>gensym</obj>.  <arg>reuse-tempvars</arg> should be used only when it
+is guaranteed that none of the temporary variables in <arg>alist</arg> is
+referred to by any of the values to be substituted; as, when the
+temporary variables have been freshly made with <obj>gensym</obj>.
+
+If <arg>sequential-flag</arg> is non-<obj>nil</obj>, then the value substituted for a
+temporary variable is allowed to refer to the temporary variables
+preceding it in alist.  <obj>setf</obj> and similar macros should all use this
+option.
+</description></definition><definition><define key="define-modify-macro-fun" name="define-modify-macro" type="fun"><args>macro-name (lambda-list...) combiner-function [doc-string]</args>
+</define>
+
+<description>Is a quick way to define <obj>setf</obj>'ing macros which resemble <obj>incf</obj>.
+For example, here is how <obj>incf</obj> is defined:
+
+<lisp>(define-modify-macro incf (&amp;optional (delta 1)) +
+   &quot;Increment PLACE's value by DELTA.&quot;)
+</lisp>
+<arg>lambda-list</arg> describes any arguments the macro accepts, but not first
+argument, which is always the place to be examined and modified.  The
+old value of this place, and any additional arguments such as <obj>delta</obj>
+in the case of <obj>incf</obj>, are combined using the <arg>combiner-function</arg>
+(in this case, <obj>+</obj>) to get the new value which is stored back in the
+place.
+</description></definition><definition>
+<define key="deflocf-fun" name="deflocf" type="mac"></define>
+
+<description>Defines how to perform <obj>locf</obj> on a generalized variable.
+There are two forms of usage, analogous to those of <obj>defsetf</obj>.
+
+
+<lisp>(deflocf <arg>function</arg> <arg>locating-function</arg>)
+</lisp>says that the way to get the location of <obj>(<arg>function</arg> <arg>args</arg>...)</obj> is to do
+<obj>(<arg>locating-function</arg> <arg>args</arg>...)</obj>.  For example,
+
+<lisp>(deflocf car sys:car-location)
+</lisp>could be used to define <obj>locf</obj> on <obj>car</obj> forms.
+is the way <obj>setf</obj> of <obj>car</obj> is defined.  Its meaning is that <obj>(locf
+(car <arg>x</arg>))</obj> should expand into <obj>(sys:car-location <arg>x</arg>)</obj>.
+
+The more general form of <obj>deflocf</obj> is used when there is no
+locating function with exactly the right calling sequence.  Thus,
+
+<lisp>(deflocf <arg>function</arg> (<arg>function-args</arg>...) <arg>body</arg>...)
+</lisp>tells <obj>locf</obj> how to locate <obj>(<arg>function</arg> <arg>args</arg>...)</obj> by
+providing something like a macro defininition to expand into code to do
+the locating.  <arg>body</arg> computes the code; the last form in <arg>body</arg>
+returns a suitable expression.  <arg>function-args</arg> should be a lambda
+list, which can have optional and rest args.  <arg>body</arg> can substitute
+the values of the variables in this lambda list, to refer to the
+arguments in the form being <obj>locf</obj>'ed.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(deflocf car (list) `(sys:car-location ,list))
+</exdent></lisp>is how one could define the <obj>locf</obj>'ing of <obj>car</obj> using the general
+form of <obj>deflocf</obj>.  The simple form of <obj>deflocf</obj> can be regarded
+as an abbreviation for something like this.
+
+
+<lisp>(deflocf <arg>function</arg>)
+</lisp>says that <obj>locf</obj> should not be allowed on forms starting with <arg>function</arg>.
+This is useful only when <arg>function</arg> is defined as a macro or subst, for then
+<obj>locf</obj>'s normal action is to expand the macro call and try again.  In
+other cases there is no way to <obj>locf</obj> a function unless you define
+one, so you can simply refrain from defining any way.
+</description></definition></section></chapter>
+</document-part>

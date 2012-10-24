@@ -1,0 +1,310 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="area-chapter"></a>
+<chapter name="area-chapter" number="17" title="Areas"><index-entry index="concepts" title="area"></index-entry>
+
+<p>Storage in the Lisp Machine is divided into <arg>areas</arg>.  Each area
+contains related objects, of any type.  Areas are intended to give the
+user control over the paging behavior of the program, among other
+things.  Putting frequently used data and rarely used data in different
+areas can cause the frequently used data to occupy fewer pages.  For
+example, the system puts the debugging info alists of compiled functions
+in a special area so that the other list structure the functions point
+to will be more compact.
+</p>
+
+<p>Whenever a new object is created the area to be used can
+optionally be specified.  For example, instead of using <obj>cons</obj> you can
+use <obj>cons-in-area</obj> (see <ref definition-in-file="fd-con" key="cons-in-area-fun" title="Function cons-in-area" type="fun"></ref>).  Object-creating functions
+which take keyword arguments generally accept a <obj>:area</obj> argument.
+You can also control which area is used by binding <obj>default-cons-area</obj>
+(see <ref definition-in-file="areas" key="default-cons-area-var" title="Variable default-cons-area" type="var"></ref>); most functions that allocate storage
+use the value of this variable, by default, to specify the area to use.
+</p>
+
+<p>There is a default `working storage' area that collects those objects
+that the user has not chosen to control explicitly. 
+</p>
+
+<p indent="1">        Areas also give the user a handle to control the garbage
+collector.  Some areas can be declared to be <arg>static</arg>, which means that
+they change slowly and the garbage collector should not attempt to
+reclaim any space in them.  This can eliminate a lot of useless
+copying.  A static area can be explicitly
+garbage-collected at infrequent intervals when it is believed that that
+might be worthwhile. 
+</p>
+
+<p indent="1">        Each area can potentially have a different storage discipline,
+a different paging algorithm, and even a different data representation. 
+The microcode dispatches on attributes of the area at the
+appropriate times.  The structure of the machine makes the performance
+cost of these features negligible; information about areas is stored
+in extra bits in the memory mapping hardware where it can be quickly
+dispatched on by the microcode; these dispatches usually have to be
+done anyway to make the garbage collector work and to implement
+invisible pointers.  This feature is not currently used by the system,
+except for the list/structure distinction described below.
+</p>
+
+<p indent="1">        Each area has a name and a number.  The name is a symbol whose
+value is the number.  The number is an index into various internal
+tables.  Normally the name is treated as a special variable, so the
+number is what is given as an argument to a function that takes an area
+as an argument.  Thus, areas are not Lisp objects; you cannot
+pass an area itself as an argument to a function; you just pass its
+number.  There is a maximum number of areas (set at cold-load generation
+time); you can only have that many areas before the various internal
+tables overflow.  Currently (as this manual is written) the limit is
+256 areas, of which 64 already exist when you start.
+</p>
+
+<p indent="1">        The storage of an area consists of one or more <arg>regions</arg>.  Each region
+is a contiguous section of address space with certain homogeneous properties.
+The most important of these is the <arg>data representation type</arg>.  A given region
+can only store one type.  The two types that exist now are <arg>list</arg> and <arg>structure</arg>.
+A list is anything made out of conses (a closure for instance).  A structure is
+anything made out of a block of memory with a header at the front; symbols, strings,
+arrays, instances, compiled functions, etc.  Since lists and structures cannot be stored
+in the same region, they cannot be on the same page.  It is necessary to know about
+this when using areas to increase locality of reference.
+</p>
+
+<p>When you create an area, one region is created initially.  When you try
+to allocate memory to hold an object in some area, the system tries to
+find a region that has the right data representation type to hold this
+object, and that has enough room for it to fit.  If there isn't any such
+region, it makes a new one (or signals an error; see the <obj>:size</obj> option
+to <obj>make-area</obj>, below).  The size of the new region is an attribute of
+the area (controllable by the <obj>:region-size</obj> option to <obj>make-area</obj>).
+If regions are too large, memory may get taken up by a region and never used.
+If regions are too small, the system may run out of regions because regions,
+like areas, are defined by internal tables that have a fixed size (set at
+cold-load generation time).  Currently (as this manual is written) the limit
+is 256 regions, of which about 105 already exist when you start.
+(If you're wondering why the limit on regions isn't higher than the limit
+on areas, as it clearly ought to be, it's just because both limits have
+to be multiples of 256 for internal reasons, and 256 regions seem
+to be enough.)
+</p>
+<a name="Area Functions and Variables"></a>
+
+<section chapter-number="17" name="Area Functions and Variables" number="1" title="Area Functions and Variables"><definition>
+<define key="default-cons-area-var" name="default-cons-area" type="var"></define>
+
+<description>The value of this variable is the number of the area in which objects are created
+by default.  It is initially the number of <obj>working-storage-area</obj>.
+Giving <obj>nil</obj> where an area is required uses the value of <obj>default-cons-area</obj>.
+Note that to put objects into an area other than <obj>working-storage-area</obj>
+you can either bind this variable or use functions such as
+<obj>cons-in-area</obj> (see <ref definition-in-file="fd-con" key="cons-in-area-fun" title="Function cons-in-area" type="fun"></ref>) which take the area as an explicit argument.
+</description></definition><definition>
+<define key="background-cons-area-var" name="background-cons-area" type="var"></define>
+
+<description>The value of this variable is the number of a non-temporary area in
+which objects created as incidental side effects by system functions
+should be created.  This area is used whenever an object is created that
+should never be in a temporary area, even if <arg>default-cons-area</arg> is a
+temporary area.
+
+By default, this area is <obj>working-storage-area</obj>.
+</description></definition><definition><define key="make-area-fun" name="make-area" type="fun"><args><standard>&amp;key</standard> name size region-size representation gc read-only pdl room</args>
+</define>
+
+<description>Creates a new area, whose name and attributes are specified by the keywords.
+You must specify a symbol as a name; the symbol is <obj>setq</obj>'ed to
+the area-number of the new area, and that number is also returned,
+so that you can use <obj>make-area</obj> as the initialization of a <obj>defvar</obj>.
+
+Here are the meanings of the keywords:
+
+<table><tbody><tr><td><arg>name</arg></td>
+<td><index-entry index="keywords" title=":name make-area"></index-entry>
+A symbol that will be the name of the area.  This item is required.
+
+</td></tr><tr><td><arg>size</arg></td>
+<td><index-entry index="keywords" title=":size make-area"></index-entry>
+The maximum allowed size of the area, in words.  Defaults to infinite.
+(Actually, the default is the largest positive fixnum; but the area is
+not limited to that size!)
+If the number of words allocated to the area reaches this size, attempting
+to cons an object in the area will signal an error.
+
+</td></tr><tr><td><arg>region-size</arg></td>
+<td><index-entry index="keywords" title=":region-size make-area"></index-entry>
+The approximate size, in words, for regions within this area.  The
+default is the area size if a <obj>:size</obj> argument was given, otherwise it is a
+suitable medium size.  Note that if you specify <obj>:size</obj> and not
+<obj>:region-size</obj>, the area will have exactly one region.  When making an
+area that will grow very big, it is desirable to make the region size
+larger than the default region size to avoid creating very many regions
+and possibly overflowing the system's fixed-size region tables.
+
+</td></tr><tr><td><arg>representation</arg></td>
+<td><index-entry index="keywords" title=":representation make-area"></index-entry>
+The type of object to be contained in the area's initial region.
+The argument to this keyword can be <obj>:list</obj>, <obj>:structure</obj>, or a numeric code.
+<obj>:structure</obj> is the default.  If you are only going to cons lists in your
+area, you should specify <obj>:list</obj> so you don't get a useless structure region.
+
+</td></tr><tr><td><arg>gc</arg></td>
+<td><index-entry index="keywords" title=":gc make-area"></index-entry>
+The type of garbage-collection to be employed.  The choices are
+<obj>:dynamic</obj> (which is the default), <obj>:static</obj>, and <obj>:temporary</obj>.
+<obj>:static</obj> means that the area will not be copied by the garbage
+collector, and nothing in the area or pointed to by the area will ever
+be reclaimed, unless a garbage collection of this area is manually
+requested.  <obj>:temporary</obj> is like <obj>:static</obj>, but in addition you are
+allowed to use <obj>si:reset-temporary-area</obj> on this area.
+
+</td></tr><tr><td><arg>read-only</arg></td>
+<td><index-entry index="keywords" title=":read-only make-area"></index-entry>
+With an argument of <obj>t</obj>, causes the area to be made read-only.  Defaults
+to <obj>nil</obj>.  If an area is read-only, then any attempt to change anything
+in it (altering a data object in the area or creating a new object in the
+area) will signal an error unless <obj>sys:%inhibit-read-only</obj>
+(see <ref definition-in-file="fd-sub" key="sys:%inhibit-read-only-var" title="Variable sys:%inhibit-read-only" type="var"></ref>) is bound to a non-<obj>nil</obj> value.
+
+</td></tr><tr><td><arg>pdl</arg></td>
+<td><index-entry index="keywords" title=":pdl make-area"></index-entry>
+With an argument of <obj>t</obj>, makes the area suitable for storing
+regular-pdls of stack-groups.  This is a special attribute due to the
+pdl-buffer hardware.  Defaults to <obj>nil</obj>.  Areas for which this is <obj>nil</obj>
+may <arg>not</arg> be used to store regular-pdls.  Areas for which this is <obj>t</obj>
+are relatively slow to access; all references to pages in the area will
+take page faults to check whether the referenced location is really in
+the pdl-buffer.
+
+</td></tr><tr><td><arg>room</arg></td>
+<td><index-entry index="keywords" title=":room make-area"></index-entry>
+With an argument of <obj>t</obj>, adds this area to the list of areas that are
+displayed by default by the <obj>room</obj> function (see <ref definition-in-file="fd-hac" key="room-fun" title="Function room" type="fun"></ref>).
+</td></tr></tbody></table>
+
+<lisp><exdent amount="96"><caption>Example: </caption>(make-area :name 'foo-area
+           :gc :dynamic
+           :representation :list)
+</exdent></lisp></description></definition><definition><define key="describe-area-fun" name="describe-area" type="fun"><args>area</args>
+</define>
+
+<description><arg>area</arg> may be the name or the number of an area.  Various
+attributes of the area are printed.
+</description></definition><definition>
+<define key="area-list-var" name="area-list" type="var"></define>
+
+<description>The value of <obj>area-list</obj> is a list of the names of all existing areas.
+This list shares storage with the internal area name table, so you should
+not change it.
+</description></definition><definition><define key="%area-number-fun" name="%area-number" type="fun"><args>pointer</args>
+</define>
+
+<description>Returns the number of the area to which <arg>pointer</arg> points, or <obj>nil</obj> if
+it does not point within any known area.  The data-type of <arg>pointer</arg>
+is ignored.
+</description></definition><definition><define key="%region-number-fun" name="%region-number" type="fun"><args>pointer</args>
+</define>
+
+<description>Returns the number of the region to which <arg>pointer</arg> points, or <obj>nil</obj> if
+it does not point within any known region.  The data-type of <arg>pointer</arg>
+is ignored.  (This information is generally not very interesting to users;
+it is important only inside the system.)
+</description></definition><definition><define key="area-name-fun" name="area-name" type="fun"><args>number</args>
+</define>
+
+<description>Given an area number, returns the name.  This ``function'' is actually an array.
+</description></definition><definition><define key="si:reset-temporary-area-fun" name="si:reset-temporary-area" type="fun"><args>area-number</args>
+</define>
+
+<description>This very dangerous operation marks all the storage in area
+<arg>area-number</arg> as free and available for re-use.  Any data in the area
+is lost and pointers to it become meaningless.  In principle,
+this operation should only be used if you are sure there are no pointers
+into the area.
+
+If the area was not defined as temporary, this function gets an
+error.
+</description></definition><nopara></nopara>
+<p>See also <obj>cons-in-area</obj> (<ref definition-in-file="fd-con" key="cons-in-area-fun" title="Function cons-in-area" type="fun"></ref>), <obj>list-in-area</obj> (<ref definition-in-file="fd-con" key="list-in-area-fun" title="Function list-in-area" type="fun"></ref>),
+and <obj>room</obj> (<ref definition-in-file="fd-hac" key="room-fun" title="Function room" type="fun"></ref>).
+</p>
+</section><a name="Interesting Areas"></a>
+
+
+<section chapter-number="17" name="Interesting Areas" number="2" title="Interesting Areas"><p>This section lists the names of some of the areas and tells what they are for.
+Only the ones of the most interest to a user are listed; there are many others.
+</p>
+<definition>
+<define key="working-storage-area-var" name="working-storage-area" type="const"></define>
+
+<description>This is the normal value of <obj>default-cons-area</obj>.
+Most working data are consed in this area.
+</description></definition><definition>
+<define key="permanent-storage-area-var" name="permanent-storage-area" type="const"></define>
+
+<description>This area is to be used for permanent data, which will (almost) never become
+garbage.  Unlike <obj>working-storage-area</obj>, the contents of this area
+are not continually copied by the garbage collector; it is a static area.
+</description></definition><definition>
+<define key="sys:extra-pdl-area-var" name="sys:extra-pdl-area" type="const"></define>
+
+<description>The `number consing area' in which floating point numbers, ratios and bignums
+are normally created.  If a pointer to a number in this area is stored anywhere
+outside the machine registers and current stack, a copy of the number is
+made in <obj>working-storage-area</obj> and a pointer to the copy is stored instead.
+When <obj>sys:extra-pdl-area</obj> gets full, the all numbers pointed to by the
+registers and current stack are copied, and then nothing in the area can be
+in use any more, so it is marked as empty.
+</description></definition><definition>
+<define key="sys:p-n-string-var" name="sys:p-n-string" type="const"></define>
+
+<description>Print-names of symbols are stored in this area.
+</description></definition><definition>
+<define key="sys:nr-sym-var" name="sys:nr-sym" type="const"></define>
+
+<description>Contains most of the symbols in the Lisp world, except <obj>t</obj> and <obj>nil</obj>.
+</description></definition><definition>
+<define key="sys:resident-symbol-area-var" name="sys:resident-symbol-area" type="const"></define>
+
+<description>Contains the symbols <obj>t</obj> and <obj>nil</obj>.  <obj>nil</obj> is known to be at address zero.
+</description></definition><definition>
+<define key="sys:pkg-area-var" name="sys:pkg-area" type="const"></define>
+
+<description>This area contains packages, principally the hash tables with which <obj>intern</obj>
+keeps track of symbols.
+</description></definition><definition>
+<define key="macro-compiled-program-var" name="macro-compiled-program" type="const"></define>
+
+<description>Compiled functions (FEFs) are put here by the compiler and by <obj>fasload</obj>.
+So are the constants that they refer to.
+</description></definition><definition>
+<define key="sys:property-list-area-var" name="sys:property-list-area" type="const"></define>
+
+<description>This area holds the property lists of symbols.
+</description></definition></section><a name="compiler"></a>
+
+<section chapter-number="17" name="compiler" number="3" title="Errors Pertaining to Areas"><definition><define key="sys:area-overflow-condition" name="sys:area-overflow" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This is signaled on an attempt to make an area bigger than its declared maximum size.
+
+The condition instance supports the operations <obj>:area-name</obj> and
+<obj>:area-maximum-size</obj>.
+</description></definition><definition><define key="sys:region-table-overflow-condition" name="sys:region-table-overflow" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This is signaled if you run out of regions.
+</description></definition><definition><define key="sys:virtual-memory-overflow-condition" name="sys:virtual-memory-overflow" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This is signaled if all of virtual memory is part of some region and an
+attempt is made to allocate a new region.  There may be free space left
+in some regions in other areas, but there is no way to apply it to the
+area in which storage is to be allocated. 
+</description></definition><definition><define key="sys:cons-in-fixed-area-condition" name="sys:cons-in-fixed-area" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This is signaled if an attempt is made add a second region to a fixed
+area.  The fixed areas are certain areas, created at system
+initialization, that are only allowed a single region, because their
+contents must be contiguous in virtual memory.
+</description></definition></section></chapter>
+</document-part>

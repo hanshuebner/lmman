@@ -1,0 +1,244 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part>
+<chapter name="NIL" number="34" title="Initializations"><index-entry index="concepts" title="initialization"></index-entry>
+
+<p>There are a number of programs and facilities in the Lisp Machine that require
+that ``initialization routines'' be run either when the facility is first loaded, or when
+the system is booted, or both.  These initialization routines may set up data structures,
+start processes running, open network connections, and so on.
+</p>
+
+<p>It is easy to perform an action when a file is loaded: simply place an expression
+to perform the action in the file.  But this causes the action to be repeated
+if the file is loaded a second time, and often that should not be done.
+Also, this does not provide a way to cause actions to be taken at other times,
+such as when the system is booted or when a garbage collection is started.
+</p>
+
+<p>The <arg>initialization list</arg> facility serves these needs.  An
+initialization list is a symbol whose value is a list of
+<arg>initializations</arg>, put on by various programs, all to be performed
+when a certain event (such as a cold boot) happens.  When the event
+occurs, the system function in charge of handling the event
+(<obj>si:lisp-reinitialize</obj>, for cold boot) executes all the
+initializations on the appropriate list, in the order they are present
+on the list.
+</p>
+
+<p>Each initialization has a name, a form to be evaluated, a flag saying
+whether the form has yet been evaluated, and the source file of the
+initialization, if any.  The name is a string or a symbol and lies in
+the car of an initialization; thus <obj>assoc</obj> may be used on
+initialization lists to find particular initializations.
+</p>
+
+<p>System and user files place initializations on initialization lists
+using the function <obj>add-initialization</obj>.  The name of the
+initialization is specified so that the system can distinguish between
+adding a new initialization and repeating or changing the definition of
+an initialization already known: if there is already an initialization
+with the specified name, this is a new definition of the same
+initialization.  One can specify that the initialization
+be executed immediately if it is new but not if it is repeated.
+</p>
+
+<p>User programs are free to create their own initialization lists to be run
+at their own times.
+</p>
+<a name="System Initialization Lists"></a>
+
+
+<section chapter-number="34" name="System Initialization Lists" number="1" title="System Initialization Lists"><p>There are several initialization lists built into the system.
+Each one is invoked by the system at a specific time, such as
+immediately after a cold boot, or during <obj>disk-save</obj>.
+A user program can put initializations on these lists to cause
+actions to be taken at those times as the program needs.
+This avoids the need to modify system functions such as
+<obj>lisp-reinitialize</obj> or <obj>disk-save</obj> in order to make them interact
+properly with the user program.
+</p>
+
+<p>The system initialization lists are generally identified by keywords
+rather than by their actual names.  We name them here by their keywords.
+In each case, the actual initialization list symbol is in the <obj>si</obj>
+package, and its name is the conventional keyword followed by
+`-initialization-list'.  Thus, for <obj>:cold</obj>, there is
+<obj>si:cold-initialization-list</obj>.  This is just a convention.
+</p>
+
+<p>Unless otherwise specified, an initialization added to a system list
+is not run when it is added, only when the appropriate event happens.
+A few system lists are exceptions and also run each initialization
+when it is added.  Such exceptions are noted explicitly.
+</p>
+
+<p>     The <obj>:once</obj> initialization list is used for initializations that
+need to be done only once when the subsystem is loaded and must never be
+done again.  For example, there are some databases that need to be
+initialized the first time the subsystem is loaded, but should not be
+reinitialized every time a new version of the software is loaded into a
+currently running system.  This list is for that purpose.  When
+a new initialization is added to this list, it is executed immediately;
+but when an initialization is redefined, it is not executed again.
+</p>
+
+<p>     The <obj>:cold</obj> initialization list is used for things that must be
+run once at cold-boot time.  The initializations on this list are run
+after the ones on <obj>:system</obj> but before the ones on the <obj>:warm</obj> list.
+</p>
+
+<p>     The <obj>:warm</obj> initialization list is used for things which must be
+run every time the machine is booted, including warm boots.  The
+function that prints the greeting, for example, is on this list.  For cold
+boots, the <obj>:cold</obj> initializations are done before the <obj>:warm</obj> ones.
+</p>
+
+<p>     The <obj>:system</obj> initialization list is like the <obj>:warm</obj> list but
+its initializations are run <arg>before</arg> those of the <obj>:cold</obj> list.
+These are generally very fundamental system initializations that must be
+done before the <obj>:cold</obj> or <obj>:warm</obj> initializations can work.
+Initializing the process and window systems, the file system, and the
+Chaosnet NCP falls in this category.  By default, a new initialization
+added to this list is run immediately also.  In general, the system list
+should not be touched by user subsystems, though there may be cases when
+it is necessary to do so.
+</p>
+
+<p indent="1">        The <obj>:before-cold</obj> initialization list is used for things to
+be run by <obj>disk-save</obj>.  Thus they happen essentially at cold boot
+time, but only once when the world is saved, not each time it is started
+up.
+</p>
+
+<p indent="1">        The <obj>:site</obj> initialization list is run every time a new site
+table and host table are loaded by <obj>update-site-configuration-info</obj>.
+By default, adding an initialization
+to this list runs the initialization immediately, even if the
+initialization is not new.
+</p>
+
+<p indent="1">        The <obj>:site-option</obj> initialization list is run every time the
+site options may have changed; that is, when a new site tables are
+loaded or after a cold boot (to see the per-machine options of the
+machine being booted on).  By default, adding an initialization
+to this list runs the initialization immediately, even if the
+initialization is not new.
+</p>
+
+<p indent="1">        The <obj>:full-gc</obj> initialization list is run by the function
+<obj>si:full-gc</obj> just before garbage collecting.  Initializations might be
+put on this list to discard pointers to bulky objects, or to turn copy
+lists into cdr-coded form so that they will remain permanently
+localized.
+</p>
+
+<p indent="1">        The <obj>:after-flip</obj> initialization list is run after every
+garbage collection flip, at the beginning of scavenging.  These initializations
+can force various objects to be copied into new space near each other
+simply by referencing them all consecutively.
+</p>
+
+<p indent="1">        The <obj>:after-full-gc</obj> initialization list is run by the function
+<obj>si:full-gc</obj> just after a flip is done, but before scavenging.
+</p>
+
+<p indent="1">        The <obj>:login</obj> and <obj>:logout</obj> lists are run by the <obj>login</obj> and
+<obj>logout</obj> functions (see <ref definition-in-file="fd-hac" key="login-fun" title="Function login" type="fun"></ref>) respectively.  Note that <obj>disk-save</obj>
+calls <obj>logout</obj>.  Also note that often people don't call <obj>logout</obj>; they
+just cold-boot the machine.
+</p>
+</section><a name="time"></a>
+
+<section chapter-number="34" name="time" number="2" title="Programming Initializations"><definition><define key="add-initialization-fun" name="add-initialization" type="fun"><args>name form <standard>&amp;optional</standard> list-of-keywords initialization-list-name</args>
+</define>
+
+<description>Adds an initialization called <arg>name</arg> with the form <arg>form</arg> to the initialization list
+specified either by <arg>initialization-list-name</arg> or by keyword.  If the initialization
+list already contains an initialization called <arg>name</arg>,
+it is redefined to execute <arg>form</arg>.
+
+<arg>initialization-list-name</arg>, if specified, is a symbol that has as its
+value the initialization list.  If it is void, it is initialized (!)
+to <obj>nil</obj>, and is given a <obj>si:initialization-list</obj> property of <obj>t</obj>.
+If a keyword specifies an initialization list,
+<arg>initialization-list-name</arg> is ignored and should not be specified.
+
+The keywords allowed in <arg>list-of-keywords</arg> are of two kinds.  Most
+specify the initialization list to use; a list of such keywords makes up
+most of the previous section.  Aside from them, four other keywords are
+allowed, which specify when to evaluate <arg>form</arg>.  They are called
+the <arg>when-keywords</arg>.  Here is what they mean:
+
+<table><tbody><tr><td><obj>:normal</obj></td>
+<td><index-entry index="keywords" title=":normal add-initialization"></index-entry>
+Only place the form on the list.  Do not evaluate it until the time comes to do
+this kind of initialization.  This is the default unless <obj>:system</obj>, <obj>:once</obj>,
+<obj>:site</obj> or <obj>:site-option</obj> is specified.
+</td></tr><tr><td><obj>:first</obj></td>
+<td><index-entry index="keywords" title=":first add-initialization"></index-entry>
+Evaluate the form now if it is not flagged as having been evaluated before.
+This is the default if <obj>:system</obj> or <obj>:once</obj> is specified.
+</td></tr><tr><td><obj>:now</obj></td>
+<td><index-entry index="keywords" title=":now add-initialization"></index-entry>
+Evaluate the form now unconditionally as well as adding it to the list.
+</td></tr><tr><td><obj>:redo</obj></td>
+<td><index-entry index="keywords" title=":redo add-initialization"></index-entry>
+Do not evaluate the form now, but set the flag to <obj>nil</obj> even if the initialization
+is already in the list and flagged <obj>t</obj>.
+</td></tr></tbody></table>
+Actually, the keywords are compared with <obj>string-equal</obj> and may be in any
+package.  If both kinds of keywords are used, the list keyword should come
+<arg>before</arg> the when-keyword in <arg>list-of-keywords</arg>; otherwise the list keyword
+may override the when-keyword.
+
+The <obj>add-initialization</obj> function keeps each list ordered so that
+initializations added first are at the front of the list.  Therefore, by
+controlling the order of execution of the additions, you can control
+explicit dependencies on order of initialization.  Typically, the order
+of additions is controlled by the loading order of files.  The system
+list is the most critically ordered of the predefined
+lists.
+</description></definition>
+<p>The <obj>add-initialization</obj> keywords that specify an initialization list
+are defined by a variable; you can add new keywords to it.
+</p>
+<definition>
+<define key="si:initialization-keywords-var" name="si:initialization-keywords" type="var"></define>
+
+<description>Each element on this list defines the keyword for one initialization
+list.  Each element is a list of two or three elements.  The first is
+the keyword symbol that names the initialization list.  The second is a
+special variable, whose value is the initialization list itself.  The
+third, if present, is a symbol defining the default ``time'' at which
+initializations added to this list should be evaluated; it should be
+<obj>si:normal</obj>, <obj>si:now</obj>, <obj>si:first</obj>, or <obj>si:redo</obj>.  This third
+element just acts as a default; if the list of keywords passed to
+<obj>add-initialization</obj> contains one of the keywords <obj>normal</obj>, <obj>now</obj>,
+<obj>first</obj>, or <obj>redo</obj>, it overrides this default.  If the third
+element is not present, it is as if the third element were
+<obj>si:normal</obj>.
+</description></definition><definition><define key="delete-initialization-fun" name="delete-initialization" type="fun"><args>name <standard>&amp;optional</standard> keywords initialization-list-name</args>
+</define>
+
+<description>Removes the specified initialization from the specified initialization list.
+Keywords may be any of the list options allowed by <obj>add-initialization</obj>.
+</description></definition><definition><define key="initializations-fun" name="initializations" type="fun"><args>initialization-list-name <standard>&amp;optional</standard> redo-flag flag-value</args>
+</define>
+
+<description>Performs the initializations in the specified list.  <arg>redo-flag</arg> controls
+whether initializations that have already been performed are re-performed;
+<obj>nil</obj> means no, non-<obj>nil</obj> is yes, and the default is <obj>nil</obj>.  <arg>flag-value</arg> is the
+value to be bashed into the flag slot of an entry.  If it is unspecified, it
+defaults to <obj>t</obj>, meaning that the system should remember that the initialization
+has been done.  The reason that there is no convenient way for you to
+specify one of the specially-known-about lists is that you shouldn't
+be calling <obj>initializations</obj> on them.  This is done by the system
+when it is appropriate.
+</description></definition><definition><define key="reset-initializations-fun" name="reset-initializations" type="fun"><args>initialization-list-name</args>
+</define>
+
+<description>Bashes the flag of all entries in the specified list to <obj>nil</obj>, thereby causing
+them to get rerun the next time the function <obj>initializations</obj> is called on
+the initialization list.
+</description></definition></section></chapter>
+</document-part>

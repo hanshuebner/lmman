@@ -1,0 +1,82 @@
+body {
+        width: 40em;
+}
+
+h1, h2, h3 {
+        font-family: sans-serif;
+}
+
+div#navigation {
+        position: fixed;
+        right: 0px;
+        top: 2px;
+}
+
+div#navigation .nav-button {
+        font-family: sans-serif;
+        display: inline;
+        margin: 5px;
+        padding: 5px;
+        background-color: #CCCCCC;
+}
+
+div#navigation a {
+        text-decoration: none;
+}
+
+.arg {
+        font-style: italic;
+}
+
+.obj {
+        font-family: sans-serif;
+        font-size: 80%;
+        font-weight: bold;
+}
+
+.standard {
+        font-style: normal;
+}
+
+p {
+        margin-right: 1em;
+        margin-bottom: 1em;
+}
+
+p.indented {
+        text-indent: 2em;
+}
+
+pre {
+        margin-left: 3em;
+        margin-right: 3em;
+}
+
+.definition {
+        margin-top: 1em;
+        width: 100%;
+}
+
+.definition-type-title {
+        margin-right: 2em;
+        float: right;
+        font-style: italic;
+}
+
+.description {
+        margin-left: 3em;
+}
+
+.arguments {
+        font-style: italic;
+}
+
+table {
+        margin-top: 1em;
+        margin-left: 3em;
+        margin-right: 3em;
+}
+
+td {
+        vertical-align: top;
+}

@@ -1,0 +1,1695 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="array-chapter"></a>
+<chapter name="array-chapter" number="9" title="Arrays"><index-entry index="concepts" title="array"></index-entry>
+
+<index-entry index="concepts" title="rank of an array"></index-entry>
+
+<index-entry index="concepts" title="vector"></index-entry>
+
+<p indent="1">        An <arg>array</arg> is a Lisp object that consists of a group of cells,
+each of which may contain an object.  The individual cells are
+selected by numerical <arg>subscripts</arg>.  The type predicate <obj>arrayp</obj>
+(<ref definition-in-file="fd-dtp" key="arrayp-fun" title="Function arrayp" type="fun"></ref>) can be used to test whether an object is an array.
+
+<index-entry index="concepts" title="subscript"></index-entry>
+</p>
+
+<p indent="1">        The <arg>rank</arg> of an array (the number of dimensions which the
+array has) is the number of subscripts used to refer to one of the
+elements of the array.  The rank may be any integer from zero to seven,
+inclusively.  An array of rank zero has a single element which is
+addressed using no subscripts.  An array of rank one is called a
+<arg>vector</arg>; the predicate <obj>vectorp</obj> (see <ref definition-in-file="fd-dtp" key="vectorp-fun" title="Function vectorp" type="fun"></ref>) tests whether an
+object is a vector.  A series of functions called the generic sequence
+functions accept either a vector or a list as argument indiscriminantly
+(see <ref chapter="10" definition-in-file="generic" key="generic-sequence-functions" section="0" title="Generic Sequence Functions" type="section"></ref>).
+</p>
+<definition>
+<define key="array-rank-limit-var" name="array-rank-limit" type="const"></define>
+
+<description>A constant giving the upper limit on the rank of an array.  It is 8,
+indicating that 7 is the highest possible rank.
+</description></definition>
+<p indent="1">        The lowest value for any subscript is zero; the highest value
+is a property of the array.  Each dimension has a size, which is
+the lowest number which is too great to be used as a subscript.
+For example, in a one-dimensional array of five elements, the size
+of the one and only dimension is five, and the acceptable
+values of the subscript are zero, one, two, three, and four.
+</p>
+<definition>
+<define key="array-dimension-limit-var" name="array-dimension-limit" type="const"></define>
+
+<description>Any one dimension of an array must be smaller than this constant.
+</description></definition>
+<index-entry index="concepts" title="total size of an array"></index-entry>
+
+<p>The <arg>total size</arg> of an array is the number of elements in it.
+It is the product of the sizes of the dimensions of the array.
+</p>
+<definition>
+<define key="array-total-size-limit-var" name="array-total-size-limit" type="const"></define>
+
+<description>The total number of elements of any array must be smaller than this constant.
+</description></definition>
+<index-entry index="concepts" title="fill pointer"></index-entry>
+
+<index-entry index="concepts" title="simple array"></index-entry>
+
+<p>A vector can have a <arg>fill pointer</arg> which is a number saying how
+many elements of the vector are <arg>active</arg>.  For many purposes,
+only that many elements (starting with element zero) are used.
+</p>
+
+<p indent="1">        The most basic primitive functions for handling arrays are:
+<obj>make-array</obj>, which is used for the creation of arrays, <obj>aref</obj>,
+which is used for examining the
+contents of arrays, and <obj>aset</obj>, which
+is used for storing into arrays.
+</p>
+
+<p indent="1">        An array is a regular Lisp object, and it is common for an
+array to be the binding of a symbol, or the car or cdr of a cons,
+or, in fact, an element of an array.  There are many functions,
+described in this chapter, which take arrays as arguments and
+perform useful operations on them.
+</p>
+
+<p>Another way of handling arrays, inherited from Maclisp, is to treat them
+as functions.  In this case each array has a name, which is a symbol
+whose function definition is the array.  Zetalisp supports this
+style by allowing an array to be <arg>applied</arg> to arguments, as if it were
+a function.  The arguments are treated as subscripts and the array is
+referenced appropriately.  The <obj>store</obj> special form (see <ref definition-in-file="fd-arr" key="store-fun" title="Special Form store" type="spec"></ref>)
+is also supported.  This kind of array referencing is considered to be
+obsolete and is slower than the usual kind.  It should not be used in
+new programs.
+</p>
+<a name="Array Types"></a>
+
+
+<section chapter-number="9" name="Array Types" number="1" title="Array Types"><index-entry index="concepts" title="general array"></index-entry>
+
+<index-entry index="concepts" title="specialized array"></index-entry>
+
+<index-entry index="concepts" title="numeric array"></index-entry>
+
+<index-entry index="concepts" title="bit array"></index-entry>
+
+<index-entry index="concepts" title="string"></index-entry>
+
+<index-entry index="concepts" title="types of arrays"></index-entry>
+
+<p indent="1">        There are several types of arrays, which differ primarily in
+which kinds of elements they are allowed to hold.  Some types of arrays
+can hold Lisp objects of any type; such arrays are called <arg>general</arg>
+arrays.  The other types of array restrict the possible elements to a
+certain type, usually a numeric type.  Arrays of these types are called
+<arg>specialized</arg> arrays, or <arg>numeric</arg> arrays if the elements must be
+numbers.  For example, one array type permits only complex numbers with
+floating components to be stored in the array.  Another permits only the
+numbers zero and one; Common Lisp calls these <arg>bit arrays</arg>.  The
+contents of a black-and-white screen are stored in a bit array.  Several
+predicates exist for finding out which of these classifications an array
+belongs to: <obj>simple-vector-p</obj> (<ref definition-in-file="fd-dtp" key="simple-vector-p-fun" title="Function simple-vector-p" type="fun"></ref>),
+<obj>bit-vector-p</obj>, <obj>simple-bit-vector-p</obj>, <obj>stringp</obj> (<ref definition-in-file="fd-dtp" key="stringp-fun" title="Function stringp" type="fun"></ref>),
+and <obj>simple-string-p</obj>.
+</p>
+
+<p>The array types are known by a set of symbols whose names
+begin with <obj>art-</obj> (for `ARray Type').
+</p>
+
+<index-entry index="variables" title="art-q"></index-entry>
+
+<p indent="1">        The most commonly used type is called <obj>art-q</obj>.  An <obj>art-q</obj>
+array simply holds Lisp objects of any type.
+</p>
+
+<index-entry index="variables" title="art-q-list"></index-entry>
+
+<p indent="1">        Similar to the <obj>art-q</obj> type is the <obj>art-q-list</obj>.  Like the
+<obj>art-q</obj>, its elements may be any Lisp object.  The difference is that
+the <obj>art-q-list</obj> array doubles as a list; the function <obj>g-l-p</obj>
+takes an <obj>art-q-list</obj> array and returns a list whose elements are
+those of the array, and whose actual substance is that of the array.  If
+you <obj>rplaca</obj> elements of the list, the corresponding element of the
+array is changed, and if you store into the array, the corresponding
+element of the list changes the same way.  An attempt to <obj>rplacd</obj>
+the list causes a <obj>sys:rplacd-wrong-representation-type</obj> error,
+since arrays cannot implement that operation.
+</p>
+
+<index-entry index="variables" title="art-string"></index-entry>
+
+<p>The most important type of specialized array is the <arg>string</arg>, which is
+a vector of character objects.  Character strings are implemented by the
+<obj>art-string</obj> array type.  Many important system functions, including
+<obj>read</obj>, <obj>print</obj>, and <obj>eval</obj>, treat <obj>art-string</obj> arrays very
+differently from the other kinds of arrays.  There are also many
+functions specifically for operating on strings, described in chapter
+<ref chapter="11" definition-in-file="fd-str" key="string-chapter" title="Characters and Strings" type="chapter"></ref>.
+</p>
+
+<p>As viewed by Common Lisp programs, the elements of a string are character
+objects.  As viewed by traditional programs, the elements are integers in
+the range 0 to 255.  While most code still accesses strings in the
+traditional manner and gets integers out, the Common Lisp viewpoint is
+considered the correct one.  See <ref definition-in-file="fd-str" key="string-element-type" type="page"></ref> for a discussion
+of this conflict of conventions and its effect on programs.
+</p>
+
+<index-entry index="variables" title="art-fat-string"></index-entry>
+
+<p indent="1">        An <obj>art-fat-string</obj> array is a character string with wider
+characters, containing 16 bits rather than 8 bits.  The extra bits are
+ignored by many string operations, such as comparison, on these strings;
+typically they are used to hold font information.
+</p>
+
+<index-entry index="variables" title="art-1b"></index-entry>
+
+<index-entry index="variables" title="art-2b"></index-entry>
+
+<index-entry index="variables" title="art-4b"></index-entry>
+
+<index-entry index="variables" title="art-8b"></index-entry>
+
+<index-entry index="variables" title="art-16b"></index-entry>
+
+<p indent="1">        There is a set of types called <obj>art-1b, art-2b, art-4b, art-8b</obj>, 
+and <obj>art-16b</obj>;
+these names are short for `1 bit', `2 bits', and so on.  Each element
+of an <obj>art-<arg>n</arg>b</obj> array is a non-negative fixnum, and only the
+least significant <arg>n</arg> bits are remembered in the array; all of the others are discarded.  Thus <obj>art-1b</obj> arrays store only 0 and 1, and
+if you store a 5 into an <obj>art-2b</obj> array and look at it
+later, you will find a 1 rather than a 5.
+</p>
+
+<p indent="1">        These arrays are used when it is known beforehand that the
+fixnums which will be stored are non-negative and limited in size to a
+certain number of bits.  Their advantage over the <obj>art-q</obj> array is
+that they occupy less storage, because more than one element of the
+array is kept in a single machine word.  (For example, 32 elements
+of an <obj>art-1b</obj> array or 2 elements of an <obj>art-16b</obj> array
+fit into one word).
+</p>
+
+<index-entry index="variables" title="art-32b"></index-entry>
+
+<p indent="1">        There are also <obj>art-32b</obj> arrays which have 32 bits per element.
+Since fixnums only have 24 bits anyway, these are the same as <obj>art-q</obj>
+arrays except that they only hold fixnums.  They are not compatible
+with the other ``bit'' array types and generally should not be used.
+</p>
+
+<index-entry index="variables" title="art-half-fix"></index-entry>
+
+<p indent="1">        An <obj>art-half-fix</obj> array contains half-size fixnums.  Each element
+of the array is a signed 16-bit integer; the range is from -32768 to 32767
+inclusive.
+</p>
+
+<index-entry index="variables" title="art-float"></index-entry>
+
+<p indent="1">        The <obj>art-float</obj> array type is a special-purpose type whose
+elements are floats.  When storing into such an array the value (any
+kind of number) is converted to a float, using the <obj>float</obj>
+function (see <ref definition-in-file="fd-num" key="float-fun" title="Function float" type="fun"></ref>).  The advantage of
+storing floats in an <obj>art-float</obj> array rather than an <obj>art-q</obj>
+array is that the numbers in an <obj>art-float</obj> array are not true Lisp
+objects.  Instead the array remembers the numerical value, and when it
+is <obj>aref</obj>'ed creates a Lisp object (a float) to hold the value.
+Because the system does special storage management for bignums and
+floats that are intermediate results, the use of <obj>art-float</obj> arrays
+can save a lot of work for the garbage collector and hence greatly
+increase performance.  An intermediate result is a Lisp object passed
+as an argument, stored in a local variable, or returned as the value of
+a function, but not stored into a special variable, a non-<obj>art-float</obj>
+array, or list structure.  <obj>art-float</obj> arrays also provide a locality
+of reference advantage over <obj>art-q</obj> arrays containing floats, since
+the floats are contained in the array rather than being separate objects
+probably on different pages of memory.
+</p>
+
+<index-entry index="variables" title="art-fps-float"></index-entry>
+
+<p indent="1">        The <obj>art-fps-float</obj> array type is another special-purpose type
+whose elements are floats.  The internal format of this array is compatible
+with the PDP-11/VAX single-precision floating-point format.  The primary purpose
+of this array type is to interface with the FPS array processor, which can
+transfer data directly in and out of such an array.
+</p>
+
+<p indent="1">        Any type of number may be stored into an <obj>art-fps-float</obj>
+array, but it is, in effect, converted to a float, and then rounded
+off to the 24-bit precision of the PDP-11.  If the magnitude of the
+number is too large, the largest valid floating-point number is
+stored.  If the magnitude is too small, zero is stored.
+</p>
+
+<p indent="1">        When an element of an <obj>art-fps-float</obj> array is read, a new
+float is created containing the value, just as with an <obj>art-float</obj>
+array.
+</p>
+
+<index-entry index="variables" title="art-complex"></index-entry>
+
+<p indent="1">        The <obj>art-complex</obj> array type is a special purpose type whose
+elements are arbitrary numbers, which may be complex numbers.  (Most of
+the numeric array types can only hold real numbers.)  As compared with
+an ordinary <obj>art-q</obj> array, <obj>art-complex</obj> provides an advantage in
+garbage collection similar to what <obj>art-float</obj> provides for floating
+point numbers.
+</p>
+
+<index-entry index="variables" title="art-complex-float"></index-entry>
+
+<p indent="1">        The <obj>art-complex-float</obj> array type is a special purpose type whose
+elements are numbers (real or complex) whose real and imaginary parts
+are both floating point numbers.  (If you store a non-floating-point
+number into the array, its real and imaginary parts are converted to
+floating point.)  This provides maximum advantage in garbage collection
+if all the elements you wish to store in the array are numbers with
+floating point real and imaginary parts.
+</p>
+
+<index-entry index="variables" title="art-complex-fps-float"></index-entry>
+
+<p indent="1">        The <obj>art-complex-fps-float</obj> array type is similar to
+<obj>art-complex-float</obj> but each real or imaginary part is stored in the
+form used by the FPS array processor.  Each element occupies two words,
+the first being the real part and the second being the imaginary part.
+</p>
+
+<index-entry index="variables" title="art-stack-group-head"></index-entry>
+
+<index-entry index="variables" title="art-reg-pdl"></index-entry>
+
+<index-entry index="variables" title="art-special-pdl"></index-entry>
+
+<p indent="1">        There are three types of arrays which exist only for the
+implementation of <arg>stack groups</arg>; these types are called
+<obj>art-stack-group-head, art-special-pdl</obj>, and <obj>art-reg-pdl</obj>.  Their elements
+may be any Lisp object; their use is explained in the section on
+stack groups (see <ref chapter="14" definition-in-file="fd-sg" key="stack-group" section="0" title="Stack Groups" type="section"></ref>).
+
+<index-entry index="concepts" title="stack group"></index-entry>
+</p>
+<definition>
+<define key="array-types-var" name="array-types" type="const"></define>
+
+<description>The value of <obj>array-types</obj> is a list of all of the array type symbols
+such as <obj>art-q</obj>, <obj>art-4b</obj>, <obj>art-string</obj> and so on.  The values
+of these symbols are internal array type code numbers for the corresponding
+type.
+</description></definition><definition><define key="array-types-fun" name="array-types" type="fun"><args>array-type-code</args>
+</define>
+
+<description>Given an internal numeric array-type code, returns the symbolic name
+of that type.
+</description></definition><definition>
+<define key="array-elements-per-q-var" name="array-elements-per-q" type="const"></define>
+
+<description><obj>array-elements-per-q</obj> is an association list (see <ref definition-in-file="fd-con" key="alist" type="page"></ref>) which
+associates each array type symbol with the number of array elements
+stored in one word, for an array of that type.  If the value is negative,
+it is instead the number of words per array element, for arrays whose
+elements are more than one word long.
+</description></definition><definition><define key="array-elements-per-q-fun" name="array-elements-per-q" type="fun"><args>array-type-code</args>
+</define>
+
+<description>Given the internal array-type code number, returns the number of array
+elements stored in one word, for an array of that type.  If the value
+is negative, it is instead the number of words per array element, for
+arrays whose elements are more than one word long.
+</description></definition><definition>
+<define key="array-bits-per-element-var" name="array-bits-per-element" type="const"></define>
+
+<description>The value of <obj>array-bits-per-element</obj> is an association list (see <ref definition-in-file="fd-con" key="alist" type="page"></ref>)
+which associates each array type symbol with the number of
+bits of unsigned number it can hold, or <obj>nil</obj> if it can
+hold Lisp objects.  This can be used to tell whether an array
+can hold Lisp objects or not.
+</description></definition><definition><define key="array-bits-per-element-fun" name="array-bits-per-element" type="fun"><args>array-type-code</args>
+</define>
+
+<description>Given the internal array-type code numbers, returns the number of bits
+per cell for unsigned numeric arrays, or <obj>nil</obj> for a type of array
+that can contain Lisp objects.
+</description></definition><definition><define key="array-element-size-fun" name="array-element-size" type="fun"><args>array</args>
+</define>
+
+<description>Given an array, returns the number of bits that fit in an element of
+that array.  For arrays that can hold general Lisp objects, the result is
+25., based on the assumption that you will be storing fixnums in the array.
+</description></definition></section><a name="displaced-array"></a>
+
+
+<section chapter-number="9" name="displaced-array" number="2" title="Extra Features of Arrays"><index-entry index="concepts" title="array leader"></index-entry>
+
+<p indent="1">        Any array may have an <arg>array leader</arg>.  An array leader is
+like a one-dimensional <obj>art-q</obj> array which is attached to the main
+array.  So an array which has a leader acts like two arrays joined
+together.  The leader can be stored into and examined by a special set
+of functions, different from those used for the main array:
+<obj>array-leader</obj> and <obj>store-array-leader</obj>.  The leader is always
+one-dimensional, and always can hold any kind of Lisp object,
+regardless of the type or rank of the main part of the array.
+</p>
+
+<p>Very often the main part of an array is used as a homogeneous set of objects,
+while the leader is used to remember a few associated non-homogeneous pieces of data.
+In this case the leader is not used like an array; each slot is used
+differently from the others.  Explicit numeric subscripts should not be
+used for the leader elements of such an array; instead the leader should be described
+by a <obj>defstruct</obj> (see <ref definition-in-file="defstr" key="defstruct-fun" title="Macro defstruct" type="mac"></ref>).
+</p>
+
+<p indent="1">        By convention, element 0 of the array leader of an array is used
+to hold the number of elements in the array that are ``active''.  When the
+zeroth element is used this way, it is called a <arg>fill pointer</arg>.
+
+<index-entry index="concepts" title="fill pointer"></index-entry>
+Many array-processing functions recognize the fill pointer.
+For instance, if a string (an array of type <obj>art-string</obj>) has
+seven elements, but its fill pointer contains the value five, then only elements
+zero through four of the string are considered to be active; the string's
+printed representation is five characters long, string-searching
+functions stop after the fifth element, etc.  Fill pointers are
+a Common Lisp standard, but the array leader which is the Lisp Machine's
+way of implementing them is not standard.
+</p>
+<definition><define key="fill-pointer-fun" name="fill-pointer" type="fun"><args>array</args>
+</define>
+
+<description>Returns the fill pointer of <arg>array</arg>, or <obj>nil</obj> if it does
+not have one.  This function can be used with <obj>setf</obj> to set the
+array's fill pointer.
+</description></definition>
+<p indent="1">        The system does not provide a way to turn off the fill-pointer
+convention; any array that has a leader must reserve element 0 for the
+fill pointer or avoid using many of the array functions.
+</p>
+
+<p indent="1">        Leader element 1 is used in conjunction with the ``named
+structure'' feature to associate a user-defined data type with the array; see
+<ref definition-in-file="defstr" key="named-structure" type="page"></ref>.  Element 1 is treated specially only if the array is
+flagged as a named structure.
+</p>
+
+
+
+<subsection name="NIL" title="Displaced Arrays"><index-entry index="concepts" title="displaced array"></index-entry>
+
+<p indent="1">        The following explanation of <arg>displaced arrays</arg>
+is probably not of interest to a beginner; the section may
+be passed over without losing the continuity of the manual.
+</p>
+
+<p indent="1">        Normally, an array is represented as a small amount of header
+information, followed by the contents of the array.  However, sometimes
+it is desirable to have the header information removed from the actual
+contents.  One such occasion is when the contents of the array must be
+located in a special part of the Lisp Machine's address space, such as
+the area used for the control of input/output devices, or the bitmap
+memory which generates the TV image.  Displaced arrays are also used to
+reference certain special system tables, which are at fixed addresses
+so the microcode can access them easily.
+</p>
+
+<p indent="1">        If you give <obj>make-array</obj> a fixnum or a locative
+as the value of the <obj>:displaced-to</obj> option,
+it creates a displaced array referring to that location of virtual memory
+and its successors.
+References to elements of the displaced array will access that part
+of storage, and return the contents; the regular <obj>aref</obj> and
+<obj>aset</obj> functions are used.  If the array is one whose elements
+are Lisp objects, caution should be used: if the region of address
+space does not contain typed Lisp objects, the integrity of the storage
+system and the garbage collector could be damaged.  If the array is one
+whose elements are bytes (such as an <obj>art-4b</obj> type), then there
+is no problem.  It is important to know, in this case, that the elements
+of such arrays are allocated from the right to the left within the 32-bit
+words.
+</p>
+
+<index-entry index="concepts" title="indirect array"></index-entry>
+
+<p indent="1">        It is also possible to have an array whose contents, instead
+of being located at a fixed place in virtual memory, are defined
+to be those of another array.  Such an array is called an <arg>indirect array</arg>,
+and is created by giving <obj>make-array</obj> an array as
+the value of the <obj>:displaced-to</obj> option.
+The effects of this are simple if both arrays have the same type; the two
+arrays share all elements.  An object stored in a certain element
+of one can be retrieved from the corresponding element of the other.
+This, by itself, is not very useful.  However, if the arrays have
+different rank, the manner of accessing the elements differs.
+Thus, creating a one-dimensional array of nine elements,
+indirected to a second, two-dimensional array of three elements by three,
+allows access to the elements in either a one-dimensional or
+a two-dimensional manner.  Weird effects can be produced if
+the new array is of a different type than the old array; this is not
+generally recommended.  Indirecting an <obj>art-<arg>m</arg>b</obj> array to
+an <obj>art-<arg>n</arg>b</obj> array does the obvious thing.  For instance,
+if <arg>m</arg> is 4 and <arg>n</arg> is 1, each element of the first array
+contains four bits from the second array, in right-to-left order.
+</p>
+
+<index-entry index="concepts" title="index offset"></index-entry>
+
+<p indent="1">        It is also possible to create an indirect array in such a way
+that when an attempt is made to reference it or store into it, a
+constant number is added to the subscript given.  This number is called
+the <arg>index-offset</arg>.  It is specified at the time the indirect array
+is created, by giving a fixnum to <obj>make-array</obj>
+as the value of the <obj>:displaced-index-offset</obj> option.
+The length of the indirect array need not be the full length of
+the array it indirects to; it can be smaller.  Thus the indirect array can
+cover just a subrange of the original array.
+The <obj>nsubstring</obj> function (see <ref definition-in-file="fd-str" key="nsubstring-fun" title="Function nsubstring" type="fun"></ref>) creates such
+arrays.  When using index offsets with multi-dimensional arrays, there
+is only one index offset; it is added in to the linearized subscript
+which is the result of multiplying each subscript by an appropriate
+coefficient and adding them together.
+</p>
+</subsection></section><a name="Constructing Arrays"></a>
+
+<section chapter-number="9" name="Constructing Arrays" number="3" title="Constructing Arrays"><definition><define key="vector-fun" name="vector" type="fun"><args><standard>&amp;rest</standard> elements</args>
+</define>
+
+<description>Constructs and returns a vector (one-dimensional array)
+whose elements are the arguments given.
+</description></definition><definition><define key="make-array-fun" name="make-array" type="fun"><args>dimensions <standard>&amp;rest</standard> options.</args>
+</define>
+
+<description>This is the primitive function for making arrays.  <arg>dimensions</arg>
+should be a list of fixnums which are the dimensions of the array; the
+length of the list is the rank of the array.  For
+convenience you can specify a single fixnum rather than a list
+of one fixnum, when making a one-dimensional array.
+
+<arg>options</arg> are alternating keywords and values.  The keywords may be
+any of the following:
+
+<table><tbody><tr><td><obj>:area</obj></td><td>The value specifies in which area (see <ref chapter="17" definition-in-file="areas" key="area" section="0" title="Areas" type="section"></ref>) the array should be created.
+It should be either an area number (a fixnum), or <obj>nil</obj> to mean the
+default area.
+
+</td></tr><tr><td><obj>:type</obj></td><td>The value should be a symbolic name of an array type; the most
+common of these is <obj>art-q</obj>, which is the default.  The elements of the array are
+initialized according to the type:  if the array is of a type whose
+elements may only be fixnums or floats, then every element of the array is
+initially 0 or 0.0; otherwise, every element is initially
+<obj>nil</obj>.  See the description of array types on <ref definition-in-file="fd-arr" key="array-type" type="page"></ref>.
+The value of the option may also be the value of a symbol which is an array type name
+(that is, an internal numeric array type code).
+
+<index-entry index="concepts" title="array initialization"></index-entry>
+
+</td></tr><tr><td><obj>:element-type</obj></td><td><arg>element-type</arg> is the Common Lisp way to control the type of array made.
+Its value is a Common Lisp type specifier (see <ref chapter="2" definition-in-file="fd-dtp" key="type-specifiers" section="3" title="Type Specifiers" type="section"></ref>).
+The array type used is the most specialized which can allow as an element
+anything which fits the type specifier.  For example,
+if <arg>element-type</arg> is <obj>(mod 4)</obj>, you get an <obj>art-2b</obj> array.
+If <arg>element-type</arg> is <obj>(mod 3)</obj>, you still get an <obj>art-2b</obj> array,
+that being the most restrictive which can store the numbers 0, 1 and 2.
+If <obj>element-type</obj> is <obj>string-char</obj>, you get a string.
+
+</td></tr><tr><td><obj>:initial-value</obj></td><td></td></tr><tr><td><obj>:initial-element make-array</obj></td><td>Specifies the value to be stored in each element of the new
+array.  If it is not specified, it is <obj>nil</obj> for arrays that can
+hold arbitrary objects, or 0 or 0.0 for numeric arrays.
+<obj>:initial-value</obj> is obsolete.
+
+</td></tr><tr><td><obj>:initial-contents</obj></td><td>Specifies the entire contents for the new array, as a sequence of
+sequences of sequences...  Array element 1 3 4 of a three-dimensional
+array would be <obj>(elt (elt (elt <arg>initial-contents</arg> 1) 3) 4)</obj>.  Recall
+that a sequence is either a list or a vector, and vectors include
+strings.
+
+</td></tr><tr><td><obj>:displaced-to</obj></td><td>If this is not <obj>nil</obj>, a <arg>displaced</arg> array is constructed.
+If the value is a fixnum or a locative, <obj>make-array</obj> creates a
+regular displaced array which refers to the specified section of virtual
+address space.
+If the value is an array, <obj>make-array</obj> creates
+an indirect array (see <ref definition-in-file="fd-arr" key="indirect-array" type="page"></ref>).
+
+<index-entry index="concepts" title="displaced array"></index-entry>
+
+<index-entry index="concepts" title="indirect array"></index-entry>
+
+</td></tr><tr><td><obj>:leader-length</obj></td><td>The value should be a fixnum.  The array is made with a leader
+containing that many elements.  The elements of the leader are
+initialized to <obj>nil</obj> unless the <obj>:leader-list</obj> option is given (see
+below).
+
+</td></tr><tr><td><obj>:leader-list</obj></td><td>The value should be a list.  Call the number of elements in the list <arg>n</arg>.
+The first <arg>n</arg> elements of the leader are initialized from successive
+elements of this list.  If the <obj>:leader-length</obj> option is not specified,
+then the length of the leader is <arg>n</arg>.  If the <obj>:leader-length</obj>
+option is given, and its value is greater than <arg>n</arg>, then the <arg>n</arg>th
+and following leader elements are initialized to <obj>nil</obj>.  If its value
+is less than <arg>n</arg>, an error is signaled.  The leader elements are
+filled in forward order; that is, the car of the list is stored
+in leader element 0, the cadr in element 1, and so on.
+
+</td></tr><tr><td><obj>:fill-pointer</obj></td><td>The value should be a fixnum.  The array is made with a leader
+containing at least one element, and this fixnum is used to initialize
+that first element.
+
+Using the <obj>:fill-pointer</obj> option is equivalent to using
+<obj>:leader-list</obj> with a list one element long.  It avoids consing the list,
+and is also compatible with Common Lisp.
+
+</td></tr><tr><td><obj>:displaced-index-offset</obj></td><td>If this is present, the value of the <obj>:displaced-to</obj> option should be an
+array, and the value should be a non-negative fixnum; it is made to be the
+index-offset of the created indirect array. (See <ref definition-in-file="fd-arr" key="index-offset" type="page"></ref>.)
+
+<index-entry index="concepts" title="index offset"></index-entry>
+
+</td></tr><tr><td><obj>:named-structure-symbol</obj></td><td>If this is not <obj>nil</obj>, it is a symbol to
+be stored in the named-structure cell of the array.  The array
+made is tagged as a named structure (see <ref definition-in-file="defstr" key="named-structure" type="page"></ref>.)  If
+the array has a leader, then this symbol is stored in leader element
+1 regardless of the value of the <obj>:leader-list</obj> option.  If the array
+does not have a leader, then this symbol is stored in array element zero.
+Array leader slot 1, or array element 0, cannot be used for anything
+else in a named structure.
+
+</td></tr><tr><td><obj>:adjustable-p</obj></td><td>In strict Common Lisp, a non-<obj>nil</obj> value for this keyword makes the
+array <arg>adjustable</arg>, which means that it is permissible to change the
+array's size with <obj>adjust-array</obj> (<ref definition-in-file="fd-arr" key="adjust-array-fun" title="Function adjust-array" type="fun"></ref>).  This is
+because other Lisp systems have multiple representations for arrays, one
+which is simple and fast to access, and another which can be adjusted.
+The Lisp Machine does not require two representations: any array's size
+may be changed, and this keyword is ignored.
+</td></tr></tbody></table>
+
+<lisp><exdent amount="96"><caption>Examples: </caption><standard>;; Create a one-dimensional array of five elements.</standard>
+(make-array 5)
+<standard>;; Create a two-dimensional array,</standard>
+<standard>;; three by four, with four-bit elements.</standard>
+(make-array '(3 4) :type 'art-4b)
+<standard>;; Create an array with a three-element leader.</standard>
+(make-array 5 :leader-length 3)
+<standard>;; Create an array containing 5 <obj>t</obj>'s,</standard>
+<standard>;; and a fill pointer saying the array is full.</standard>
+(make-array 5 :initial-value t :fill-pointer 5)
+<standard>;; Create a named-structure with five leader</standard>
+<standard>;; elements, initializing some of them.</standard>
+(setq b (make-array 20 :leader-length 5 
+                       :leader-list '(0 nil foo)
+                       :named-structure-symbol 'bar))
+(array-leader b 0) =&gt; 0
+(array-leader b 1) =&gt; bar
+(array-leader b 2) =&gt; foo
+(array-leader b 3) =&gt; nil
+(array-leader b 4) =&gt; nil
+</exdent>
+<index-entry index="concepts" title="array leader"></index-entry>
+</lisp>
+        <obj>make-array</obj> returns the newly-created array, and also
+returns, as a second value, the number of words allocated in the process
+of creating the array, i.e. the <obj>%structure-total-size</obj> of the array.
+
+When <obj>make-array</obj> was originally implemented, it took its arguments
+in the following fixed pattern:
+
+<lisp>   (make-array <arg>area</arg> <arg>type</arg> <arg>dimensions</arg>
+               &amp;optional <arg>displaced-to</arg> <arg>leader</arg>
+                         <arg>displaced-index-offset</arg>
+                         <arg>named-structure-symbol</arg>)
+</lisp><arg>leader</arg> was a combination of the <obj>:leader-length</obj> and <obj>:leader-list</obj>
+options, and the list was in reverse order.
+This obsolete form is still supported so that old programs will continue
+to work, but the new keyword-argument form is preferred.
+</description></definition></section><a name="Accessing Array Elements"></a>
+
+<section chapter-number="9" name="Accessing Array Elements" number="4" title="Accessing Array Elements"><definition><define key="aref-fun" name="aref" type="fun"><args>array <standard>&amp;rest</standard> subscripts</args>
+</define>
+
+<description>Returns the element of <arg>array</arg> selected by the <arg>subscripts</arg>.
+The <arg>subscripts</arg> must be fixnums and their number must match the
+rank of <arg>array</arg>.
+</description></definition><definition><define key="cli:aref-fun" name="cli:aref" type="fun"><args>array <standard>&amp;rest</standard> subscripts</args>
+</define>
+
+<description>The Common Lisp version of <obj>aref</obj> differs from the traditional one in
+that it returns a character object rather than an integer when <arg>array</arg>
+is a string.  See chapter <ref chapter="11" definition-in-file="fd-str" key="string-chapter" title="Characters and Strings" type="chapter"></ref> for a discussion of the data
+type of string elements.
+</description></definition><definition><define key="aset-fun" name="aset" type="fun"><args>x array <standard>&amp;rest</standard> subscripts</args>
+</define>
+
+<description>Stores <arg>x</arg> into the element of <arg>array</arg> selected by the <arg>subscripts</arg>.
+The <arg>subscripts</arg> must be fixnums and their number must match the
+rank of <arg>array</arg>.  The returned value is <arg>x</arg>.
+
+<obj>aset</obj> is equivalent to
+
+<lisp>(setf (aref <arg>array</arg> <arg>subscripts</arg>...) <arg>x</arg>)
+</lisp></description></definition><definition><define key="aloc-fun" name="aloc" type="fun"><args>array <standard>&amp;rest</standard> subscripts</args>
+</define>
+
+<description>Returns a locative pointer to the element-cell of <arg>array</arg> selected by
+the <arg>subscripts</arg>.  The <arg>subscripts</arg> must be fixnums and their
+number must match the rank of <arg>array</arg>.  The array must not be
+a numeric array, since locatives to the middle of a numeric array
+are not allowed.
+See the explanation of locatives in <ref chapter="15" definition-in-file="fd-loc" key="locative" section="0" title="Locatives" type="section"></ref>.
+
+It is equivalent, and preferable, to write
+
+<lisp>(locf (aref <arg>array</arg> <arg>subscripts</arg>...))
+</lisp></description></definition><definition><define key="ar-1-force-fun" name="ar-1-force" type="fun"><args>array i</args>
+</define><define key="as-1-force-fun" name="as-1-force" type="fun"><args>value array i</args>
+</define><define key="ap-1-force-fun" name="ap-1-force" type="fun"><args>array i</args>
+</define>
+
+<description>These functions access an array with a single subscript regardless of
+how many dimensions the array has.  They may be useful for manipulating
+arrays of varying rank, as an alternative to maintaining and updating
+lists of subscripts or to creating one-dimensional indirect arrays.
+<obj>ar-1-force</obj> refers to an element,
+<obj>as-1-force</obj> sets an element, and <obj>ap-1-force</obj> returns a locative
+to the element's cell.
+
+In using these functions, you must pay attention to the order in which
+the array elements are actually stored.  See
+<ref chapter="9" definition-in-file="fd-arr" key="array-element-order-section" section="11" title="Order of Array Elements" type="section"></ref>.
+</description></definition><definition><define key="array-row-major-index-fun" name="array-row-major-index" type="fun"><args>array <standard>&amp;rest</standard> indices</args>
+</define>
+
+<description>Calculates the cumulative index in <arg>array</arg> of the element at indices <arg>indices</arg>.
+
+<lisp>(ar-1-force <arg>array</arg>
+   (array-row-major-index <arg>array</arg> <arg>indices</arg>...))
+</lisp>is equivalent to <obj>(aref <arg>array</arg> <arg>indices</arg>...)</obj>.
+</description></definition><definition><define key="array-leader-fun" name="array-leader" type="fun"><args>array i</args>
+</define>
+
+<description><arg>array</arg> should be an array with a leader, and <arg>i</arg> should be a
+fixnum.  This returns the <arg>i</arg> th element of <arg>array</arg>'s leader.
+This is analogous to <obj>aref</obj>.
+</description></definition><definition><define key="store-array-leader-fun" name="store-array-leader" type="fun"><args>x array i</args>
+</define>
+
+<description><arg>array</arg> should be an array with a leader, and <arg>i</arg> should be a
+fixnum.  <arg>x</arg> may be any object.  <arg>x</arg> is stored in the <arg>i</arg> th element
+of <arg>array</arg>'s leader.  <obj>store-array-leader</obj> returns <arg>x</arg>.
+This is analogous to <obj>aset</obj>.
+
+It is equivalent, and preferable, to write
+
+<lisp>(setf (array-leader <arg>array</arg> <arg>i</arg>) <arg>x</arg>)
+</lisp></description></definition><definition><define key="ap-leader-fun" name="ap-leader" type="fun"><args>array i</args>
+</define>
+
+<description>Is equivalent to
+
+<lisp>(locf (array-leader <arg>array</arg> <arg>i</arg>))
+</lisp></description></definition><need amount="1500"></need><nopara></nopara>
+<p>The following array accessing functions generally need not be used
+by users.
+</p>
+<definition><define key="ar-1-fun" name="ar-1" type="fun"><args>array i</args>
+</define><define key="ar-2-fun" name="ar-2" type="fun"><args>array i j</args>
+</define><define key="ar-3-fun" name="ar-3" type="fun"><args>array i j k</args>
+</define><define key="as-1-fun" name="as-1" type="fun"><args>x array i</args>
+</define><define key="as-2-fun" name="as-2" type="fun"><args>x array i j</args>
+</define><define key="as-3-fun" name="as-3" type="fun"><args>x array i j k</args>
+</define><define key="ap-1-fun" name="ap-1" type="fun"><args>array i</args>
+</define><define key="ap-2-fun" name="ap-2" type="fun"><args>array i j</args>
+</define><define key="ap-3-fun" name="ap-3" type="fun"><args>array i j k</args>
+</define>
+
+<description>These are obsolete versions of <obj>aref</obj>, <obj>aset</obj> and <obj>aloc</obj> that
+only work for one-, two-, or three-dimensional arrays, respectively.
+</description></definition>
+<p>The compiler turns <obj>aref</obj> into <obj>ar-1</obj>, <obj>ar-2</obj>, etc. according to
+the number of subscripts specified, turns <obj>aset</obj> into <obj>as-1</obj>,
+<obj>as-2</obj>, etc., and turns <obj>aloc</obj> into <obj>ap-1</obj>, <obj>ap-2</obj>, etc.  For
+arrays with more than three dimensions the compiler uses the slightly
+less efficient form since the special routines only exist for one, two
+and three dimensions.  There is no reason for any program to call
+<obj>ar-1</obj>, <obj>as-1</obj>, <obj>ar-2</obj>, etc.  explicitly; they are documented
+because there used to be such a reason, and many old programs use these
+functions.  New programs should use <obj>aref</obj>, <obj>aset</obj>, and <obj>aloc</obj>.
+</p>
+
+<p>A related function, provided only for Maclisp compatibility, is
+<obj>arraycall</obj> (<ref definition-in-file="fd-arr" key="arraycall-fun" title="Function arraycall" type="fun"></ref>).
+</p>
+<definition><define key="svref-fun" name="svref" type="fun"><args>vector index</args>
+</define>
+
+<description>A special accessing function defined by Common Lisp to work only on
+simple general vectors: vectors with no fill pointer, not displaced, and
+not adjustable (see <ref definition-in-file="fd-arr" key="adjustable-array" type="page"></ref>).  Some other Lisp systems open
+code <obj>svref</obj> so that it is faster than <obj>aref</obj>, but on the Lisp
+Machine <obj>svref</obj> is a synonym for <obj>cli:aref</obj>.
+</description></definition><definition><define key="bit-fun" name="bit" type="fun"><args>bit-vector index</args>
+</define><define key="sbit-fun" name="sbit" type="fun"><args>bit-vector index</args>
+</define><define key="char-fun" name="char" type="fun"><args>bit-vector index</args>
+</define><define key="schar-fun" name="schar" type="fun"><args>bit-vector index</args>
+</define>
+
+<description>Special accessing functions defined to work only on bit vectors, only on
+simple bit vectors, only on strings, and only on simple strings, respectively.
+On the Lisp Machine they are all synonyms for <obj>cli:aref</obj>.
+</description></definition><need amount="1500"></need><nopara></nopara>
+<p>Here are the conditions signaled for various errors in accessing arrays.
+</p>
+<definition><define key="sys:array-has-no-leader-condition" name="sys:array-has-no-leader" type="condition"><args>(<obj>sys:bad-array-mixin</obj> <obj>error</obj>)</args>
+</define>
+
+<description>This is signaled on a reference to the leader of an array that doesn't
+have one.  The condition instance supports the <obj>:array</obj> operation,
+which returns the array that was used.
+
+The <obj>:new-array</obj> proceed-type is provided.
+</description></definition><definition>
+<define key="sys:bad-array-mixin-flavor-condition" name="sys:bad-array-mixin" type="flavor-condition"></define>
+
+<description>This mixin is used in the conditions signaled by several kinds of
+problems pertaining to arrays.  It defines prompting for the
+<obj>:new-array</obj> proceed type.
+</description></definition><definition><define key="sys:array-wrong-number-of-dimensions-condition" name="sys:array-wrong-number-of-dimensions" type="condition"><args>(<obj>sys:bad-array-mixin</obj> <obj>error</obj>)</args>
+</define>
+
+<description>This is signaled when an array is referenced (either reading or writing)
+with the wrong number of subscripts; for example, <obj>(aref &quot;foo&quot; 1 2)</obj>.
+
+The <obj>:array</obj> operation on the condition instance returns the array
+that was used.  The <obj>:subscripts-used</obj> operation returns the
+list of subscripts used.
+
+The <obj>:new-array</obj> proceed type is provided.  It expects one argument,
+an array to use instead of the original one.
+</description></definition><definition><define key="sys:subscript-out-of-bounds-condition" name="sys:subscript-out-of-bounds" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This is signaled when there are the right number of subscripts but their
+values specify an element that falls outside the bounds of the array.
+The same condition is used by <obj>sys:%instance-ref</obj>, etc., when the
+index is out of bounds in the instance.
+
+The condition instance supports the operations <obj>:object</obj> and
+<obj>:subscripts-used</obj>, which return the array or instance and the list of
+subscripts.
+
+The <obj>:new-subscript</obj> proceed type is provided.  It takes an
+appropriate number of subscripts as arguments.  You should provide as
+many subscripts as there originally were.
+</description></definition><definition><define key="sys:number-array-not-allowed-condition" name="sys:number-array-not-allowed" type="condition"><args>(<obj>sys:bad-array-mixin</obj> <obj>error</obj>)</args>
+</define>
+
+<description>This is signaled by an attempt to use <obj>aloc</obj> on a numeric array
+such as an <obj>art-1b</obj> array or a string.
+The <obj>:array</obj> operation and the <obj>:new-array</obj> proceed type are available.
+</description></definition></section><a name="Getting Information About an Array"></a>
+
+<section chapter-number="9" name="Getting Information About an Array" number="5" title="Getting Information About an Array"><definition><define key="array-type-fun" name="array-type" type="fun"><args>array</args>
+</define>
+
+<description>Returns the symbolic type of <arg>array</arg>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(setq a (make-array '(3 5)))
+(array-type a) =&gt; art-q
+</exdent></lisp></description></definition><definition><define key="array-element-type-fun" name="array-element-type" type="fun"><args>array</args>
+</define>
+
+<description>Returns a type specifier which describes what elements could be stored in
+<arg>array</arg> (see <ref chapter="2" definition-in-file="fd-dtp" key="type-specifiers" section="3" title="Type Specifiers" type="section"></ref> for more about type specifiers).  Thus, if
+<arg>array</arg> is a string, the value is <obj>string-char</obj>.  If <arg>array</arg> is an
+<obj>art-1b</obj> array, the value is <obj>bit</obj>.  If <arg>array</arg> is an <obj>art-2b</obj>
+array, the value is <obj>(mod 4)</obj>.  If array is an <obj>art-q</obj> array,
+the value is <obj>t</obj> (the type which all objects belong to).
+</description></definition><definition><define key="array-length-fun" name="array-length" type="fun"><args>array</args>
+</define><define key="array-total-size-fun" name="array-total-size" type="fun"><args>array</args>
+</define>
+
+<description><arg>array</arg> may be any array.  This returns the total number
+of elements in <arg>array</arg>.  For a one-dimensional array,
+this is one greater than the maximum allowable subscript.
+(But if fill pointers are being used, you may want to use
+<obj>array-active-length</obj>.)
+
+<lisp><exdent amount="96"><caption>Example: </caption>(array-length (make-array 3)) =&gt; 3
+(array-length (make-array '(3 5))) =&gt; 15
+</exdent></lisp><obj>array-total-size</obj> is the Common Lisp name of this function.
+</description></definition><definition><define key="array-active-length-fun" name="array-active-length" type="fun"><args>array</args>
+</define>
+
+<description>If <arg>array</arg> does not have a fill pointer, then this returns whatever
+<obj>(array-length <arg>array</arg>)</obj> would have.  If <arg>array</arg> does have a
+fill pointer, <obj>array-active-length</obj> returns it.  See the general
+explanation of the use of fill pointers on <ref definition-in-file="fd-arr" key="fill-pointer" type="page"></ref>.
+</description></definition><definition><define key="array-rank-fun" name="array-rank" type="fun"><args>array</args>
+</define>
+
+<description>Returns the number of dimensions of <arg>array</arg>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(array-rank (make-array '(3 5))) =&gt; 2
+</exdent></lisp></description></definition><definition><define key="array-dimension-fun" name="array-dimension" type="fun"><args>array n</args>
+</define>
+
+<description>Returns the length of dimension <arg>n</arg> of <arg>array</arg>.  Examples:
+
+<lisp>(setq a (make-array '(2 3)))
+(array-dimension a 0) =&gt; 2
+(array-dimension a 1) =&gt; 3
+</lisp></description></definition><definition><define key="array-dimension-n-fun" name="array-dimension-n" type="fun"><args>n array</args>
+</define>
+
+<description><arg>array</arg> may be any kind of array, and <arg>n</arg> should be a fixnum.
+If <arg>n</arg> is between 1 and the rank of <arg>array</arg>,
+this returns the <arg>n</arg> th dimension of <arg>array</arg>.  If <arg>n</arg> is 0,
+this returns the length of the leader of <arg>array</arg>; if <arg>array</arg> has no
+leader it returns <obj>nil</obj>.  If <arg>n</arg> is any other value, this
+returns <obj>nil</obj>.
+
+This function is obsolete; use <obj>array-dimension-n</obj>,
+whose calling sequence is cleaner.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(setq a (make-array '(3 5) :leader-length 7))
+(array-dimension-n 1 a) =&gt; 3
+(array-dimension-n 2 a) =&gt; 5
+(array-dimension-n 3 a) =&gt; nil
+(array-dimension-n 0 a) =&gt; 7
+</exdent></lisp></description></definition><definition><define key="array-dimensions-fun" name="array-dimensions" type="fun"><args>array</args>
+</define>
+
+<description>Returns a list whose elements are the dimensions
+of <arg>array</arg>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(setq a (make-array '(3 5)))
+(array-dimensions a) =&gt; (3 5)
+</exdent></lisp>Note: the list returned by <obj>(array-dimensions <arg>x</arg>)</obj> is
+equal to the cdr of the list returned by <obj>(arraydims <arg>x</arg>)</obj>.
+</description></definition><definition><define key="arraydims-fun" name="arraydims" type="fun"><args>array</args>
+</define>
+
+<description>Returns a list whose first element is the symbolic name of
+the type of <arg>array</arg>, and whose remaining elements are its dimensions.
+<arg>array</arg> may be any array; it also may be a symbol whose
+function cell contains an array, for Maclisp compatibility (see <ref chapter="9" definition-in-file="fd-arr" key="maclisp-array" section="14" title="Maclisp Array Compatibility" type="section"></ref>).
+
+<lisp><exdent amount="96"><caption>Example: </caption>(setq a (make-array '(3 5)))
+(arraydims a) =&gt; (art-q 3 5)
+</exdent></lisp>
+<obj>arraydims</obj> is for Maclisp compatibility only.
+</description></definition><definition><define key="array-in-bounds-p-fun" name="array-in-bounds-p" type="fun"><args>array <standard>&amp;rest</standard> subscripts</args>
+</define>
+
+<description><obj>t</obj> if <arg>subscripts</arg> is a legal
+set of subscripts for <arg>array</arg>, otherwise <obj>nil</obj>.
+</description></definition><definition><define key="array-displaced-p-fun" name="array-displaced-p" type="fun"><args>array</args>
+</define>
+
+<description><obj>t</obj> if <arg>array</arg> is any kind of displaced array
+(including an indirect array), otherwise <obj>nil</obj>.
+<arg>array</arg> may be any kind of array.
+</description></definition><definition><define key="array-indirect-p-fun" name="array-indirect-p" type="fun"><args>array</args>
+</define>
+
+<description><obj>t</obj> if <arg>array</arg> is an indirect array, otherwise <obj>nil</obj>.
+<arg>array</arg> may be any kind of array.
+</description></definition><definition><define key="array-indexed-p-fun" name="array-indexed-p" type="fun"><args>array</args>
+</define>
+
+<description><obj>t</obj> if <arg>array</arg> is an indirect array with an index-offset,
+otherwise <obj>nil</obj>.
+<arg>array</arg> may be any kind of array.
+</description></definition><definition><define key="array-index-offset-fun" name="array-index-offset" type="fun"><args>array</args>
+</define>
+
+<description>Returns the index offset of <arg>array</arg> if it is an indirect
+array which has an index offset.  Otherwise it returns <obj>nil</obj>.
+<arg>array</arg> may be any kind of array.
+</description></definition><definition><define key="array-has-fill-pointer-p-fun" name="array-has-fill-pointer-p" type="fun"><args>array</args>
+</define>
+
+<description><obj>t</obj> if array has a fill pointer.  It must have a leader and leader
+element 0 must be an integer.  While array leaders are not standard
+Common Lisp, fill pointers are, and so is this function.
+</description></definition><definition><define key="array-has-leader-p-fun" name="array-has-leader-p" type="fun"><args>array</args>
+</define>
+
+<description><obj>t</obj> if <arg>array</arg> has a leader, otherwise <obj>nil</obj>.
+</description></definition><definition><define key="array-leader-length-fun" name="array-leader-length" type="fun"><args>array</args>
+</define>
+
+<description>Returns the length of <arg>array</arg>'s leader if it has one, or <obj>nil</obj> if it
+does not.
+</description></definition><definition><define key="adjustable-array-p-fun" name="adjustable-array-p" type="fun"><args>array</args>
+</define>
+
+<description>According to Common Lisp, returns <obj>t</obj> if <arg>array</arg>'s size may be
+adjusted with <obj>adjust-array</obj> (see below).  On the Lisp Machine,
+this function always returns <obj>t</obj>.
+</description></definition></section><a name="Changing the Size of an Array"></a>
+
+<section chapter-number="9" name="Changing the Size of an Array" number="6" title="Changing the Size of an Array"><definition><define key="adjust-array-fun" name="adjust-array" type="fun"><args>array new-dimensions <standard>&amp;key</standard> element-type initial-element initial-contents fill-pointer displaced-to displaced-index-offset</args>
+</define>
+
+<description>Modifies various aspects of an array.  <arg>array</arg> is modified in place if that is possible;
+otherwise, a new array is created and <arg>array</arg> is forwarded to it.  In either case,
+<arg>array</arg> is returned.  The arguments have the same names as arguments
+to <obj>make-array</obj>, and signify approximately the same thing.  However:
+
+<arg>element-type</arg> is just an error check.  <obj>adjust-array</obj> cannot change
+the array type.  If the array type of <arg>array</arg> is not what
+<arg>element-type</arg> would imply, you get an error.
+
+If <arg>displaced-to</arg> is specified, the new array is displaced as specified by
+<arg>displaced-to</arg> and <arg>displaced-index-offset</arg>.  If <arg>array</arg> itself was
+already displaced, it is modified in place provided that either <arg>array</arg>
+used to have an index offset and is supposed to continue to have one,
+or <arg>array</arg> had no index offset and is not supposed to have one.
+
+Otherwise, if <arg>initial-contents</arg> was specified, it is used to set all
+the contents of the array.  The old contents of <arg>array</arg> are irrelevant.
+
+Otherwise, each element of <arg>array</arg> is copied forward into the new array
+to the slot with the same indices, if there is one.  Any new slots whose
+indices were out of range in <arg>array</arg> are initialized to
+<arg>initial-element</arg>, or to <obj>nil</obj> or 0 if <arg>initial-element</arg> was not
+specified.
+
+<arg>fill-pointer</arg>, if specified, is used to set the fill pointer of the
+array.  Aside from this, the result has a leader with the same contents
+as the original <arg>array</arg>.
+
+<obj>adjust-array</obj> is the only function in this section which is standard
+Common Lisp.  According to Common Lisp, an array's dimensions can be
+adjusted only if the <obj>:adjustable</obj> option was specified to
+<obj>make-array</obj> with a non-<obj>nil</obj> value when the array was created
+(see <ref definition-in-file="fd-arr" key="adjustable-array" type="page"></ref>).  The Lisp Machine does not distinguish
+adjustable and nonadjustable arrays; any array may be adjusted.
+</description></definition><definition><define key="adjust-array-size-fun" name="adjust-array-size" type="fun"><args>array new-size</args>
+</define>
+
+<description>If <arg>array</arg> is a one-dimensional array, its size is
+changed to be <arg>new-size</arg>.  If <arg>array</arg> has more than one
+dimension, its size (<obj>array-length</obj>) is changed to <arg>new-size</arg>
+by changing only the last dimension.
+
+If <arg>array</arg> is made smaller, the extra elements are lost; if <arg>array</arg>
+is made bigger, the new elements are initialized in the same fashion as
+<obj>make-array</obj> (see <ref definition-in-file="fd-arr" key="make-array-fun" title="Function make-array" type="fun"></ref>) would initialize them: either to <obj>nil</obj> or 0,
+depending on the type of array.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(setq a (make-array 5))
+(aset 'foo a 4)
+(aref a 4) =&gt; foo
+(adjust-array-size a 2)
+(aref a 4) =&gt; <standard>an error occurs</standard>
+</exdent></lisp>        If the size of the array is being increased,
+<obj>adjust-array-size</obj> may have to allocate a new array somewhere.  In
+that case, it alters <arg>array</arg> so that references to it will be made to
+the new array instead, by means of invisible pointers (see
+<obj>structure-forward</obj>, <ref definition-in-file="fd-sub" key="structure-forward-fun" title="Function structure-forward" type="fun"></ref>).
+<obj>adjust-array-size</obj> returns the new array if it creates one, and
+otherwise it returns <arg>array</arg>.  Be careful to be consistent about
+using the returned result of <obj>adjust-array-size</obj>, because you may end
+up holding two arrays which are not the same (i.e. not <obj>eq</obj>), but
+which share the same contents.
+</description></definition><definition><define key="array-grow-fun" name="array-grow" type="fun"><args>array <standard>&amp;rest</standard> dimensions</args>
+</define>
+
+<description>Equivalent to <obj>(adjust-array <arg>array</arg> <arg>dimensions</arg>)</obj>.
+This name is obsolete.
+</description></definition><definition><define key="si:change-indirect-array-fun" name="si:change-indirect-array" type="fun"><args>array type dimlist displaced-p index-offset</args>
+</define>
+
+<description>Changes an indirect array <arg>array</arg>'s type, size, or target pointed at.
+<arg>type</arg> specifies the new array type, <arg>dimlist</arg> its new dimensions,
+<arg>displaced-p</arg> the target it should point to (an array, locative or fixnum),
+and <arg>index-offset</arg> the new offset in the new target.
+
+<arg>array</arg> is returned.
+</description></definition></section><a name="Arrays Overlaid With Lists"></a>
+
+
+<section chapter-number="9" name="Arrays Overlaid With Lists" number="7" title="Arrays Overlaid With Lists"><p>These functions manipulate <obj>art-q-list</obj> arrays, which were
+introduced on <ref definition-in-file="fd-arr" key="art-q-list-var" type="page"></ref>.
+</p>
+<definition><define key="g-l-p-fun" name="g-l-p" type="fun"><args>array</args>
+</define>
+
+<description><arg>array</arg> should be an <obj>art-q-list</obj> array.  This returns
+a list which shares the storage of <arg>array</arg>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(setq a (make-array 4 :type 'art-q-list))
+(aref a 0) =&gt; nil
+(setq b (g-l-p a)) =&gt; (nil nil nil nil)
+(rplaca b t)
+b =&gt; (t nil nil nil)
+(aref a 0) =&gt; t
+(aset 30 a 2)
+b =&gt; (t nil 30 nil)
+</exdent></lisp>
+<obj>g-l-p</obj> stands for `get list pointer'.
+</description></definition><nopara></nopara>
+<p>The following two functions work strangely, in the same way that <obj>store</obj>
+does, and should not be used in new programs.
+</p>
+<definition><define key="get-list-pointer-into-array-fun" name="get-list-pointer-into-array" type="fun"><args>array-ref</args>
+</define>
+
+<description>The argument <arg>array-ref</arg> is ignored, but should be a reference
+to an <obj>art-q-list</obj> array by applying the array to subscripts (rather
+than by <obj>aref</obj>).  This returns a list object which
+is a portion of the ``list'' of the array, beginning with the last
+element of the last array which has been called as a function.
+</description></definition><definition><define key="get-locative-pointer-into-array-fun" name="get-locative-pointer-into-array" type="fun"><args>array-ref</args>
+</define>
+
+<description><obj>get-locative-pointer-into-array</obj> is
+similar to <obj>get-list-pointer-into-array</obj>, except that it returns a
+locative, and doesn't require the array to be <obj>art-q-list</obj>.
+Use <obj>locf</obj> of <obj>aref</obj> in new programs.
+</description></definition></section><a name="Adding to the End of an Array"></a>
+
+<section chapter-number="9" name="Adding to the End of an Array" number="8" title="Adding to the End of an Array"><definition><define key="vector-push-fun" name="vector-push" type="fun"><args>x array</args>
+</define><define key="array-push-fun" name="array-push" type="fun"><args>array x</args>
+</define>
+
+<description><arg>array</arg> must be a one-dimensional array which has a fill pointer and <arg>x</arg> may
+be any object.  <obj>vector-push</obj> attempts to store <arg>x</arg> in the element
+of the array designated by the fill pointer, and increase the fill pointer
+by one.  If the fill pointer does not designate an element of the array (specifically,
+when it gets too big), it is unaffected and <obj>vector-push</obj> returns <obj>nil</obj>;
+otherwise, the two actions (storing and incrementing) happen uninterruptibly,
+and <obj>vector-push</obj> returns the <arg>former</arg> value of the fill pointer,
+i.e. the array index in which it stored <arg>x</arg>.  If the array is of type
+<obj>art-q-list</obj>, an operation similar to <obj>nconc</obj> has taken place,
+in that the element has been added to the list by changing the cdr of
+the formerly last element.  The cdr-coding is updated to ensure this.
+
+<obj>array-push</obj> is an old name for this function.  <obj>vector-push</obj> is
+preferable because it takes arguments in an order like <obj>push</obj>.
+</description></definition><definition><define key="vector-push-extend-fun" name="vector-push-extend" type="fun"><args>x array <standard>&amp;optional</standard> extension</args>
+</define><define key="array-push-extend-fun" name="array-push-extend" type="fun"><args>array x <standard>&amp;optional</standard> extension</args>
+</define>
+
+<description><obj>vector-push-extend</obj> is just like <obj>vector-push</obj> except
+that if the fill pointer gets too large, the array grows
+to fit the new element; it never ``fails'' the way <obj>vector-push</obj> does,
+and so never returns <obj>nil</obj>.  <arg>extension</arg> is the number of
+elements to be added to the array if it needs to grow.  It defaults
+to something reasonable, based on the size of the array.
+
+<obj>array-push-extend</obj> differs only in the order of arguments,
+</description></definition><definition><define key="vector-pop-fun" name="vector-pop" type="fun"><args>array</args>
+</define><define key="array-pop-fun" name="array-pop" type="fun"><args>array</args>
+</define>
+
+<description><arg>array</arg> must be a one-dimensional array which has a fill pointer.
+The fill pointer is decreased by one and the array element
+designated by the new value of the fill pointer is returned.
+If the new value does not designate any element of the array
+(specifically, if it had already reached zero), an error is caused.
+The two operations (decrementing and array referencing) happen
+uninterruptibly.  If the array is of type <obj>art-q-list</obj>, an operation
+similar to <obj>nbutlast</obj> has taken place.  The cdr-coding is
+updated to ensure this.
+
+The two names are synonymous.
+</description></definition><definition><define key="sys:fill-pointer-not-fixnum-condition" name="sys:fill-pointer-not-fixnum" type="condition"><args>(<obj>sys:bad-array-mixin</obj> <obj>error</obj>)</args>
+</define>
+
+<description>This is signaled when one of the functions in this section is used with
+an array whose leader element zero is not a fixnum.  Most other array
+accessing operations simply assume that the array has no fill
+pointer in such a case, but these cannot be performed without a fill
+pointer.
+
+The <obj>:array</obj> operation on the condition instance returns the array
+that was used.  The <obj>:new-array</obj> proceed type is supported, with one
+argument, an array.
+</description></definition></section><a name="Copying an Array"></a>
+
+
+<section chapter-number="9" name="Copying an Array" number="9" title="Copying an Array"><p>The new functions <obj>replace</obj> (<ref definition-in-file="generic" key="replace-fun" title="Function replace" type="fun"></ref>)
+and <obj>fill</obj> (<ref definition-in-file="generic" key="fill-fun" title="Function fill" type="fun"></ref>) are useful ways to
+copy parts of arrays.
+</p>
+<definition><define key="array-initialize-fun" name="array-initialize" type="fun"><args>array value <standard>&amp;optional</standard> start end</args>
+</define>
+
+<description>Stores <arg>value</arg> into all or part of <arg>array</arg>.
+<arg>start</arg> and <arg>end</arg> are optional indices which delimit the
+part of <arg>array</arg> to be initialized.  They default to the beginning
+and end of the array.
+
+This function is by far the fastest way to do the job.
+</description></definition><definition><define key="fillarray-fun" name="fillarray" type="fun"><args>array x</args>
+</define>
+
+<description>        <arg>array</arg> may be any type of array, or, for Maclisp
+compatibility, a symbol whose function cell contains an array.  It can
+also be <obj>nil</obj>, in which case an array of type <obj>art-q</obj> is created.
+There are two forms of this function, depending on the type of <arg>x</arg>.
+        If <arg>x</arg> is a list, then <obj>fillarray</obj> fills up <arg>array</arg> with
+the elements of <arg>list</arg>.  If <arg>x</arg> is too short to fill up all of
+<arg>array</arg>, then the last element of <arg>x</arg> is used to fill the
+remaining elements of <arg>array</arg>.  If <arg>x</arg> is too long, the extra
+elements are ignored.  If <arg>x</arg> is <obj>nil</obj> (the empty list), <arg>array</arg>
+is filled with the default initial value for its array type (<obj>nil</obj> or 0).
+        If <arg>x</arg> is an array (or, for Maclisp compatibility, a symbol
+whose function cell contains an array), then the elements of <arg>array</arg> are
+filled up from the elements of <arg>x</arg>.  If <arg>x</arg> is too small, then
+the extra elements of <arg>array</arg> are not affected.
+        If <arg>array</arg> is multi-dimensional, the elements are accessed
+in row-major order: the last subscript varies the most quickly.
+The same is true of <arg>x</arg> if it is an array.
+        <obj>fillarray</obj> returns <arg>array</arg>; or, if <arg>array</arg> was
+<obj>nil</obj>, the newly created array.
+</description></definition><definition><define key="listarray-fun" name="listarray" type="fun"><args>array <standard>&amp;optional</standard> limit</args>
+</define>
+
+<description>        <arg>array</arg> may be any type of array, or, for Maclisp
+compatibility, a symbol whose function cell contains an array.  
+<obj>listarray</obj> creates and returns a list whose elements are those of
+<arg>array</arg>.  If <arg>limit</arg> is present, it should be a fixnum, and only
+the first <arg>limit</arg> (if there are more than that many) elements of
+<arg>array</arg> are used, and so the maximum length of the returned list is
+<arg>limit</arg>. 
+        If <arg>array</arg> is multi-dimensional, the elements are accessed
+in row-major order: the last subscript varies the most quickly.
+</description></definition><definition><define key="list-array-leader-fun" name="list-array-leader" type="fun"><args>array <standard>&amp;optional</standard> limit</args>
+</define>
+
+<description><arg>array</arg> may be any type of array, or, for Maclisp
+compatibility, a symbol whose function cell contains an array.  
+<obj>list-array-leader</obj> creates and returns a list whose elements are those of
+<arg>array</arg>'s leader.  If <arg>limit</arg> is present, it should be a fixnum, and only
+the first <arg>limit</arg> (if there are more than that many) elements of
+<arg>array</arg>'s leader are used, and so the maximum length of the returned list is
+<arg>limit</arg>. If <arg>array</arg> has no leader, <obj>nil</obj> is returned.
+</description></definition><definition><define key="copy-array-contents-fun" name="copy-array-contents" type="fun"><args>from to</args>
+</define>
+
+<description><arg>from</arg> and <arg>to</arg> must be arrays.  The contents of <arg>from</arg>
+is copied into the contents of <arg>to</arg>, element by element.
+If <arg>to</arg> is shorter than <arg>from</arg>,
+the rest of <arg>from</arg> is ignored.  If <arg>from</arg> is shorter than
+<arg>to</arg>, the rest of <arg>to</arg> is filled with <obj>nil</obj>, 0 or 0.0
+according to the type of array.
+This function always returns <obj>t</obj>.
+
+The entire length of <arg>from</arg> or <arg>to</arg> is used, ignoring the fill
+pointers if any.  The leader itself is not copied.
+
+<obj>copy-array-contents</obj> works on multi-dimensional arrays.  <arg>from</arg> and
+<arg>to</arg> are linearized subscripts, and elements are taken in row-major
+order.
+</description></definition><definition><define key="copy-array-contents-and-leader-fun" name="copy-array-contents-and-leader" type="fun"><args>from to</args>
+</define>
+
+<description>Like <obj>copy-array-contents</obj>, but also copies the leader of <arg>from</arg>
+(if any) into <arg>to</arg>.
+</description></definition><definition><define key="copy-array-portion-fun" name="copy-array-portion" type="fun"><args>from-array from-start from-end to-array to-start to-end</args>
+</define>
+
+<description>The portion of the array <arg>from-array</arg> with indices greater than or
+equal to <arg>from-start</arg> and less than <arg>from-end</arg> is copied into
+the portion of the array <arg>to-array</arg> with indices greater than or
+equal to <arg>to-start</arg> and less than <arg>to-end</arg>, element by element.
+If there are more elements in the selected portion of <arg>to-array</arg>
+than in the selected portion of <arg>from-array</arg>, the extra elements
+are filled with the default value as by <obj>copy-array-contents</obj>.
+If there are more elements in the selected portion of <arg>from-array</arg>,
+the extra ones are ignored.  Multi-dimensional arrays are treated
+the same way as <obj>copy-array-contents</obj> treats them.
+This function always returns <obj>t</obj>.
+</description></definition><nopara></nopara>
+<p><obj>%blt</obj> and <obj>%blt-typed</obj> (<ref definition-in-file="fd-sub" key="%blt-fun" title="Function %blt" type="fun"></ref>) are often useful for copying
+parts of arrays.  They can be used to shift a part of an array either up
+or down.
+</p>
+</section><a name="Bit Array Functions"></a>
+
+
+<section chapter-number="9" name="Bit Array Functions" number="10" title="Bit Array Functions"><p>These functions perform bitwise boolean operations on the elements
+of arrays.
+</p>
+<definition><define key="bit-and-fun" name="bit-and" type="fun"><args>bit-array-1 bit-array-2 <standard>&amp;optional</standard> result-bit-array</args>
+</define><define key="bit-ior-fun" name="bit-ior" type="fun"><args>bit-array-1 bit-array-2 <standard>&amp;optional</standard> result-bit-array</args>
+</define><define key="bit-xor-fun" name="bit-xor" type="fun"><args>bit-array-1 bit-array-2 <standard>&amp;optional</standard> result-bit-array</args>
+</define><define key="bit-eqv-fun" name="bit-eqv" type="fun"><args>bit-array-1 bit-array-2 <standard>&amp;optional</standard> result-bit-array</args>
+</define><define key="bit-nand-fun" name="bit-nand" type="fun"><args>bit-array-1 bit-array-2 <standard>&amp;optional</standard> result-bit-array</args>
+</define><define key="bit-nor-fun" name="bit-nor" type="fun"><args>bit-array-1 bit-array-2 <standard>&amp;optional</standard> result-bit-array</args>
+</define><define key="bit-andc1-fun" name="bit-andc1" type="fun"><args>bit-array-1 bit-array-2 <standard>&amp;optional</standard> result-bit-array</args>
+</define><define key="bit-andc2-fun" name="bit-andc2" type="fun"><args>bit-array-1 bit-array-2 <standard>&amp;optional</standard> result-bit-array</args>
+</define><define key="bit-orc1-fun" name="bit-orc1" type="fun"><args>bit-array-1 bit-array-2 <standard>&amp;optional</standard> result-bit-array</args>
+</define><define key="bit-orc2-fun" name="bit-orc2" type="fun"><args>bit-array-1 bit-array-2 <standard>&amp;optional</standard> result-bit-array</args>
+</define>
+
+<description>Perform boolean operations element by element on bit arrays.  The
+arguments must match in their size and shape, and all of their elements
+must be integers.  Corresponding elements of <arg>bit-array-1</arg> and
+<arg>bit-array-2</arg> are taken and passed to one of <obj>logand</obj>, <obj>logior</obj>,
+etc. to get an element of the result array.
+
+If the third argument is non-<obj>nil</obj>, the result bits are stored into it,
+modifying it destructively.  If it is <obj>t</obj>, the results are stored in
+<arg>bit-array-1</arg>.  Otherwise a new array of the same type as
+<arg>bit-array-1</arg> is created and used for the result.  In any case, the
+value returned is the array where the results are stored.
+
+These functions were introduced for the sake of Common Lisp, which
+defines them only when all arguments are specialized arrays that hold
+only zero or one.  In the Lisp machine, they accept not only such arrays
+(<obj>art-1b</obj> arrays) but any arrays whose elements are integers.
+</description></definition><definition><define key="bit-not-fun" name="bit-not" type="fun"><args>bit-array <standard>&amp;optional</standard> result-bit-array</args>
+</define>
+
+<description>Performs <obj>lognot</obj> on each element of <arg>bit-array</arg> to get an element of
+the result.  If <arg>result-bit-array</arg> is non-<obj>nil</obj>, the result elements
+are stored in that; it must match <arg>bit-array</arg> in size and shape.
+Otherwise, a new array of the same type as <arg>bit-array</arg> is created and
+used to hold the result.  The value of <obj>bit-not</obj> is the array where the
+results are stored.
+</description></definition><definition><define key="bitblt-fun" name="bitblt" type="fun"><args>alu width height from-array from-x from-y to-array to-x to-y</args>
+</define>
+
+<description><arg>from-array</arg> and <arg>to-array</arg> must be two-dimensional arrays
+of bits or bytes (<obj>art-1b</obj>, <obj>art-2b</obj>, <obj>art-4b</obj>, <obj>art-8b</obj>,
+<obj>art-16b</obj>, or <obj>art-32b</obj>).  <obj>bitblt</obj> copies a rectangular portion of <arg>from-array</arg>
+into a rectangular portion of <arg>to-array</arg>.  The value stored
+can be a Boolean function of the new value and the value already there,
+under the control of <arg>alu</arg> (see below).  This function is most commonly used
+in connection with raster images for TV displays.
+
+The top-left corner of the source rectangle is <obj>(ar-2-reverse
+<arg>from-array</arg> <arg>from-x</arg> <arg>from-y</arg>)</obj>.  The top-left corner of the
+destination rectangle is <obj>(ar-2-reverse <arg>to-array</arg> <arg>to-x</arg>
+<arg>to-y</arg>)</obj>.  <arg>width</arg> and <arg>height</arg> are the dimensions of both
+rectangles.  If <arg>width</arg> or <arg>height</arg> is zero, <obj>bitblt</obj> does
+nothing.  The <arg>x</arg> coordinates and <arg>width</arg> are used as the second
+dimension of the array, since the horizontal index is the one which
+varies fastest in the screen buffer memory and the array's last index
+varies fastest in row-major order.
+
+<arg>from-array</arg> and <arg>to-array</arg> are allowed to be the same array.
+<obj>bitblt</obj> normally traverses the arrays in increasing order of <arg>x</arg>
+and <arg>y</arg> subscripts.  If <arg>width</arg> is negative, then <obj>(abs <arg>width</arg>)</obj>
+is used as the width, but the processing of the <arg>x</arg> direction is done
+backwards, starting with the highest value of <arg>x</arg> and working down.
+If <arg>height</arg> is negative it is treated analogously.  When
+<obj>bitblt</obj>'ing an array to itself, when the two rectangles overlap, it
+may be necessary to work backwards to achieve effects such
+as shifting the entire array downwards by a certain number of rows.  Note
+that negativity of <arg>width</arg> or <arg>height</arg> does not affect the
+(<arg>x</arg>, <arg>y</arg>) coordinates specified by the arguments, which are still the
+top-left corner even if <obj>bitblt</obj> starts at some other corner.
+
+If the two arrays are of different types, <obj>bitblt</obj> works bit-wise
+and not element-wise.  That is, if you <obj>bitblt</obj> from an <obj>art-2b</obj>
+array into an <obj>art-4b</obj> array, then two elements of the <arg>from-array</arg>
+correspond to one element of the <arg>to-array</arg>.
+
+If <obj>bitblt</obj> goes outside the bounds of the source array, it wraps
+around.  This allows such operations as the replication of a small
+stipple pattern through a large array.  If <obj>bitblt</obj> goes outside
+the bounds of the destination array, it signals an error.
+
+If <arg>src</arg> is an element of the source rectangle, and <arg>dst</arg>
+is the corresponding element of the destination rectangle, then
+<obj>bitblt</obj> changes the value of <arg>dst</arg> to
+<obj>(boole <arg>alu</arg> <arg>src</arg> <arg>dst</arg>)</obj>.  See the <obj>boole</obj>
+function (<ref definition-in-file="fd-num" key="boole-fun" title="Function boole" type="fun"></ref>).  There are symbolic names for some of the
+most useful <arg>alu</arg> functions; they are <obj>tv:alu-seta</obj> (plain
+copy), <obj>tv:alu-ior</obj> (inclusive or), <obj>tv:alu-xor</obj> (exclusive
+or), and <obj>tv:alu-andca</obj> (and with complement of source).
+
+<obj>bitblt</obj> is written in highly-optimized microcode and goes very much
+faster than the same thing written with ordinary <obj>aref</obj> and <obj>aset</obj>
+operations would.  Unfortunately this causes <obj>bitblt</obj> to have a couple
+of strange restrictions.  Wrap-around does not work correctly if
+<arg>from-array</arg> is an indirect array with an index-offset.  <obj>bitblt</obj>
+signals an error if the second dimensions of <arg>from-array</arg>
+and <arg>to-array</arg> are not both integral multiples of the machine word
+length.  For <obj>art-1b</obj> arrays, the second dimension must be a multiple
+of 32., for <obj>art-2b</obj> arrays it must be a multiple of 16., etc.
+</description></definition></section><a name="array-element-order-section"></a>
+
+
+<section chapter-number="9" name="array-element-order-section" number="11" title="Order of Array Elements"><p>Currently, multi-dimensional arrays are stored in row-major order, as
+in Maclisp., and as specified by Common Lisp.  This means that
+successive memory locations differ in the last subscript.  In older
+versions of the system, arrays were stored in column-major order.
+</p>
+
+<p>Most user code has no need to know about which order array elements are
+stored in.  There are three known reasons to care: use of
+multidimensional indirect arrays; paging efficiency
+(if you want to reference every element in a
+multi-dimensional array and move linearly through memory to improve
+locality of reference, you must vary the last subscript fastest
+in row-major order);
+and access to the TV screen or to arrays of pixels copied to or from the
+screen with <obj>bitblt</obj>.  The latter is the most important one.
+</p>
+
+<p>The bits on the screen are actually stored in rows, which means that the
+dimension that varies fastest has to be the horizontal position.  As a
+result, if arrays are stored in row-major order, the horizontal position
+must be the second subscript, but if arrays are stored in column-major
+order, the horizontal position must be the first subscript.  To ease the
+conversion of code that uses arrays of pixels, several bridging
+functions are provided:
+</p>
+<definition><define key="make-pixel-array-fun" name="make-pixel-array" type="fun"><args>width height <standard>&amp;rest</standard> options</args>
+</define>
+
+<description>This is like <obj>make-array</obj> except that the dimensions of the array are
+<arg>width</arg> and <arg>height</arg>, in whichever order is correct.  <arg>width</arg> is
+used as the dimension in the subscript that varies fastest in memory,
+and <arg>height</arg> as the other dimension.  <arg>options</arg> are passed along to
+<obj>make-array</obj> to specify everything but the size of the array.
+</description></definition><definition><define key="pixel-array-width-fun" name="pixel-array-width" type="fun"><args>array</args>
+</define>
+
+<description>Returns the extent of <arg>array</arg>, a two-dimensional array, in the
+dimension that varies faster through memory.  For a screen array, this
+is always the width.
+</description></definition><definition><define key="pixel-array-height-fun" name="pixel-array-height" type="fun"><args>array</args>
+</define>
+
+<description>Returns the extent of <arg>array</arg>, a two-dimensional array, in the
+dimension that varies slower through memory.  For a screen array, this
+is always the height.
+</description></definition><definition><define key="ar-2-reverse-fun" name="ar-2-reverse" type="fun"><args>array horizontal-index vertical-index</args>
+</define>
+
+<description>Returns the element of <arg>array</arg> at <arg>horizontal-index</arg> and
+<arg>vertical-index</arg>.  <arg>horizontal-index</arg> is used as the subscript in
+whichever dimension varies faster through memory.
+</description></definition><definition><define key="as-2-reverse-fun" name="as-2-reverse" type="fun"><args>newvalue array horizontal-index vertical-index</args>
+</define>
+
+<description>Stores <arg>newvalue</arg> into the element of <arg>array</arg> at
+<arg>horizontal-index</arg> and <arg>vertical-index</arg>.  <arg>horizontal-index</arg> is
+used as the subscript in whichever dimension varies faster through
+memory.
+</description></definition>
+<p>Code that was written before the change in order of array indices can be
+converted by replacing calls to <obj>make-array</obj>, <obj>array-dimension</obj>,
+<obj>aref</obj> and <obj>aset</obj> with these functions.  It can then work either in
+old systems or in new ones.  In more complicated circumstances, you can
+facilitate conversion by writing code which tests this variable.
+</p>
+<definition>
+<define key="sys:array-index-order-var" name="sys:array-index-order" type="const"></define>
+
+<description>This is <obj>t</obj> in more recent system versions which store arrays in
+row-major order (last subscript varies fastest).  It is <obj>nil</obj> in older
+system versions which store arrays in column-major order.
+</description></definition></section><a name="Matrices and Systems of Linear Equations"></a>
+
+
+<section chapter-number="9" name="Matrices and Systems of Linear Equations" number="12" title="Matrices and Systems of Linear Equations"><p>The functions in this section perform some useful matrix operations.
+The matrices are represented as two-dimensional Lisp arrays.  These
+functions are part of the mathematics package rather than the kernel
+array system, hence the `<obj>math:</obj>' in the names.
+</p>
+<definition><define key="math:multiply-matrices-fun" name="math:multiply-matrices" type="fun"><args>matrix-1 matrix-2 <standard>&amp;optional</standard> matrix-3</args>
+</define>
+
+<description>Multiplies <arg>matrix-1</arg> by <arg>matrix-2</arg>.  If <arg>matrix-3</arg> is supplied,
+<obj>multiply-matrices</obj> stores the results into <arg>matrix-3</arg> and returns
+<arg>matrix-3</arg>, which should be of exactly the right dimensions for
+containing the result of the multiplication; otherwise it creates an
+array to contain the answer and returns that.  All matrices must be
+either one- or two-dimensional arrays, and the first dimension of
+<arg>matrix-2</arg> must equal the second dimension of <arg>matrix-1</arg>.
+</description></definition><definition><define key="math:invert-matrix-fun" name="math:invert-matrix" type="fun"><args>matrix <standard>&amp;optional</standard> into-matrix</args>
+</define>
+
+<description>Computes the inverse of <arg>matrix</arg>.  If <arg>into-matrix</arg> is supplied,
+stores the result into it and returns it; otherwise it creates an array
+to hold the result and returns that.  <arg>matrix</arg> must be two-dimensional
+and square.  The Gauss-Jordan algorithm with partial pivoting is used.
+Note: if you want to solve a set of simultaneous equations, you should
+not use this function; use <obj>math:decompose</obj> and <obj>math:solve</obj> (see
+below).
+</description></definition><definition><define key="math:transpose-matrix-fun" name="math:transpose-matrix" type="fun"><args>matrix <standard>&amp;optional</standard> into-matrix</args>
+</define>
+
+<description>Transposes <arg>matrix</arg>.  If <arg>into-matrix</arg> is supplied, stores the
+result into it and returns it; otherwise it creates an array to hold the
+result and returns that.  <arg>matrix</arg> must be a two-dimensional array.
+<arg>into-matrix</arg>, if provided, must be two-dimensional and have
+exactly the right dimensions to hold the transpose of <arg>matrix</arg>.
+</description></definition><definition><define key="math:determinant-fun" name="math:determinant" type="fun"><args>matrix</args>
+</define>
+
+<description>Returns the determinant of <arg>matrix</arg>.  <arg>matrix</arg> must be a two-dimensional
+square matrix.
+</description></definition>
+<p>The next two functions are used to solve sets of simultaneous linear
+equations.  <obj>math:decompose</obj> takes a matrix holding the coefficients of the
+equations and produces the LU decomposition; this decomposition can then
+be passed to <obj>math:solve</obj> along with a vector of right-hand sides
+to get the values of the variables.  If you want to solve the same
+equations for many different sets of right-hand side values, you only need to call
+<obj>math:decompose</obj> once.  In terms of the argument names used below, these
+two functions exist to solve the vector equation <arg>A</arg> <arg>x</arg> = <arg>b</arg>
+for <arg>x</arg>.  <arg>A</arg> is a matrix.  <arg>b</arg> and <arg>x</arg> are vectors.
+</p>
+<definition><define key="math:decompose-fun" name="math:decompose" type="fun"><args>a <standard>&amp;optional</standard> lu ps</args>
+</define>
+
+<description>Computes the LU decomposition of matrix <arg>a</arg>.  If <arg>lu</arg> is non-<obj>nil</obj>,
+stores the result into it and returns it; otherwise it creates an array
+to hold the result, and returns that.  The lower triangle of <arg>lu</arg>, with
+ones added along the diagonal, is L, and the upper triangle of <arg>lu</arg> is
+U, such that the product of L and U is <arg>a</arg>.  Gaussian elimination with
+partial pivoting is used.  The <arg>lu</arg> array is permuted by rows according
+to the permutation array <arg>ps</arg>, which is also produced by this function;
+if the argument <arg>ps</arg> is supplied, the permutation array is stored into it;
+otherwise, an array is created to hold it.  This function returns two values,
+the LU decomposition and the permutation array.
+</description></definition><definition><define key="math:solve-fun" name="math:solve" type="fun"><args>lu ps b <standard>&amp;optional</standard> x</args>
+</define>
+
+<description>This function takes the LU decomposition and associated permutation
+array produced by <obj>math:decompose</obj> and solves the set of simultaneous
+equations defined by the original matrix <arg>a</arg> given to <obj>math:decompose</obj>
+and the right-hand sides in the vector <arg>b</arg>.  If <arg>x</arg> is supplied, the solutions
+are stored into it and it is returned; otherwise an array is
+created to hold the solutions and that is returned.  <arg>b</arg> must
+be a one-dimensional array.
+</description></definition><definition><define key="math:list-2d-array-fun" name="math:list-2d-array" type="fun"><args>array</args>
+</define>
+
+<description>Returns a list of lists containing the values in <arg>array</arg>, which must
+be a two-dimensional array.  There is one element for each row; each
+element is a list of the values in that row.
+</description></definition><definition><define key="math:fill-2d-array-fun" name="math:fill-2d-array" type="fun"><args>array list</args>
+</define>
+
+<description>This is the opposite of <obj>math:list-2d-array</obj>.  <arg>list</arg> should be a
+list of lists, with each element being a list corresponding to a row.
+<arg>array</arg>'s elements are stored from the list.  Unlike <obj>fillarray</obj>
+(see <ref definition-in-file="fd-arr" key="fillarray-fun" title="Function fillarray" type="fun"></ref>), if <arg>list</arg> is not long enough,
+<obj>math:fill-2d-array</obj> ``wraps around'', starting over at the beginning.
+The lists which are elements of <arg>list</arg> also work this way.
+</description></definition><definition><define key="math:singular-matrix-condition" name="math:singular-matrix" type="condition"><args>(<obj>sys:arithmetic-error</obj> <obj>error</obj>)</args>
+</define>
+
+<description>This is signaled when any of the matrix manipulation functions in this
+section has trouble because of a singular matrix.  (In some functions,
+such as <obj>math:determinant</obj>, a singular matrix is not a problem.)
+
+The <obj>:matrix</obj> operation on the condition instance returns the matrix
+which is singular.
+</description></definition></section><a name="Planes"></a>
+
+
+<section chapter-number="9" name="Planes" number="13" title="Planes"><index-entry index="concepts" title="plane"></index-entry>
+
+<p>A <arg>plane</arg> is effectively an array whose bounds, in each dimension, are
+plus-infinity and minus-infinity; all integers are legal as indices.
+Planes may be of any rank.  When you create a plane, you do not need to
+specify any size, just the rank.  You also specify a default value.  At
+that moment, every component of the plane has that value.  As you can't
+ever change more than a finite number of components, only a finite
+region of the plane need actually be stored.  When you refer to an
+element for which space has not actually been allocated, you just get
+the default value.
+</p>
+
+<p>The regular array accessing functions don't work on planes.
+You can use <obj>make-plane</obj> to create a plane,
+<obj>plane-aref</obj> or <obj>plane-ref</obj> to get the value of a component, and
+<obj>plane-aset</obj> or <obj>plane-store</obj> to store into a component.
+<obj>array-rank</obj> works on planes.
+</p>
+
+<p>A plane is actually stored as an array with a leader.
+The array corresponds to a rectangular, aligned region of the plane,
+containing all the components in which a <obj>plane-store</obj> has been done
+(and, usually, others which have never been altered).
+The lowest-coordinate corner of that rectangular region is
+given by the <obj>plane-origin</obj> in the array leader.
+The highest-coordinate corner can be found by adding the <obj>plane-origin</obj>
+to the <obj>array-dimensions</obj> of the array.
+The <obj>plane-default</obj> is the contents of all the
+elements of the plane that are not actually stored in the array.
+The <obj>plane-extension</obj> is the amount to extend a plane by in any direction
+when the plane needs to be extended.  The default is 32.
+</p>
+
+<p>If you never use any negative indices, then the <obj>plane-origin</obj> remains
+all zeroes and you can use regular array functions, such as <obj>aref</obj> and <obj>aset</obj>,
+to access the portion of the plane that is actually stored.  This can be
+useful to speed up certain algorithms.  In this case you can even use the
+<obj>bitblt</obj> function on a two-dimensional plane of bits or bytes,
+provided you don't change the <obj>plane-extension</obj> to a number that is not
+a multiple of 32.
+</p>
+<definition><define key="make-plane-fun" name="make-plane" type="fun"><args>rank <standard>&amp;key</standard> type default-value extension initial-dimensions initial-origins</args>
+</define>
+
+<description>Creates and returns a plane.  <arg>rank</arg> is the number of dimensions.  The keyword arguments are
+
+<table><tbody><tr><td><arg>type</arg></td><td>The array type symbol (e.g. <obj>art-1b</obj>) specifying the type of the array
+out of which the plane is made.
+</td></tr><tr><td><arg>default-value</arg></td><td>The default component value as explained above.
+</td></tr><tr><td><arg>extension</arg></td><td>The amount by which to extend the plane, as explained above.
+</td></tr><tr><td><arg>initial-dimensions</arg></td><td><obj>nil</obj> or a list of integers whose length is <arg>rank</arg>.  If not <obj>nil</obj>,
+each element corresponds to one dimension, specifying the width to
+allocate the array initially in that dimension.
+</td></tr><tr><td><arg>initial-origins</arg></td><td><obj>nil</obj> or a list of integers whose length is <arg>rank</arg>.  If not <obj>nil</obj>,
+each element corresponds to one dimension, specifying the smallest index
+in that dimension for which storage should initially be allocated.
+</td></tr></tbody></table>Example:
+
+<lisp>(make-plane 2 :type 'art-4b :default-value 3)
+</lisp>creates a two-dimensional plane of type <obj>art-4b</obj>, with default value <obj>3</obj>.
+</description></definition><definition><define key="plane-origin-fun" name="plane-origin" type="fun"><args>plane</args>
+</define>
+
+<description>A list of numbers, giving the lowest coordinate values actually stored.
+</description></definition><definition><define key="plane-default-fun" name="plane-default" type="fun"><args>plane</args>
+</define>
+
+<description>This is the contents of the infinite number of plane elements that are
+not actually stored.
+</description></definition><definition><define key="plane-extension-fun" name="plane-extension" type="fun"><args>plane</args>
+</define>
+
+<description>The amount to extend the plane by, in any direction, when <obj>plane-store</obj> is done
+outside of the currently-stored portion.
+</description></definition><definition><define key="plane-aref-fun" name="plane-aref" type="fun"><args>plane <standard>&amp;rest</standard> subscripts</args>
+</define><define key="plane-ref-fun" name="plane-ref" type="fun"><args>plane subscripts</args>
+</define>
+
+<description>These two functions return the contents of a specified element of a plane.
+They differ only in the way they take their arguments; <obj>plane-aref</obj> wants
+the subscripts as arguments, while <obj>plane-ref</obj> wants a list of subscripts.
+</description></definition><definition><define key="plane-aset-fun" name="plane-aset" type="fun"><args>datum plane <standard>&amp;rest</standard> subscripts</args>
+</define><define key="plane-store-fun" name="plane-store" type="fun"><args>datum plane subscripts</args>
+</define>
+
+<description>These two functions store <arg>datum</arg> into the specified element of a plane,
+extending it if necessary, and return <arg>datum</arg>.
+They differ only in the way they take their arguments; <obj>plane-aset</obj> wants
+the subscripts as arguments, while <obj>plane-store</obj> wants a list of subscripts.
+</description></definition></section><a name="generic-sequence-functions"></a>
+
+
+<section chapter-number="9" name="generic-sequence-functions" number="14" title="Maclisp Array Compatibility"><p>The functions in this section are provided only for Maclisp compatibility
+and should not be used in new programs.
+</p>
+
+<p indent="1">        Fixnum arrays do not exist (however, see Zetalisp's
+small-positive-integer arrays).  Float arrays exist but you do not use
+them in the same way; no declarations are required or allowed.
+Un-garbage-collected arrays do not exist.
+Readtables and obarrays are represented as arrays, but Zetalisp does not
+use special array types for them.  See the descriptions of <obj>read</obj>
+(<ref definition-in-file="rdprt" key="read-fun" title="Function read" type="fun"></ref>) and <obj>intern</obj> (<ref definition-in-file="packd" key="intern-fun" title="Function intern" type="fun"></ref>) for information about
+readtables and obarrays (packages).  There are no `dead'' arrays, nor are
+Multics ``external'' arrays provided.
+</p>
+
+<p>The <obj>arraycall</obj> function exists for compatibility
+but should not be used (see <obj>aref</obj>, <ref definition-in-file="fd-arr" key="aref-fun" title="Function aref" type="fun"></ref>.)
+</p>
+
+<p>Subscripts are always checked for validity, regardless of the value
+of <obj>*rset</obj> and whether the code is compiled or not. 
+However, in a multi-dimensional array, an error is caused only
+if the subscripts would have resulted in a reference to storage
+outside of the array. For example, if you have a 2 by 7 array and refer
+to an element with subscripts 3 and 1, no error occurs
+despite the fact that the reference is invalid;
+but if you refer to element 1 by 100, an error occurs.
+In other words, subscript errors are caught if and only if
+they refer to storage outside the array; some errors are undetected,
+but they can only clobber (alter randomly) some other element of the same array,
+not something completely unpredictable.
+</p>
+
+<p><obj>loadarrays</obj> and <obj>dumparrays</obj> are not provided.  However,
+arrays can be put into QFASL files; see <ref chapter="18" definition-in-file="compil" key="fasdump" section="8" title="Putting Data in QFASL Files" type="section"></ref>.
+</p>
+
+<p indent="1">        The <obj>*rearray</obj> function is not provided, since not all
+of its functionality is available in Zetalisp.
+Its most common uses are implemented by <obj>adjust-array-size</obj>.
+</p>
+
+<p indent="1">        In Maclisp, arrays are usually kept on the <obj>array</obj> property
+of symbols, and the symbols are used instead of the arrays.  In order
+to provide some degree of compatibility for this manner of using
+arrays, the <obj>array</obj>, <obj>*array</obj>, and <obj>store</obj> functions are
+provided, and when arrays are applied to arguments, the arguments are
+treated as subscripts and <obj>apply</obj> returns the corresponding element
+of the array.
+</p>
+<definition><define key="array-fun" name="array" type="fun"><args><standard>&amp;quote</standard> symbol type <standard>&amp;eval</standard> <standard>&amp;rest</standard> dims</args>
+</define>
+
+<description>Creates an <obj>art-q</obj> type array in <obj>default-array-area</obj>
+with the given dimensions.  (That is, <arg>dims</arg> is given
+to <obj>make-array</obj> as its first argument.)  <arg>type</arg> is ignored.
+If <arg>symbol</arg> is <obj>nil</obj>, the array is returned; otherwise,
+the array is put in the function cell of <arg>symbol</arg>, and <arg>symbol</arg>
+is returned.
+</description></definition><definition><define key="*array-fun" name="*array" type="fun"><args>symbol type <standard>&amp;rest</standard> dims</args>
+</define>
+
+<description>Is like <obj>array</obj>, except that all of the arguments
+are evaluated.
+</description></definition><definition><define key="store-fun" name="store" type="spec"><args>array-ref x</args>
+</define>
+
+<description>Stores <arg>x</arg> into the
+specified array element.  <arg>array-ref</arg> should be a form which
+references an array by calling it as a function (<obj>aref</obj> forms are not
+acceptable).  First <arg>x</arg> is evaluated, then <arg>array-ref</arg> is
+evaluated, and then the value of <arg>x</arg> is stored into the array cell
+last referenced by a function call, presumably the one in <arg>array-ref</arg>.
+</description></definition><definition><define key="xstore-fun" name="xstore" type="fun"><args>x array-ref</args>
+</define>
+
+<description>        This is just like <obj>store</obj>, but it is not
+a special form; this is because the arguments are in the other
+order.  This function only exists for the compiler to compile the
+<obj>store</obj> special form into, and should never be used by programs.
+</description></definition><definition><define key="arraycall-fun" name="arraycall" type="fun"><args>ignored array <standard>&amp;rest</standard> subscripts</args>
+</define>
+
+<description><obj>(arraycall t <arg>array</arg> <arg>sub1</arg> <arg>sub2</arg>...)</obj> is the same
+as <obj>(aref <arg>array</arg> <arg>sub1</arg> <arg>sub2</arg>...)</obj>.  It exists for
+Maclisp compatibility.
+</description></definition></section></chapter>
+</document-part>

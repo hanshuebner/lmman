@@ -1,0 +1,1187 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="string-chapter"></a>
+<chapter name="string-chapter" number="11" title="Characters and Strings"><index-entry index="concepts" title="string"></index-entry>
+
+<p indent="1">        A string is a one-dimensional array representing a sequence of
+characters.  The printed representation of a string is its characters
+enclosed in quotation marks, for example <obj>&quot;foo bar&quot;</obj>.  Strings are
+constants, that is, evaluating a string returns that string.  Strings
+are the right data type to use for text-processing.
+</p>
+
+<index-entry index="concepts" title="character object"></index-entry>
+
+<p>Individual characters can be represented by <arg>character objects</arg> or by
+fixnums.  A character object is actually the same as a fixnum except
+that it has a recognizably different data type and prints differently.
+Without escaping, a character object is printed by outputting the
+character it represents.  With escaping, a character object prints as
+<obj>#\<arg>char</arg></obj> in Common Lisp syntax or as <obj>#≠/<arg>char</arg></obj> in
+traditional syntax; see <ref chapter="11" definition-in-file="fd-str" key="character-set" section="1" title="Characters" type="section"></ref> and <ref definition-in-file="rdprt" key="sharp-slash" type="page"></ref>.  By
+contrast, a fixnum would in all cases print as a sequence of digits.
+Character objects are accepted by most numeric functions in place of
+fixnums, and may be used as array indices.  When evaluated, they are
+constants.
+</p>
+
+<p>The character object data type was introduced recently for Common Lisp
+support.  Traditionally characters were always represented as fixnums,
+and nearly all system and user code still does so.  Character objects
+are interchangeable with fixnums in most contexts, but not in <obj>eq</obj>,
+which is often used to compare the result of the stream input operations
+such as <obj>:tyi</obj>, since that might be <obj>nil</obj>.  Therefore, the
+stream input operations still return fixnums that represent characters.
+Aside from this, Common Lisp functions that return a character return a
+character object, while traditional functions return a fixnum.  The
+fixnum which is the character code representing <arg>char</arg> can be written
+as <obj>#/<arg>char</arg></obj> in traditional syntax.  This is equivalent to writing
+the fixnum using digits, but does not require you to know the character
+code.
+</p>
+
+<p>Most strings are arrays of type <obj>art-string</obj>, where each element is
+stored in eight bits.  Only characters with character code less than 256
+can be stored in an ordinary string; these characters form the type
+<obj>string-char</obj>.  A string can also be an array of type
+<obj>art-fat-string</obj>, where each element holds a sixteen-bit unsigned
+fixnum.  The extra bits allow for multiple fonts or an expanded character
+set.
+</p>
+
+<p indent="1">        Since strings are arrays, the usual array-referencing function
+<obj>aref</obj> is used to extract characters from strings.  For example,
+<obj>(aref &quot;frob&quot; 1)</obj> returns the representation of lower case <obj>r</obj>.
+The first character is at index zero.
+</p>
+
+<p>Conceptually, the elements of a string are character objects.
+This is what Common Lisp programs expect to see when they do
+<obj>aref</obj> (or <obj>char</obj>, which on the Lisp
+Machine is synonymous with <obj>aref</obj>) on a string.  But nearly all
+Lisp Machine programs are traditional, and expect elements of strings
+to be fixnums.  Therefore, <obj>aref</obj> of a string actually returns
+a fixnum.  A distinct version of <obj>aref</obj> exists for Common Lisp
+programs.  It is <obj>cli:aref</obj> and it does return character objects
+if given a string.  For all other kinds of arrays, <obj>aref</obj> and <obj>cli:aref</obj>
+are equivalent.
+
+<lisp>(aref &quot;Foo&quot; 1)  =&gt;  #o157
+(cli:aref &quot;Foo&quot; 1)  =&gt;  #≠/o
+</lisp></p>
+
+<p>It is also legal to store into strings, for example using <obj>setf</obj> of
+<obj>aref</obj>.  As with <obj>rplaca</obj> on lists, this changes the actual object;
+you must be careful to understand where side-effects will propagate.  It
+makes no difference whether a character object or a fixnum is stored.
+When you are making strings that you intend to change later, you
+probably want to create an array with a fill-pointer (see
+<ref definition-in-file="fd-arr" key="fill-pointer" type="page"></ref>) so that you can change the length of the string as well
+as the contents.  The length of a string is always computed using
+<obj>array-active-length</obj>, so that if a string has a fill-pointer, its
+value is used as the length.
+</p>
+
+<p>The functions described in this section provide a variety of useful
+operations on strings.  In place of a string, most of these functions
+accept a symbol or a fixnum as an argument, coercing it into a
+string.  Given a symbol, its print name, which is a string, is used.
+Given a fixnum, a one-character string containing the character designated
+by that fixnum is used.  Several of the functions actually work on any
+type of one-dimensional array and may be useful for other than string
+processing; these are the functions such as <obj>substring</obj> and <obj>string-length</obj>
+which do not depend on the elements of the string being characters.
+</p>
+
+<p>The generic sequence functions in chapter <ref chapter="10" definition-in-file="generic" key="sequence-chapter" title="Generic Sequence Functions" type="chapter"></ref> may
+also be used on strings.
+</p>
+<a name="xr-special-character-names"></a>
+
+
+<section chapter-number="11" name="xr-special-character-names" number="1" title="Characters"><index-entry index="concepts" title="characters"></index-entry>
+
+<p>The Lisp Machine data type for character objects is a recent addition
+to the system.  Most programs still use fixnums to represent characters.
+</p>
+
+<p>Common Lisp programs typically work with actual character objects but
+programs traditionally use fixnums to represent characters.  The new
+Common Lisp functions for operating with characters have been implemented
+to accept fixnums as well, so that they can be used equally well from
+traditional programs.
+</p>
+<definition><define key="characterp-fun" name="characterp" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is a character object; <obj>nil</obj> otherwise.
+In particular, it is <obj>nil</obj> if <arg>object</arg> is a fixnum such as
+traditional programs use to represent characters.
+</description></definition><definition><define key="character-fun" name="character" type="fun"><args>object</args>
+</define>
+
+<description>Coerces <obj>object</obj> to a single character,
+represented as a fixnum.  If <obj>object</obj> is a number, it is returned.  If
+<obj>object</obj> is a string or an array, its first element is returned.  If
+<obj>object</obj> is a symbol, the first character of its pname is returned.
+Otherwise an error occurs.  The way characters are represented as fixnums
+is explained in <ref chapter="11" definition-in-file="fd-str" key="character-set" section="1" title="Characters" type="section"></ref>.
+</description></definition><definition><define key="cli:character-fun" name="cli:character" type="fun"><args>object</args>
+</define>
+
+<description>Coerces <arg>object</arg> into a character and returns the character as a character object
+for Common Lisp programs.
+</description></definition><definition><define key="int-char-fun" name="int-char" type="fun"><args>fixnum</args>
+</define>
+
+<description>Converts <arg>fixnum</arg>, regarded as representing a character, to a
+character object.  This is a special case of <obj>cli:character</obj>.
+<obj>(int-char #o101)</obj> is the character object for <obj>A</obj>.  If a character
+object is given as an argument, it is returned unchanged.
+</description></definition><definition><define key="char-int-fun" name="char-int" type="fun"><args>char</args>
+</define>
+
+<description>Converts <arg>char</arg>, a character object, to the fixnum which represents
+the same character.  This is the inverse of <obj>int-char</obj>.  It may also
+be given a fixnum as argument, in which case the value is the same
+fixnum.
+</description></definition>
+
+
+<subsection name="NIL" title="Components of a Character"><index-entry index="concepts" title="character code"></index-entry>
+
+<index-entry index="concepts" title="font (of a character)"></index-entry>
+
+<index-entry index="concepts" title="bits (of a character)"></index-entry>
+
+<index-entry index="concepts" title="modifier bits (of a character)"></index-entry>
+
+<index-entry index="concepts" title="character set"></index-entry>
+
+<p>A character object, or a fixnum which is interpreted as a character,
+contains three separate pieces of information: the <arg>character code</arg>,
+the <arg>font number</arg>, and the <arg>modifier bits</arg>.  Each of these things
+is an integer from a fixed range.  The character code ranges from 0 to
+377 (octal), the font number from 0 to 377 (octal), and the modifier
+bits from 0 to 17 (octal).  These numeric constants should not appear
+in programs; instead, use the constant symbols <obj>char-code-limit</obj>,
+and so on, described below.
+</p>
+
+<p>Ordinary strings can hold only characters whose font number and modifier
+bits are zero.  Fat strings can hold characters with any font number,
+but the modifier bits must still be zero.
+</p>
+
+<p>Character codes less than 200 octal are printing graphics;
+when output to a device they are assumed to print a character and move
+the cursor one character position to the right.  (All software provides
+for variable-width fonts, so the term ``character position'' shouldn't
+be taken too literally.)
+</p>
+
+<p>Character codes 200 through 236 octal are used for special characters.
+Character 200 is a ``null character'', which does not correspond to any
+key on the keyboard.  The null character is not used for anything much;
+<obj>fasload</obj> uses it internally.  Characters 201 through 236 correspond
+to the special function keys on the keyboard such as <obj>Return</obj> and
+<obj>Call</obj>.  The remaining character codes 237 through 377 octal are reserved
+for future expansion.
+</p>
+
+<p indent="1">        Most of the special characters do not normally appear in files
+(although it is not forbidden for files to contain them).  These
+characters exist mainly to be used as ``commands'' from the keyboard.  A
+few special characters, however, are ``format effectors'' which are just
+as legitimate as printing characters in text files.  The names and
+meanings of these characters are:
+</p>
+
+<table><tbody><tr><td><obj>Return</obj></td><td>The ``newline'' character, which separates lines of text.  We do not use
+the PDP-10 convention which separates lines by a pair of characters, a
+``carriage return'' and a ``linefeed''.
+
+</td></tr><tr><td><obj>Page</obj></td><td>The ``page separator'' character, which separates pages of text.
+
+</td></tr><tr><td><obj>Tab</obj></td><td>The ``tabulation'' character, which spaces to the right until the next ``tab stop''.
+Tab stops are normally every 8 character positions.
+</td></tr></tbody></table>
+<p>The space character is considered to be a printing character whose printed image
+happens to be blank, rather than a format effector.
+</p>
+
+<p indent="1">        When a letter is typed with any of the modifier bit keys
+(<obj>Control</obj>, <obj>Meta</obj>, <obj>Super</obj>, or <obj>Hyper</obj>), the letter is normally
+upper-case.  If the <obj>Shift</obj> key is pressed as well, then the letter
+becomes lower-case.  This is exactly the reverse of what the <obj>Shift</obj>
+key does to letters without control bits.  (The <obj>Shift-lock</obj> key has
+no effect on letters with control bits.)
+</p>
+<definition><define key="char-code-fun" name="char-code" type="fun"><args>char</args>
+</define><define key="char-font-fun" name="char-font" type="fun"><args>char</args>
+</define><define key="char-bits-fun" name="char-bits" type="fun"><args>char</args>
+</define>
+
+<description>Return the character code of <arg>char</arg>, the font number of <arg>char</arg>,
+and the modifier bits value of <arg>char</arg>.  <arg>char</arg> may
+be a fixnum or a character object; the value is always a fixnum.
+
+These used to be written as
+
+<lisp>(ldb %%ch-char <arg>char</arg>)
+(ldb %%ch-font <arg>char</arg>)
+(ldb %%ch-control-meta <arg>char</arg>)
+</lisp>Such use of <obj>ldb</obj> is frequent but obsolete.
+</description></definition><definition>
+<define key="char-code-limit-var" name="char-code-limit" type="const"></define>
+
+<description>A constant whose value is a bound on the maximum code of any character.
+In the Lisp Machine, currently, it is 400 (octal).
+</description></definition><definition>
+<define key="char-font-limit-var" name="char-font-limit" type="const"></define>
+
+<description>A constant whose value is a bound on the maximum font number value of
+any character.  In the Lisp Machine, currently, it is 400 (octal).
+</description></definition><definition>
+<define key="char-bits-limit-var" name="char-bits-limit" type="const"></define>
+
+<description>A constant whose value is a bound on the maximum modifier bits value of
+any character.  In the Lisp Machine, currently, it is 20 (octal).  Thus,
+there are four modifier bits.  These are just the familiar Control, Meta,
+Super and Hyper bits.
+</description></definition><definition>
+<define key="char-control-bit-var" name="char-control-bit" type="const"></define>
+<define key="char-meta-bit-var" name="char-meta-bit" type="const"></define>
+<define key="char-super-bit-var" name="char-super-bit" type="const"></define>
+<define key="char-hyper-bit-var" name="char-hyper-bit" type="const"></define>
+
+<description>Constants with values 1, 2, 4 and 8.
+These give the meanings of the bits within the bits-field of a character object.
+Thus, <obj>(bit-test char-meta-bit (char-bits <arg>char</arg>))</obj> would be non-<obj>nil</obj>
+if <arg>char</arg> is a meta-character.  (This can also be tested with <obj>char-bit</obj>.)
+</description></definition><definition><define key="char-bit-fun" name="char-bit" type="fun"><args>char name</args>
+</define>
+
+<description><obj>t</obj> if <arg>char</arg> has the modifier bit named by <arg>name</arg>.  <arg>name</arg> is
+one of the following four symbols: <obj>:control</obj>, <obj>:meta</obj>,
+<obj>:super</obj>, and <obj>:hyper</obj>.
+
+<lisp>(char-bit #\meta-x :meta) =&gt; t.
+</lisp></description></definition><definition><define key="set-char-bit-fun" name="set-char-bit" type="fun"><args>char name newvalue</args>
+</define>
+
+<description>Returns a character like <arg>char</arg> except that the bit specified by <arg>name</arg>
+is present if <arg>newvalue</arg> is non-<obj>nil</obj>, absent otherwise.  Thus,
+
+<lisp>(set-char-bit #\x :meta t) =&gt; #\meta-x.
+</lisp>The value is a fixnum if <arg>char</arg> is one; a character object if <arg>char</arg> is one.
+</description></definition>
+<index-entry index="concepts" title="keyboard character"></index-entry>
+
+<p>Until recently the only way to access
+the character code, font and modifier bits was with <obj>ldb</obj>,
+using the byte field names listed below.
+Most code still uses that method, but it is obsolete; <obj>char-bit</obj>
+should be used instead.
+
+<index-entry index="concepts" title="%%kbd fields"></index-entry>
+</p>
+
+<table><tbody><tr><td><obj>%%kbd-char</obj></td><td></td></tr><tr><td><obj>%%ch-char</obj></td>
+<td><index-entry index="variables" title="%%kbd-char"></index-entry>
+
+<index-entry index="variables" title="%%ch-char"></index-entry>
+Specifies the byte containing the character code.
+
+</td></tr><tr><td><obj>%%ch-font</obj></td>
+<td><index-entry index="variables" title="%%ch-font"></index-entry>
+Specifies the byte containing the font number.
+
+</td></tr><tr><td><obj>%%kbd-control</obj></td>
+<td><index-entry index="variables" title="%%kbd-control"></index-entry>
+Specifies the byte containing the Control bit.
+
+</td></tr><tr><td><obj>%%kbd-meta</obj></td>
+<td><index-entry index="variables" title="%%kbd-meta"></index-entry>
+Specifies the byte containing the Meta bit.
+
+</td></tr><tr><td><obj>%%kbd-super</obj></td>
+<td><index-entry index="variables" title="%%kbd-super"></index-entry>
+Specifies the byte containing the Super bit.
+
+</td></tr><tr><td><obj>%%kbd-hyper</obj></td>
+<td><index-entry index="variables" title="%%kbd-hyper"></index-entry>
+Specifies the byte containing the Hyper bit.
+
+</td></tr><tr><td><obj>%%kbd-control-meta</obj></td>
+<td><index-entry index="variables" title="%%kbd-control-meta"></index-entry>
+Specifies the byte containing all the modifier bits.
+</td></tr></tbody></table>
+<p>Characters are sometimes used to represent mouse clicks.  The character
+says which button was pressed and how many times.  Refer to the Window
+System manual for an explanation of how these characters are generated.
+</p>
+<definition><define key="tv:kbd-mouse-p-fun" name="tv:kbd-mouse-p" type="fun"><args>char</args>
+</define>
+
+<description><obj>t</obj> if <arg>char</arg> is a character used to represent a mouse click.
+Such characters are always distinguishable from characters that represent
+keyboard input.
+</description></definition><definition>
+<define key="%%kbd-mouse-button-var" name="%%kbd-mouse-button" type="const"></define>
+
+<description>The value of <obj>%%kbd-mouse-button</obj> is a byte specifier for the field in
+a mouse signal that says which button was clicked.  The byte contains
+<obj>0</obj>, <obj>1</obj>, or <obj>2</obj> for the left, middle, or right button,
+respectively.
+</description></definition><definition>
+<define key="%%kbd-mouse-n-clicks-var" name="%%kbd-mouse-n-clicks" type="const"></define>
+
+<description>The value of <obj>%%kbd-mouse-n-clicks</obj> 
+is a byte specifier for the field in a mouse signal
+that says how many times the button was clicked.
+The byte contains one less than the number of times the button was clicked.
+</description></definition></subsection>
+
+<subsection name="NIL" title="Constructing Character Objects"><definition><define key="code-char-fun" name="code-char" type="fun"><args>code <standard>&amp;optional</standard> (bits <obj>0</obj>) (font <obj>0</obj>)</args>
+</define><define key="make-char-fun" name="make-char" type="fun"><args>code <standard>&amp;optional</standard> (bits <obj>0</obj>) (font <obj>0</obj>)</args>
+</define>
+
+<description>Returns a character object made from <arg>code</arg>, <arg>bits</arg> and <arg>font</arg>.
+Common Lisp says that not all combinations may be valid, and that <obj>nil</obj>
+is returned for an invalid combination.  On the Lisp Machine, any combination
+is valid if the arguments are valid individually.
+
+According to Common Lisp, <obj>code-char</obj> requires a number as a first
+argument, whereas <obj>make-char</obj> requires a character object, whose character
+code is used.  On the Lisp Machine, either function may be used in either way.
+</description></definition><definition><define key="digit-char-fun" name="digit-char" type="fun"><args>weight <standard>&amp;optional</standard> (radix <obj>10.</obj>) (font <obj>0</obj>)</args>
+</define>
+
+<description>Returns a character object which is the digit with the specified weight,
+and with font as specified.  However, if there is no suitable character
+which has weight <arg>weight</arg> in the specified radix, the value is <obj>nil</obj>.
+If the ``digit'' is a letter (which happens if <arg>weight</arg> is greater than
+9), it is returned in upper case.
+</description></definition><definition><define key="tv:make-mouse-char-fun" name="tv:make-mouse-char" type="fun"><args>button n-clicks</args>
+</define>
+
+<description>Returns the fixnum character code that represents a mouse click in the
+standard way.  <obj>tv:mouse-char-p</obj> of this value is <obj>t</obj>.
+<arg>button</arg> is 0 for the leftbutton, 1 for the middle button,
+or 2 for the right button.  <arg>n-clicks</arg> is one less than the
+number of clicks (1 for a double click, 0 normally).
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="The Character Set"><index-entry index="concepts" title="character code values"></index-entry>
+
+<p>Here are the numerical values of the characters in the Zetalisp
+character set.  It should never be necessary for a user or a source
+program to know these values.  Indeed, they are likely to be
+changed in the future.  There are symbolic names for all characters; see
+the section on character names, below.
+</p>
+
+<p>It is worth pointing out that the Zetalisp character
+set is different from the ASCII character set.   File servers
+operating on hosts that use ASCII for storing text files
+automatically perform character set conversion when text files
+are read or written.  The details of the mapping are explained in
+<ref chapter="26" definition-in-file="files" key="character-set-differences" section="8" title="File Servers" type="section"></ref>.
+<example>
+
+<group><pre>000 center-dot (⋅)             040 space       100 @           140 `
+001 down arrow (↓)             041 !           101 A           141 a
+002 alpha (α)                  042 &quot;           102 B           142 b
+003 beta (β)                   043 #           103 C           143 c
+004 and-sign (⋀)               044 $           104 D           144 d
+005 not-sign (¬)               045 %           105 E           145 e
+006 epsilon (ε)                046 &amp;           106 F           146 f
+007 pi (π)                     047 '           107 G           147 g
+010 lambda (<ref></ref>)                 050 (           110 H           150 h
+011 gamma (γ)                  051 )           111 I           151 i
+012 delta (⊗(ctl-j))                  052 *           112 J           152 j
+013 uparrow (↑)                053 +           113 K           153 k
+014 plus-minus (±)             054 ,           114 L           154 l
+015 circle-plus (<ref></ref>)            055 -           115 M           155 m
+016 infinity (∞)               056 .           116 N           156 n
+017 partial delta (∂)          057 /           117 O           157 o
+020 left horseshoe (⊂)         060 0           120 P           160 p
+021 right horseshoe (⊃)        061 1           121 Q           161 q
+022 up horseshoe (⋂)           062 2           122 R           162 r
+023 down horseshoe (⋃)         063 3           123 S           163 s
+024 universal quantifier (∀)   064 4           124 T           164 t
+025 existential quantifier (∃) 065 5           125 U           165 u
+026 circle-X (⊗)               066 6           126 V           166 v
+027 double-arrow (↔)           067 7           127 W           167 w
+030 left arrow (←)             070 8           130 X           170 x
+031 right arrow (→)            071 9           131 Y           171 y
+032 not-equals (≠)             072 :           132 Z           172 z
+033 diamond (altmode) (⋄)      073 ;           133 [           173 {
+034 less-or-equal (≤)          074 &lt;           134 \           174 |
+035 greater-or-equal (≥)       075 =           135 ]           175 }
+036 equivalence (≡)            076 &gt;           136 ^           176 ~
+037 or (⋁)                     077 ?           137 _           177 <ref></ref>
+200 Null character     210 Overstrike    220 Stop-output   230 Roman-iv
+201 Break              211 Tab           221 Abort         231 Hand-up
+202 Clear              212 Line          222 Resume        232 Hand-down
+203 Call               213 Delete        223 Status        233 Hand-left
+204 Terminal escape    214 Page          224 End           234 Hand-right
+205 Macro/backnext     215 Return        225 Roman-i       235 System
+206 Help               216 Quote         226 Roman-ii      236 Network
+207 Rubout             217 Hold-output   227 Roman-iii
+237-377 reserved for the future
+
+
+                    The Lisp Machine Character Set
+                        (all numbers in octal)
+</pre></group></example>
+</p>
+</subsection>
+
+<subsection name="NIL" title="Classifying Characters"><definition><define key="string-char-p-fun" name="string-char-p" type="fun"><args>char</args>
+</define>
+
+<description><obj>t</obj> if <arg>char</arg> is a character that can be stored in a string.  On the
+Lisp Machine, this is true if the font and modifier bits of <arg>char</arg> are zero.
+</description></definition><definition><define key="standard-char-p-fun" name="standard-char-p" type="fun"><args>char</args>
+</define>
+
+<description><obj>t</obj> if <arg>char</arg> is a standard Common Lisp character: any of the 95
+ASCII printing characters (including <obj>Space</obj>), and the <obj>Return</obj> character.
+Thus <obj>(standard-char-p #\end)</obj> is <obj>nil</obj>.
+</description></definition><definition><define key="graphic-char-p-fun" name="graphic-char-p" type="fun"><args>char</args>
+</define>
+
+<description><obj>t</obj> if <arg>char</arg> is a graphic character; one which has a printed shape.
+<obj>A</obj>, <obj>-</obj>, <obj>Space</obj> and <example>ε</example> are all graphic characters; <obj>Return</obj>,
+<obj>End</obj> and <obj>Abort</obj> are not.  A character whose modifier bits are
+nonzero is never graphic.
+
+Ordinary output to windows prints graphic characters using the current font.
+Nongraphic characters are printed using lozenges unless they have special
+formatting meanings (as <obj>Return</obj> does).
+</description></definition><definition><define key="alpha-char-p-fun" name="alpha-char-p" type="fun"><args>char</args>
+</define>
+
+<description><obj>t</obj> if <arg>char</arg> is a letter with zero modifier bits.
+</description></definition><definition><define key="digit-char-p-fun" name="digit-char-p" type="fun"><args>char <standard>&amp;optional</standard> (radix <obj>10.</obj>)</args>
+</define>
+
+<description>If <arg>char</arg> is a digit available in the specified radix, returns the
+<arg>weight</arg> of that digit.  Otherwise, it returns <obj>nil</obj>.  If the modifier
+bits of <arg>char</arg> are nonzero, the value is always <obj>nil</obj>.  (It would be
+more useful to ignore the modifier bits, but this decision provides
+Common Lisp with a foolish consistency.)  Examples:
+
+<lisp>(digit-char-p #\8 8) =&gt; nil
+(digit-char-p #\8 9) =&gt; 8
+(digit-char-p #\F 16.) =&gt; 15.
+(digit-char-p #\c-8 <arg>anything</arg>) =&gt; nil
+</lisp></description></definition><definition><define key="alphanumericp-fun" name="alphanumericp" type="fun"><args>char</args>
+</define>
+
+<description><obj>t</obj> if <arg>char</arg> is a letter or a digit 0 through 9, with zero modifier bits.
+</description></definition></subsection>
+
+<subsection name="NIL" title="Comparing Characters"><definition><define key="char-equal-fun" name="char-equal" type="fun"><args><standard>&amp;rest</standard> chars</args>
+</define>
+
+<description>This is the primitive for comparing characters for equality; many of the
+string functions call it.  The arguments may be fixnums or character
+objects indiscriminately.  The result is <obj>t</obj> if the characters are
+equal ignoring case, font and modifier bits, otherwise <obj>nil</obj>.
+</description></definition><definition><define key="char-not-equal-fun" name="char-not-equal" type="fun"><args><standard>&amp;rest</standard> chars</args>
+</define>
+
+<description><obj>t</obj> if the arguments are all different as characters, ignoring
+case, font and modifier bits.
+</description></definition><definition><define key="char-lessp-fun" name="char-lessp" type="fun"><args><standard>&amp;rest</standard> chars</args>
+</define><define key="char-greaterp-fun" name="char-greaterp" type="fun"><args><standard>&amp;rest</standard> chars</args>
+</define><define key="char-not-lessp-fun" name="char-not-lessp" type="fun"><args><standard>&amp;rest</standard> chars</args>
+</define><define key="char-not-greaterp-fun" name="char-not-greaterp" type="fun"><args><standard>&amp;rest</standard> chars</args>
+</define>
+
+<description>Ordered comparison of characters, ignoring case, font and modifier bits.
+These are the primitives for comparing characters for order; many of the
+string functions call it.  The arguments may be fixnums or character
+objects.  The result is <obj>t</obj> if the arguments are in strictly increasing
+(strictly decreasing, nonincreasing, nondecreasing) order.  Details of the
+ordering of characters are in <ref chapter="11" definition-in-file="fd-str" key="character-set" section="1" title="Characters" type="section"></ref>.
+</description></definition><definition><define key="char=-fun" name="char=" type="fun"><args>char1 <standard>&amp;rest</standard> chars</args>
+</define><define key="char//=-fun" name="char//=" type="fun"><args>char1 <standard>&amp;rest</standard> chars</args>
+</define><define key="char&gt;-fun" name="char&gt;" type="fun"><args>char1 <standard>&amp;rest</standard> chars</args>
+</define><define key="char&lt;-fun" name="char&lt;" type="fun"><args>char1 <standard>&amp;rest</standard> chars</args>
+</define><define key="char&gt;=-fun" name="char&gt;=" type="fun"><args>char1 <standard>&amp;rest</standard> chars</args>
+</define><define key="char&lt;=-fun" name="char&lt;=" type="fun"><args>char1 <standard>&amp;rest</standard> chars</args>
+</define>
+
+<description>These are the Common Lisp functions for comparing characters and 
+including the case, font and bits in the comparison.  On the Lisp Machine
+they are synonyms for the numeric comparison functions <obj>=</obj>, <obj>&gt;</obj>, etc.
+Note that in Common Lisp syntax you would write <obj>char/=</obj>, not <obj>char//=</obj>.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Character Names"><index-entry index="concepts" title="special character"></index-entry>
+
+<p>Characters can sometimes be referred to by long names; as, for
+example, in the <obj>#\</obj> construct in Lisp programs.  Every basic
+character (zero modifier bits) which is not a graphic character has
+one or more standard names.  Some graphic characters have standard
+names too.  When a non-graphic character is output to a window, it
+appears as a lozenge containing the character's standard name.
+</p>
+<definition><define key="char-name-fun" name="char-name" type="fun"><args>char</args>
+</define>
+
+<description>Returns the standard name (or one of the standard names) of <arg>char</arg>, or
+<obj>nil</obj> if there is none.  The name is returned as a string.
+<obj>(char-name #\space)</obj> is the string <obj>&quot;SPACE&quot;</obj>.
+
+If <arg>char</arg> has nonzero modifier bits, the value
+is <obj>nil</obj>.  Compound names such as <obj>Control-X</obj> are not constructed by
+this function.
+</description></definition><definition><define key="name-char-fun" name="name-char" type="fun"><args>name</args>
+</define>
+
+<description>Returns (as a character object) the character for which <arg>name</arg> is a name,
+or returns <obj>nil</obj> if <arg>name</arg> is not a recognized character name.
+<arg>name</arg> may be a symbol or a string.
+Compound names such as <obj>Control-X</obj> are not recognized.
+
+<obj>read</obj> uses this function to process the <obj>#\</obj> construct when
+a character name is encountered.
+</description></definition>
+<p>The following are the recognized special character names, in alphabetical order except
+with synonyms together.  Character names are encoded and decoded by the functions
+<obj>char-name</obj> and <obj>name-char</obj> (<ref definition-in-file="fd-str" key="char-name-fun" title="Function char-name" type="fun"></ref>).
+</p>
+
+<p>First a list of the special function keys.
+
+<lisp><obj>abort         break           call            clear-input,  clear
+delete          end             hand-down       hand-left
+hand-right      hand-up         help            hold-output
+line,  lf               macro,  back-next       network
+overstrike,  backspace,  bs             page,  form,  clear-screen
+quote           resume          return, cr              
+roman-i         roman-ii                roman-iii               roman-iv
+rubout          space,  sp              status          stop-output
+system          tab             terminal,  esc</obj>
+</lisp></p>
+
+<p>These are printing characters that also have special names because they may be hard
+to type on the hosts that are used as file servers.
+
+<lisp><obj>altmode               circle-plus     delta           gamma
+integral                lambda          plus-minus      uparrow
+center-dot      down-arrow      alpha           beta
+and-sign                not-sign                epsilon         pi
+lambda          gamma           delta           up-arrow
+plus-minus      circle-plus     infinity                partial-delta
+left-horseshoe  right-horseshoe up-horseshoe    down-horseshoe
+universal-quantifier                    existential-quantifier
+circle-x                double-arrow    left-arrow              right-arrow
+not-equal               altmode         less-or-equal   greater-or-equal
+equivalence     or-sign</obj>
+</lisp></p>
+
+<p>The following names are for special characters sometimes used to
+represent single and double mouse clicks.  The buttons can be called
+either <obj>l</obj>, <obj>m</obj>, <obj>r</obj> or <obj>1</obj>, <obj>2</obj>, <obj>3</obj> depending on stylistic
+preference.
+
+<lisp><obj>mouse-l-1 <standard>or</standard> mouse-1-1            mouse-l-2 <standard>or</standard> mouse-1-2
+mouse-m-1 <standard>or</standard> mouse-2-1              mouse-m-2 <standard>or</standard> mouse-2-2
+mouse-r-1 <standard>or</standard> mouse-3-1              mouse-r-2 <standard>or</standard> mouse-3-2</obj>
+</lisp></p>
+</subsection></section><a name="Conversion to Upper or Lower Case"></a>
+
+
+<section chapter-number="11" name="Conversion to Upper or Lower Case" number="2" title="Conversion to Upper or Lower Case"><index-entry index="concepts" title="case conversion"></index-entry>
+
+<index-entry index="concepts" title="alphabetic case"></index-entry>
+
+<index-entry index="concepts" title="upper case letter"></index-entry>
+
+<index-entry index="concepts" title="lower case letter"></index-entry>
+<definition><define key="upper-case-p-fun" name="upper-case-p" type="fun"><args>char</args>
+</define>
+
+<description><obj>t</obj> if <arg>char</arg> is an upper case letter with zero modifier bits.
+</description></definition><definition><define key="lower-case-p-fun" name="lower-case-p" type="fun"><args>char</args>
+</define>
+
+<description><obj>t</obj> if <arg>char</arg> is an lower case letter with zero modifier bits.
+</description></definition><definition><define key="both-case-p-fun" name="both-case-p" type="fun"><args>char</args>
+</define>
+
+<description>This Common Lisp function is defined to return
+<obj>t</obj> if <arg>char</arg> is a character which has distinct upper and lower case forms.
+On the Lisp Machine it returns <obj>t</obj> if <arg>char</arg> is a letter with zero
+modifier bits.
+</description></definition><definition><define key="char-upcase-fun" name="char-upcase" type="fun"><args>char</args>
+</define>
+
+<description>        If <arg>char</arg>, is a lower-case alphabetic
+character its upper-case form is returned; otherwise, <arg>char</arg> itself is
+returned.  If font information or modifier bits are present, they are preserved.
+If <arg>char</arg> is a fixnum, the value is a fixnum.  If <arg>char</arg> is a character
+object, the value is a character object.
+</description></definition><definition><define key="char-downcase-fun" name="char-downcase" type="fun"><args>char</args>
+</define>
+
+<description>Similar, but converts to lower case.
+</description></definition><definition><define key="string-upcase-fun" name="string-upcase" type="fun"><args>string <standard>&amp;key</standard> (start <obj>0</obj>) end</args>
+</define>
+
+<description>Returns a string like <arg>string</arg>, with all lower-case alphabetic
+characters replaced by the corresponding upper-case characters.
+If <arg>start</arg> or <arg>end</arg> is specified, only the specified portion
+of the string is converted, but in any case the entire string is
+returned.
+
+The result is a copy of <arg>string</arg> unless no change is necessary.
+<arg>string</arg> itself is never modified.
+</description></definition><definition><define key="string-downcase-fun" name="string-downcase" type="fun"><args>string <standard>&amp;key</standard> (start <obj>0</obj>) end</args>
+</define>
+
+<description>Similar, but converts to lower case.
+</description></definition><definition><define key="string-capitalize-fun" name="string-capitalize" type="fun"><args>string <standard>&amp;key</standard> (start <obj>0</obj>) end</args>
+</define>
+
+<description>Returns a string like <arg>string</arg> in which all, or the specified portion, has been
+processed by capitalizing each word.  For this function, a word is any maximal
+sequence of letters or digits.  It is capitalized by putting the first character
+(if it is a letter) in upper case and any letters in the rest of the word in lower case.
+
+The result is a copy of <arg>string</arg> unless no change is necessary.
+<arg>string</arg> itself is never modified.
+</description></definition><definition><define key="nstring-upcase-fun" name="nstring-upcase" type="fun"><args>string <standard>&amp;key</standard> (start <obj>0</obj>) end</args>
+</define><define key="nstring-downcase-fun" name="nstring-downcase" type="fun"><args>string <standard>&amp;key</standard> (start <obj>0</obj>) end</args>
+</define><define key="nstring-capitalize-fun" name="nstring-capitalize" type="fun"><args>string <standard>&amp;key</standard> (start <obj>0</obj>) end</args>
+</define>
+
+<description>Like the previous functions except that they modify <arg>string</arg> itself and return it.
+</description></definition><definition><define key="string-capitalize-words-fun" name="string-capitalize-words" type="fun"><args>string <standard>&amp;optional</standard> (copy-p <obj>t</obj>) (spaces <obj>t</obj>)</args>
+</define>
+
+<description>Puts each word in <arg>string</arg> into lower-case with an upper case initial,
+and if <arg>spaces</arg> is non-<obj>nil</obj> replaces each hyphen character with a space.
+
+If <arg>copy-p</arg> is <obj>t</obj>, the value is a copy of <arg>string</arg>, and
+<arg>string</arg> itself is unchanged.  Otherwise, <arg>string</arg> itself is
+returned, with its contents changed.
+
+This function is somewhat obsolete.  One can use <obj>string-capitalize</obj>
+followed optionally by <obj>string-subst-char</obj>.
+</description></definition>
+<p>See also the <obj>format</obj> operation <obj>~(</obj>...<obj>~)</obj> on <ref definition-in-file="fd-fio" key="format-case-convert" type="page"></ref>.
+</p>
+</section><a name="Basic String Operations"></a>
+
+<section chapter-number="11" name="Basic String Operations" number="3" title="Basic String Operations"><definition><define key="make-string-fun" name="make-string" type="fun"><args>size <standard>&amp;key</standard> (initial-element <obj>0</obj>)</args>
+</define>
+
+<description>Creates and returns a string of length <arg>size</arg>, with each element
+initialized to <arg>initial-element</arg>, which may be a fixnum
+or a character.
+</description></definition><definition><define key="string-fun" name="string" type="fun"><args>x</args>
+</define>
+
+<description>Coerces <arg>x</arg> into a string.  Most of the string functions apply this to
+their string arguments.  If <arg>x</arg> is a string (or any array), it is
+returned.  If <arg>x</arg> is a symbol, its pname is returned.  If <arg>x</arg> is a
+non-negative fixnum less than 400 octal, a one-character-long string
+containing it is created and returned.  If <arg>x</arg> is an instance that
+supports the <obj>:string-for-printing</obj> operation (such as, a pathname)
+then the result of that operation is returned.  Otherwise, an error is
+signaled.
+
+If you want to get the printed representation of an object into the
+form of a string, this function is <arg>not</arg> what you should use.
+You can use <obj>format</obj>, passing a first argument of <obj>nil</obj> (see <ref definition-in-file="fd-fio" key="format-fun" title="Function format" type="fun"></ref>).
+You might also want to use <obj>with-output-to-string</obj> (see
+<ref definition-in-file="stream" key="with-output-to-string-fun" title="Macro with-output-to-string" type="mac"></ref>).
+</description></definition><definition><define key="string-length-fun" name="string-length" type="fun"><args>string</args>
+</define>
+
+<description>Returns the number of characters in <arg>string</arg>.  This is 1
+if <arg>string</arg> is a number or character object, the <obj>array-active-length</obj>
+(see <ref definition-in-file="fd-arr" key="array-active-length-fun" title="Function array-active-length" type="fun"></ref>)
+if <arg>string</arg>
+is an array, or the <obj>array-active-length</obj> of the pname if <arg>string</arg> is a symbol.
+</description></definition><definition><define key="string-equal-fun" name="string-equal" type="fun"><args>string1 string2 <standard>&amp;key</standard> (start1 <obj>0</obj>) (start2 <obj>0</obj>) end1 end2</args>
+</define>
+
+<description>Compares two strings, returning <obj>t</obj> if
+they are equal and <obj>nil</obj> if they are not.  The comparison ignores
+the font and case of the characters.  <obj>equal</obj> calls <obj>string-equal</obj> if
+applied to two strings.
+        The keyword arguments <arg>start1</arg> and <arg>start2</arg> are the starting
+indices into the strings.  <arg>end1</arg> and <arg>end2</arg>
+are the final indices; the comparison stops just <arg>before</arg> the final index.
+<obj>nil</obj> for <arg>end1</arg> or <arg>end2</arg> means stop at the end of the string.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(string-equal &quot;Foo&quot; &quot;foo&quot;) =&gt; t
+(string-equal &quot;foo&quot; &quot;bar&quot;) =&gt; nil
+(string-equal &quot;element&quot; &quot;select&quot; 0 1 3 4) =&gt; t
+</exdent></lisp>
+An older calling sequence in which the <arg>start</arg> and <arg>end</arg> arguments are
+positional rather than keyword is still supported.  The arguments
+come in the order <arg>start1</arg> <arg>start2</arg> <arg>end1</arg> <arg>end2</arg>.  This calling
+sequence is obsolete and should be changed whenever found.
+</description></definition><definition><define key="string-not-equal-fun" name="string-not-equal" type="fun"><args>string1 string2 <standard>&amp;key</standard> (start1 <obj>0</obj>) end1 (start2 <obj>0</obj>) end2</args>
+</define>
+
+<description><obj>(not (string-equal ...))</obj>
+</description></definition><definition><define key="string=-fun" name="string=" type="fun"><args>string1 string2 <standard>&amp;key</standard> (start1 <obj>0</obj>) (start2 <obj>0</obj>) end1 end2</args>
+</define>
+
+<description>is like <obj>string-equal</obj> except that case is significant.
+
+<lisp>(string= &quot;A&quot; &quot;a&quot;) =&gt; nil
+</lisp></description></definition><definition><define key="string≠-fun" name="string≠" type="fun"><args>string1 string2 <standard>&amp;key</standard> (start1 <obj>0</obj>) end1 (start2 <obj>0</obj>) end2</args>
+</define><define key="string//=-fun" name="string//=" type="fun"><args>string1 string2 <standard>&amp;key</standard> (start1 <obj>0</obj>) end1 (start2 <obj>0</obj>) end2</args>
+</define>
+
+<description><obj>(not (string= ...))</obj>.  Note that in Common Lisp syntax you would
+write <obj>string/=</obj>, not <obj>string//=</obj>.
+</description></definition><definition><define key="string-lessp-fun" name="string-lessp" type="fun"><args>string1 string2 <standard>&amp;key</standard> (start1 <obj>0</obj>) end1 (start2 <obj>0</obj>) end2</args>
+</define><define key="string-greaterp-fun" name="string-greaterp" type="fun"><args>string1 string2 <standard>&amp;key</standard> (start1 <obj>0</obj>) end1 (start2 <obj>0</obj>) end2</args>
+</define><define key="string-not-greaterp-fun" name="string-not-greaterp" type="fun"><args>string1 string2 <standard>&amp;key</standard> (start1 <obj>0</obj>) end1 (start2 <obj>0</obj>) end2</args>
+</define><define key="string-not-lessp-fun" name="string-not-lessp" type="fun"><args>string1 string2 <standard>&amp;key</standard> (start1 <obj>0</obj>) end1 (start2 <obj>0</obj>) end2</args>
+</define>
+
+<description>Compare all or the specified portions of <arg>string1</arg> and <arg>string2</arg>
+using dictionary order.  Characters are compared using <obj>char-lessp</obj>
+and <obj>char-equal</obj> so that font and alphabetic case are ignored.
+
+You can use these functions as predicates, but they do more.
+If the strings fit the condition (e.g. <arg>string1</arg> is strictly less in
+<obj>string-lessp</obj>) then the value is a number, the index in <arg>string1</arg>
+of the first point of difference between the strings.  This equals
+the length of <arg>string1</arg> if the strings match.  If the condition is
+not met, the value is <obj>nil</obj>.
+
+<lisp>(string-lessp &quot;aa&quot; &quot;Ab&quot;) =&gt; 1
+(string-lessp &quot;aa&quot; &quot;Ab&quot; :end1 1 :end2 1) =&gt; nil
+(string-not-greaterp &quot;Aa&quot; &quot;Ab&quot; :end1 1 :end2 1) =&gt; 1
+</lisp></description></definition><definition><define key="string&lt;-fun" name="string&lt;" type="fun"><args>string1 string2 <standard>&amp;key</standard> (start1 <obj>0</obj>) end1 (start2 <obj>0</obj>) end2</args>
+</define><define key="string&gt;-fun" name="string&gt;" type="fun"><args>string1 string2 <standard>&amp;key</standard> (start1 <obj>0</obj>) end1 (start2 <obj>0</obj>) end2</args>
+</define><define key="string&gt;=-fun" name="string&gt;=" type="fun"><args>string1 string2 <standard>&amp;key</standard> (start1 <obj>0</obj>) end1 (start2 <obj>0</obj>) end2</args>
+</define><define key="string&lt;=-fun" name="string&lt;=" type="fun"><args>string1 string2 <standard>&amp;key</standard> (start1 <obj>0</obj>) end1 (start2 <obj>0</obj>) end2</args>
+</define><define key="string≤-fun" name="string≤" type="fun"><args>string1 string2 <standard>&amp;key</standard> (start1 <obj>0</obj>) end1 (start2 <obj>0</obj>) end2</args>
+</define><define key="string≥-fun" name="string≥" type="fun"><args>string1 string2 <standard>&amp;key</standard> (start1 <obj>0</obj>) end1 (start2 <obj>0</obj>) end2</args>
+</define>
+
+<description>Like <obj>string-lessp</obj>, etc., but treat case and font as significant
+when comparing characters.
+
+<lisp>(string&lt; &quot;AA&quot; &quot;aa&quot;) =&gt; 0
+(string-lessp &quot;AA&quot; &quot;aa&quot;) =&gt; nil
+</lisp></description></definition><definition><define key="string-compare-fun" name="string-compare" type="fun"><args>string1 string2 <standard>&amp;optional</standard> (start1 <obj>0</obj>) (start2 <obj>0</obj>) end1 end2</args>
+</define>
+
+<description>Compares two strings using dictionary order (as defined
+by <obj>char-lessp</obj>).  The arguments are interpreted as in <obj>string-equal</obj>.
+The result is <obj>0</obj> if the strings are equal, a negative number if <arg>string1</arg>
+is less than <arg>string2</arg>, or a positive number if <arg>string1</arg> is greater than
+<arg>string2</arg>.  If the strings are not equal, the absolute value of the
+number returned is one greater than the index (in <arg>string1</arg>) where the first
+difference occurred.
+</description></definition><definition><define key="substring-fun" name="substring" type="fun"><args>string start <standard>&amp;optional</standard> end area</args>
+</define>
+
+<description>Extracts a substring of <arg>string</arg>, starting at the
+character specified by <arg>start</arg> and going up to but not including
+the character specified by <arg>end</arg>.  <arg>start</arg> and <arg>end</arg> are
+0-origin indices.  The length of the returned string is <arg>end</arg> minus
+<arg>start</arg>.  If <arg>end</arg> is not specified it defaults to the length
+of <arg>string</arg>.  The area in which the result is to be consed may be
+optionally specified.
+
+<index-entry index="concepts" title="paper tape punch"></index-entry>
+
+<lisp><exdent amount="96"><caption>Example: </caption>(substring &quot;Nebuchadnezzar&quot; 4 8) =&gt; &quot;chad&quot;
+</exdent></lisp></description></definition><definition><define key="nsubstring-fun" name="nsubstring" type="fun"><args>string start <standard>&amp;optional</standard> end area</args>
+</define>
+
+<description>Is like <obj>substring</obj> except that the substring
+is not copied; instead an indirect array (see <ref definition-in-file="fd-arr" key="indirect-array" type="page"></ref>) is created which shares part
+of the argument <arg>string</arg>.  Modifying one string will modify the other.
+
+Note that <obj>nsubstring</obj> does not necessarily use less storage than
+<obj>substring</obj>; an <obj>nsubstring</obj> of any length uses at least as much
+storage as a <obj>substring</obj> 12 characters long.  So you shouldn't use
+this for efficiency; it is intended for uses in which it is important
+to have a substring which, if modified, will cause the original string
+to be modified too.
+</description></definition><definition><define key="string-append-fun" name="string-append" type="fun"><args><standard>&amp;rest</standard> strings</args>
+</define>
+
+<description>Copies and concatenates any number of strings into a single string.
+With a single argument, <obj>string-append</obj> simply copies it.  If there
+are no arguments, the value is an empty string.  In fact, vectors of any
+type may be used as arguments, and the value is a vector capable of
+holding all the elements of all the arguments.  Thus <obj>string-append</obj>
+can be used to copy and concatenate any type of vector.  If the first
+argument is not an array (for example, if it is a character), the value
+is a string.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(string-append #\! &quot;foo&quot; #\!) =&gt; &quot;!foo!&quot;
+</exdent></lisp></description></definition><definition><define key="string-nconc-fun" name="string-nconc" type="fun"><args>modified-string <standard>&amp;rest</standard> strings</args>
+</define>
+
+<description>Is like <obj>string-append</obj> except that instead
+of making a new string containing the concatenation of its arguments,
+<obj>string-nconc</obj> modifies its first argument.  <arg>modified-string</arg>
+must have a fill-pointer so that additional characters can be tacked
+onto it.  Compare this with <obj>array-push-extend</obj>
+(<ref definition-in-file="fd-arr" key="array-push-extend-fun" title="Function array-push-extend" type="fun"></ref>).  The value of <obj>string-nconc</obj> is
+<arg>modified-string</arg> or a new, longer copy of it; in the latter case
+the original copy is forwarded to the new copy (see <obj>adjust-array-size</obj>,
+<ref definition-in-file="fd-arr" key="adjust-array-size-fun" title="Function adjust-array-size" type="fun"></ref>).  Unlike <obj>nconc</obj>, <obj>string-nconc</obj>
+with more than two arguments modifies only its first argument, not
+every argument but the last.
+</description></definition><definition><define key="string-trim-fun" name="string-trim" type="fun"><args>char-set string</args>
+</define>
+
+<description>Returns a <obj>substring</obj> of <arg>string</arg>, with all characters
+in <arg>char-set</arg> stripped off the beginning and end.
+<arg>char-set</arg> is a set of characters, which can be represented as a list
+of characters, a string of characters or a single character.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(string-trim '(#\sp) &quot;  Dr. No  &quot;) =&gt; &quot;Dr. No&quot;
+(string-trim &quot;ab&quot; &quot;abbafooabb&quot;) =&gt; &quot;foo&quot;
+</exdent></lisp></description></definition><definition><define key="string-left-trim-fun" name="string-left-trim" type="fun"><args>char-set string</args>
+</define>
+
+<description>Returns a <obj>substring</obj> of <arg>string</arg>, with all characters
+in <arg>char-set</arg> stripped off the beginning.
+<arg>char-set</arg> is a set of characters, which can be represented as a list
+of characters, a string of characters or a single character.
+</description></definition><definition><define key="string-right-trim-fun" name="string-right-trim" type="fun"><args>char-set string</args>
+</define>
+
+<description>Returns a <obj>substring</obj> of <arg>string</arg>, with all characters
+in <arg>char-set</arg> stripped off the end.
+<arg>char-set</arg> is a set of characters, which can be represented as a list
+of characters, a string of characters or a single character.
+</description></definition><definition><define key="string-remove-fonts-fun" name="string-remove-fonts" type="fun"><args>string</args>
+</define>
+
+<description>        Returns a copy of <arg>string</arg> with each character truncated to 8
+bits; that is, changed to font zero.
+
+If <arg>string</arg> is an ordinary string of array type <obj>art-string</obj>, this
+does not change anything, but it makes a difference if <arg>string</arg> is an
+<obj>art-fat-string</obj>.
+</description></definition><definition><define key="string-reverse-fun" name="string-reverse" type="fun"><args>string</args>
+</define><define key="string-nreverse-fun" name="string-nreverse" type="fun"><args>string</args>
+</define>
+
+<description>Like <obj>reverse</obj> and <obj>nreverse</obj>, but on strings only (see <ref definition-in-file="generic" key="reverse-fun" title="Function reverse" type="fun"></ref>).
+There is no longer any reason to use these functions except
+that they coerce numbers
+and symbols into strings like the other string functions.
+</description></definition><definition><define key="string-pluralize-fun" name="string-pluralize" type="fun"><args>string</args>
+</define>
+
+<description>Returns a string containing the plural of the
+word in the argument <arg>string</arg>.  Any added characters go in the same
+case as the last character of <arg>string</arg>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(string-pluralize &quot;event&quot;) =&gt; &quot;events&quot;
+(string-pluralize &quot;trufan&quot;) =&gt; &quot;trufen&quot;
+(string-pluralize &quot;Can&quot;) =&gt; &quot;Cans&quot;
+(string-pluralize &quot;key&quot;) =&gt; &quot;keys&quot;
+(string-pluralize &quot;TRY&quot;) =&gt; &quot;TRIES&quot;
+</exdent></lisp>For words with multiple plural forms depending on the
+meaning, <obj>string-pluralize</obj> cannot always do the right thing.
+</description></definition><definition><define key="string-select-a-or-an-fun" name="string-select-a-or-an" type="fun"><args>word</args>
+</define>
+
+<description>Returns <obj>&quot;a&quot;</obj> or <obj>&quot;an&quot;</obj> according to the string <arg>word</arg>;
+whichever one appears to be correct to use before <arg>word</arg> in English.
+</description></definition><definition><define key="string-append-a-or-an-fun" name="string-append-a-or-an" type="fun"><args>word</args>
+</define>
+
+<description>Returns the result of appending <obj>&quot;a &quot;</obj> or <obj>&quot;an &quot;</obj>, whichever is
+appropriate, to the front of <arg>word</arg>.
+</description></definition><definition><define key="%string-equal-fun" name="%string-equal" type="fun"><args>string1 start1 string2 start2 count</args>
+</define>
+
+<description><obj>%string-equal</obj> is the microcode primitive used by <obj>string-equal</obj>.
+It returns <obj>t</obj> if the <arg>count</arg> characters of <arg>string1</arg> starting
+at <arg>start1</arg> are <obj>char-equal</obj> to the <arg>count</arg> characters of <arg>string2</arg>
+starting at <arg>start2</arg>, or <obj>nil</obj> if the characters are not equal or
+if <arg>count</arg> runs off the length of either array.
+
+Instead of a fixnum, <arg>count</arg> may also be <obj>nil</obj>.  In this case,
+<obj>%string-equal</obj> compares
+the substring from <arg>start1</arg> to <obj>(string-length <arg>string1</arg>)</obj>
+against the substring from <arg>start2</arg> to <obj>(string-length <arg>string2</arg>)</obj>.
+If the lengths of these substrings differ, then they are not equal and
+<obj>nil</obj> is returned.
+
+Note that <arg>string1</arg> and <arg>string2</arg> must really be strings; the
+usual coercion of symbols and fixnums to strings is not performed.
+This function is documented because certain programs which require
+high efficiency and are willing to pay the price of less generality
+may want to use <obj>%string-equal</obj> in place of <obj>string-equal</obj>.
+
+
+<lisp><exdent amount="96"><caption>Examples: </caption><standard>To compare the two strings <arg>foo</arg> and <arg>bar</arg>:</standard>
+(%string-equal <arg>foo</arg> 0 <arg>bar</arg> 0 nil)
+<standard>To see if the string <arg>foo</arg> starts with the characters <obj>&quot;bar&quot;</obj>:</standard>
+(%string-equal <arg>foo</arg> 0 &quot;bar&quot; 0 3)
+</exdent></lisp></description></definition><definition>
+<define key="alphabetic-case-affects-string-comparison-var" name="alphabetic-case-affects-string-comparison" type="var"></define>
+
+<description>If this variable is <obj>t</obj>, the functions <obj>%string-equal</obj> and <obj>%string-search</obj>
+consider case (and font) significant in comparing characters.
+Normally this variable is <obj>nil</obj> and those primitives ignore differences of case.
+
+This variable may be bound by user programs around calls to
+<obj>%string-equal</obj> and <obj>%string-search-char</obj>, but do not set it globally,
+for that may cause system malfunctions.
+</description></definition></section><a name="String Searching"></a>
+
+<section chapter-number="11" name="String Searching" number="4" title="String Searching"><definition><define key="string-search-char-fun" name="string-search-char" type="fun"><args>char string <standard>&amp;optional</standard> (from <obj>0</obj>) to consider-case</args>
+</define>
+
+<description>Searches through <arg>string</arg> starting at the index <arg>from</arg>,
+which defaults to the beginning, and returns the index of the first
+character that is <obj>char-equal</obj> to <arg>char</arg>, or <obj>nil</obj> if none is found.
+If <arg>to</arg> is non-<obj>nil</obj>, it is used in place of <obj>(string-length <arg>string</arg>)</obj>
+to limit the extent of the search.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(string-search-char #\a &quot;banana&quot;) =&gt; 1
+</exdent></lisp>Case (and font) is significant in comparison of characters if <arg>consider-case</arg>
+is non-<obj>nil</obj>.  In other words, characters are compared using <obj>char=</obj> rather
+than <obj>char-equal</obj>.
+
+<lisp>(string-search-char #\a &quot;BAnana&quot; 0 nil t) =&gt; 3
+</lisp></description></definition><definition><define key="%string-search-char-fun" name="%string-search-char" type="fun"><args>char string from to</args>
+</define>
+
+<description><obj>%string-search-char</obj> is the microcode primitive called by <obj>string-search-char</obj>
+and other functions.  <arg>string</arg> must be an array and <arg>char</arg>, <arg>from</arg>,
+and <arg>to</arg> must be fixnums.  The arguments are all required.
+Case-sensitivity is controlled by the value of the variable
+<obj>alphabetic-case-affects-string-comparison</obj> rather than by an argument.
+Except for these these differences, <obj>%string-search-char</obj> is the same as
+<obj>string-search-char</obj>.  This function is documented for the benefit of
+those who require the maximum possible efficiency in string searching.
+</description></definition><definition><define key="string-search-not-char-fun" name="string-search-not-char" type="fun"><args>char string <standard>&amp;optional</standard> (from <obj>0</obj>) to consider-case</args>
+</define>
+
+<description>Like <obj>string-search-char</obj> but searches <arg>string</arg> for a character different
+from <arg>char</arg>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(string-search-not-char #\B &quot;banana&quot;) =&gt; 1
+(string-search-not-char #\B &quot;banana&quot; 0 nil t) =&gt; 0
+</exdent></lisp></description></definition><definition><define key="string-search-fun" name="string-search" type="fun"><args>key string <standard>&amp;optional</standard> (from <obj>0</obj>) to (key-from <obj>0</obj>) key-to consider-case</args>
+</define>
+
+<description>Searches for the string <arg>key</arg> in the string
+<arg>string</arg>.
+The search begins at <arg>from</arg>, which defaults to the beginning of
+<arg>string</arg>.  The value returned is the index of the first character of
+the first instance of <arg>key</arg>, or <obj>nil</obj> if none is found.  If
+<arg>to</arg> is non-<obj>nil</obj>, it is used in place of <obj>(string-length
+<arg>string</arg>)</obj> to limit the extent of the search.
+
+The arguments <arg>key-from</arg> and <arg>key-to</arg> can be used to specify the
+portion of <arg>key</arg> to be searched for, rather than all of <arg>key</arg>.
+
+Case and font are significant in character
+comparison if <arg>consider-case</arg> is non-<obj>nil</obj>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(string-search &quot;an&quot; &quot;banana&quot;) =&gt; 1
+(string-search &quot;an&quot; &quot;banana&quot; 2) =&gt; 3
+(string-search &quot;tank&quot; &quot;banana&quot; 2 nil 1 3) =&gt; 3
+(string-search &quot;an&quot; &quot;BAnaNA&quot; 0 nil 0 nil t) =&gt; nil
+</exdent></lisp></description></definition><definition><define key="string-search-set-fun" name="string-search-set" type="fun"><args>char-set string <standard>&amp;optional</standard> (from <obj>0</obj>) to consider-case</args>
+</define>
+
+<description>Searches through <arg>string</arg> looking for a character that is in
+<arg>char-set</arg>.  <arg>char-set</arg> is a set of characters, which can be
+represented as a sequence of characters or a single character.
+
+The search begins at the index <arg>from</arg>, which defaults to the
+beginning.  It returns the index of the first character that is
+<obj>char-equal</obj> to some element of <arg>char-set</arg>, or <obj>nil</obj> if none is
+found.  If <arg>to</arg> is non-<obj>nil</obj>, it is used in place of
+<obj>(string-length <arg>string</arg>)</obj> to limit the extent of the search.
+
+Case and font are significant in character
+comparison if <arg>consider-case</arg> is non-<obj>nil</obj>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(string-search-set '(#\n #\o) &quot;banana&quot;) =&gt; 2
+(string-search-set &quot;no&quot; &quot;banana&quot;) =&gt; 2
+</exdent></lisp></description></definition><definition><define key="string-search-not-set-fun" name="string-search-not-set" type="fun"><args>char-set string <standard>&amp;optional</standard> (from <obj>0</obj>) to consider-case</args>
+</define>
+
+<description>Like <obj>string-search-set</obj> but searches for a character that is <arg>not</arg>
+in <arg>char-set</arg>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(string-search-not-set '(#\a #\b) &quot;banana&quot;) =&gt; 2
+</exdent></lisp></description></definition><definition><define key="string-reverse-search-char-fun" name="string-reverse-search-char" type="fun"><args>char string <standard>&amp;optional</standard> from (to <obj>0</obj>) consider-case</args>
+</define>
+
+<description>Searches through <arg>string</arg> in reverse
+order, starting from the index one less than <arg>from</arg> (<obj>nil</obj> for
+<arg>from</arg> starts at the end of <arg>string</arg>), and returns the index of the
+first character which is <obj>char-equal</obj> to <arg>char</arg>, or <obj>nil</obj> if none
+is found.  Note that the index returned is from the beginning of the
+string, although the search starts from the end.
+The last (leftmost) character of <arg>string</arg> examined is the one at index <arg>to</arg>.
+
+Case and font are significant in character
+comparison if <arg>consider-case</arg> is non-<obj>nil</obj>.  In this case,
+<obj>char=</obj> is used for the comparison rather than <obj>char-equal</obj>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(string-reverse-search-char #\n &quot;banana&quot;) =&gt; 4
+</exdent></lisp></description></definition><definition><define key="string-reverse-search-not-char-fun" name="string-reverse-search-not-char" type="fun"><args>char string <standard>&amp;optional</standard> from (to <obj>0</obj>) consider-case</args>
+</define>
+
+<description>Like <obj>string-reverse-search-char</obj> but searches for a character in <arg>string</arg>
+that is different from <arg>char</arg>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(string-reverse-search-not-char #\a &quot;banana&quot;) =&gt; 4
+;<standard>4 is the index of the second &quot;n&quot;</standard>
+</exdent></lisp></description></definition><definition><define key="string-reverse-search-fun" name="string-reverse-search" type="fun"><args>key string <standard>&amp;optional</standard> from (to <obj>0</obj>) (key-from <obj>0</obj>) key-to consider-case</args>
+</define>
+
+<description>Searches for the string <arg>key</arg> in the string <arg>string</arg>.
+The search proceeds in reverse order, starting
+from the index one less than <arg>from</arg>,
+and returns the index of the first (leftmost) character of the first instance found,
+or <obj>nil</obj> if none is found.  Note that the index returned
+is from the beginning of the string, although the search starts from the end.
+The <arg>from</arg> condition, restated, is that the instance of <arg>key</arg> found
+is the rightmost one whose rightmost character is before the <arg>from</arg>'th character
+of <arg>string</arg>.  <obj>nil</obj> for <arg>from</arg> means the search starts at the end of <arg>string</arg>.
+The last (leftmost) character of <arg>string</arg> examined is the one at index <arg>to</arg>.
+
+
+<lisp><exdent amount="96"><caption>Example: </caption>(string-reverse-search &quot;na&quot; &quot;banana&quot;) =&gt; 4
+</exdent></lisp>
+The arguments <arg>key-from</arg> and <arg>key-to</arg> can be used to specify the
+portion of <arg>key</arg> to be searched for, rather than all of <arg>key</arg>.
+Case and font are significant in character
+comparison if <arg>consider-case</arg> is non-<obj>nil</obj>.
+</description></definition><definition><define key="string-reverse-search-set-fun" name="string-reverse-search-set" type="fun"><args>char-set string <standard>&amp;optional</standard> from (to <obj>0</obj>) consider-case</args>
+</define>
+
+<description>Searches through <arg>string</arg> in reverse order for a character
+which is <obj>char-equal</obj> to some element of <arg>char-set</arg>.
+<arg>char-set</arg> is a set of characters, which can be represented as a list
+of characters, a string of characters or a single character.
+
+The search starts from an index one less than <arg>from</arg>, and returns the
+index of the first suitable character found, or <obj>nil</obj> if none is
+found.  <obj>nil</obj> for <arg>from</arg> means the search starts at the end of
+<arg>string</arg>.  Note that the index returned is from the beginning of the
+string, although the search starts from the end.  The last (leftmost)
+character of <arg>string</arg> examined is the one at index <arg>to</arg>.
+
+Case and font are significant in character
+comparison if <arg>consider-case</arg> is non-<obj>nil</obj>.  In this case,
+<obj>char=</obj> is used for the comparison rather than <obj>char-equal</obj>.
+
+
+<lisp>(string-reverse-search-set &quot;ab&quot; &quot;banana&quot;) =&gt; 5
+</lisp></description></definition><definition><define key="string-reverse-search-not-set-fun" name="string-reverse-search-not-set" type="fun"><args>char-set string <standard>&amp;optional</standard> from (to <obj>0</obj>) consider-case</args>
+</define>
+
+<description>Like <obj>string-reverse-search-set</obj> but searches for a character which
+is <arg>not</arg> in <arg>char-set</arg>.
+
+<lisp>(string-reverse-search-not-set '(#\a #\n) &quot;banana&quot;) =&gt; 0
+</lisp></description></definition><definition><define key="string-subst-char-fun" name="string-subst-char" type="fun"><args>new-char old-char string (copy-p <obj>t</obj>) (retain-font-p <obj>t</obj>)</args>
+</define>
+
+<description>Returns a copy of <arg>string</arg> in which all occurrences of <arg>old-char</arg>
+have been replaced by <arg>new-char</arg>.
+
+Case and font are ignored in comparing <arg>old-char</arg> against characters of <arg>string</arg>.
+Normally the font information of the character replaced is preserved, so that an <arg>old-char</arg>
+in font 3 is replaced by a <arg>new-char</arg> in font 3.  If <arg>retain-font-p</arg> is <obj>nil</obj>,
+the font specified in <arg>new-char</arg> is stored whenever a character is replaced.
+
+If <arg>copy-p</arg> is <obj>nil</obj>, <arg>string</arg> is modified destructively and returned.
+No copy is made.
+</description></definition><definition><define key="substring-after-char-fun" name="substring-after-char" type="fun"><args>char string <standard>&amp;optional</standard> start end area</args>
+</define>
+
+<description>Returns a copy of the portion of <arg>string</arg> that follows the next
+occurrence of <arg>char</arg> after index <arg>start</arg>.  The portion copied ends
+at index <arg>end</arg>.  If <arg>char</arg> is not found before <arg>end</arg>, a null
+string is returned.
+
+The value is consed in area <arg>area</arg>, or in <obj>default-cons-area</obj>,
+unless it is a null string.
+<arg>start</arg> defaults to zero, and <arg>end</arg> to the length of <arg>string</arg>.
+</description></definition>
+<p>See also <obj>make-symbol</obj> (<ref definition-in-file="fd-sym" key="make-symbol-fun" title="Function make-symbol" type="fun"></ref>), which given a string makes
+a new uninterned symbol with that print name, and <obj>intern</obj>
+(<ref definition-in-file="packd" key="intern-fun" title="Function intern" type="fun"></ref>), which given a string returns the one and only symbol
+(in the current package) with that print name.
+</p>
+</section><a name="function-functions"></a>
+
+
+<section chapter-number="11" name="function-functions" number="5" title="Maclisp-Compatible Functions"><p>The following functions are provided primarily for Maclisp compatibility.
+</p>
+<definition><define key="alphalessp-fun" name="alphalessp" type="fun"><args>string1 string2</args>
+</define>
+
+<description><obj>(alphalessp <arg>string1 string2</arg>)</obj> is equivalent to
+<obj>(string-lessp <arg>string1 string2</arg>)</obj>.
+</description></definition><definition><define key="samepnamep-fun" name="samepnamep" type="fun"><args>sym1 sym2</args>
+</define>
+
+<description>This predicate is equivalent to <obj>string=</obj>.
+</description></definition><definition><define key="getchar-fun" name="getchar" type="fun"><args>string index</args>
+</define>
+
+<description>        Returns the <arg>index</arg>'th character of <arg>string</arg>
+as a symbol.  Note that 1-origin indexing is used.  This function
+is mainly for Maclisp compatibility; <obj>aref</obj> should be used
+to index into strings (but <obj>aref</obj> does not coerce symbols
+or numbers into strings).
+</description></definition><definition><define key="getcharn-fun" name="getcharn" type="fun"><args>string index</args>
+</define>
+
+<description>        Returns the <arg>index</arg>'th character of <arg>string</arg>
+as a fixnum.  Note that 1-origin indexing is used.  This function
+is mainly for Maclisp compatibility; <obj>aref</obj> should be used
+to index into strings (but <obj>aref</obj> does not coerce symbols
+or numbers into strings).
+</description></definition><definition><define key="ascii-fun" name="ascii" type="fun"><args>x</args>
+</define>
+
+<description>Like <obj>character</obj>, but returns a symbol
+whose printname is the character instead of returning a fixnum.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(ascii #o101) =&gt; A
+(ascii #o56) =&gt; /.
+</exdent></lisp>The symbol returned is interned in the current package (see <ref chapter="28" definition-in-file="packd" key="package" section="0" title="Packages" type="section"></ref>).
+</description></definition><definition><define key="maknam-fun" name="maknam" type="fun"><args>char-list</args>
+</define>
+
+<description>Returns
+an uninterned symbol whose print-name is a string made up of the characters in <arg>char-list</arg>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(maknam '(a b #\0 d)) =&gt; ab0d
+</exdent></lisp></description></definition><definition><define key="implode-fun" name="implode" type="fun"><args>char-list</args>
+</define>
+
+<description>        <obj>implode</obj> is like <obj>maknam</obj> except that the returned symbol
+is interned in the current package.
+</description></definition></section></chapter>
+</document-part>

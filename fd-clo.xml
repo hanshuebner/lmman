@@ -1,0 +1,393 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="closure-chapter"></a>
+<chapter name="closure-chapter" number="13" title="Closures"><index-entry index="concepts" title="closure"></index-entry>
+
+<index-entry index="concepts" title="coroutine"></index-entry>
+
+<p indent="1">        A <arg>closure</arg> is a type of Lisp functional object useful
+for implementing certain advanced access and control structures.
+Closures give you more explicit control over the
+environment by allowing you to save the dynamic bindings of specified
+variables and then to refer to those bindings later, even after
+the construct (<obj>let</obj>, etc.) which made the bindings has been exited.
+</p>
+<a name="What a Closure Is"></a>
+
+
+<section chapter-number="13" name="What a Closure Is" number="1" title="What a Closure Is"><p indent="1">        There is a view of dynamic variable binding that we use in this
+section because it makes it easier to explain what closures do.  In this
+view, when a variable is bound dynamically, a new binding is created for
+it.  The old binding is saved away somewhere and is inaccessible.  Any
+references to the variable then get the contents of the new
+binding, and any <obj>setq</obj>'s change the contents of the new value
+cell.  Evantually the new binding goes away, and the old binding, along
+with its contents, becomes current again.
+</p>
+
+<p indent="1">        For example, consider the following sequence of Lisp forms:
+</p>
+
+<lisp>(defvar a 3)            ;<standard> <obj>a</obj> becomes 3.</standard>
+
+(let ((a 10))           ;<standard> <obj>a</obj> rebound to 10.</standard>
+  (print (+ a 6)))      ;<standard> 16 is printed.</standard>
+
+(print a)               ;<standard> 3 is printed.</standard>
+</lisp>
+<p>Initially there is a binding for <obj>a</obj>, and the <obj>setq</obj> form makes the
+contents of that binding be <obj>3</obj>.  Then the <obj>lambda</obj>-combination is
+evaluated.  <obj>a</obj> is bound to <obj>10</obj>: the old binding, which still
+contains <obj>3</obj>, is saved away, and a new binding is created with
+<obj>10</obj> as its contents.  The reference to <obj>a</obj> inside the <obj>lambda</obj>
+expression evaluates to the current binding of <obj>a</obj>, which is the
+contents of its current binding, namely <obj>10</obj>.  So <obj>16</obj> is printed.
+Then the newer binding is discarded and the old binding, which still
+contains a <obj>3</obj>, is restored.  The final <obj>print</obj> prints <obj>3</obj>.
+</p>
+
+<p indent="1">        The form <obj>(closure <arg>var-list</arg> <arg>function</arg>)</obj>, where
+<arg>var-list</arg> is a list of variables and <arg>function</arg> is any function,
+creates and returns a closure.  When this closure is applied to some
+arguments, all of the bindings of the variables on <arg>var-list</arg> are
+saved away, and the bindings that those variables had <arg>at the time
+<obj>closure</obj> was called</arg> (that is, at the time the closure was created)
+are made to be the bindings of the symbols.  Then <arg>function</arg> is
+applied to the arguments.  (This paragraph is somewhat complex, but it
+completely describes the operation of closures; if you don't understand
+it, come back and read it again after reading the next two paragraphs.)
+</p>
+
+<p indent="1">        Here is another, lower-level explanation.  The closure object
+stores several things inside it.  First, it saves the <arg>function</arg>.
+Secondly, for each variable in <arg>var-list</arg>, it remembers what that
+variable's binding was when the closure was created.
+Then when the closure is called as a function, it first temporarily restores
+the bindings it has remembered inside the closure, and then applies <arg>function</arg> to the
+same arguments to which the closure itself was applied.  When the function
+returns, the bindings are restored to be as they were before the closure
+was called.
+</p>
+
+<p indent="1">        Now, if we evaluate the form
+
+<lisp>(setq a 
+      (let ((x 3))
+        (declare (special x))
+        (closure '(x) 'frob)))
+</lisp>what happens is that a new binding is created for <obj>x</obj>, containing
+a fixnum <obj>3</obj>.  Then a closure is created, which remembers
+the function <obj>frob</obj>, the symbol <obj>x</obj>, and that binding.
+Finally the old binding of <obj>x</obj> is restored, and the closure is
+returned.  Notice that the new binding is still around, because
+it is still known about by the closure.  When the closure is applied,
+say by doing <obj>(funcall a 7)</obj>,
+this binding is temporarily restored and the value of <obj>x</obj> is <obj>3</obj>
+again.  If <obj>frob</obj> uses <obj>x</obj> as a free variable, it sees <obj>3</obj>
+as the value.
+</p>
+
+<p indent="1">        A closure can be made around any function, using any form that
+evaluates to a function.  The form could evaluate to a compiled
+function, as would <obj>(function (lambda () x))</obj>.  In the example above,
+the form is <obj>'frob</obj> and it evaluates to the symbol <obj>frob</obj>.  A symbol
+is also a good function.  It is usually better to close around a symbol
+that is the name of the desired function, so that the closure points to
+the symbol.  Then, if the symbol is redefined, the closure will use the
+new definition.  If you actually prefer that the closure continue to use
+the old definition that was current when the closure was made,
+use <obj>function</obj>, as in:
+
+<lisp>(closure '(x) (function frob))
+</lisp></p>
+
+<p indent="1">        Explicit closures made with <obj>closure</obj> record only the dynamic
+bindings of the specified variables.  Another closure mechanism is
+activated automatically to record lexical bindings whenever <obj>function</obj>
+is used around an explicit lambda expression, but <obj>closure</obj> itself has
+no interaction with lexical bindings.
+</p>
+
+<p>It is the user's responsibility to make sure that the bindings that the
+closure is intended to record are dynamic bindings, either by means of
+special declarations (see <ref definition-in-file="fd-eva" key="declare-fun" title="Special Form declare" type="spec"></ref>) as shown above or by making the variables
+globally special with <obj>defvar</obj> or equivalent.  If the function closed over is an
+explicit lambda expression, it is occasionally necessary to use declarations
+within it to make sure that the variables are considered special there.
+But this is not needed if the variables are globally special or if
+a special declaration is lexically visible where <obj>closure</obj> is called.
+</p>
+
+<p>Usually the compiler can tell when a special declaration is missing, but
+when making a closure the compiler detects this only after acting on the
+assumption that the variable is lexical, by which time it is too late to
+fix things.  The compiler warns you if this happens.
+</p>
+
+<p indent="1">        In Zetalisp's implementation of closures, lambda-binding never
+really allocates any storage to create new bindings.  Bindings receive
+separate storage only when the <obj>closure</obj> function itself finds they
+need it.  Thus, there is no cost associated with closures when they
+are not in use.
+</p>
+
+<p indent="1">        Zetalisp closures differ from the closures of Lisp 1.5 (which were
+made with <obj>function</obj>)
+in that they save specific variables rather than the entire
+variable-binding environment.  For their intended applications, this is
+an advantage.  The explicit declaration of the variables in <obj>closure</obj>
+permits higher efficiency and more flexibility.  In addition the program
+is clearer because the intended effect of the closure is made manifest
+by listing the variables to be affected.  Lisp 1.5 closures are more similar
+to Zetalisp's automatic handling of lexical variables.
+</p>
+
+<index-entry index="concepts" title="internal value cell"></index-entry>
+
+<index-entry index="concepts" title="external value cell"></index-entry>
+
+<p>Closure implementation (which it not usually necessary for you to
+understand) involves two kinds of value cells.  Every symbol has an
+<arg>internal value cell</arg>, part of the symbol itself, which is where its
+dynamic value is normally stored.  When a variable is closed over, it
+gets an <arg>external value cell</arg> to hold its value.  The external value
+cells behave according to the lambda-binding model used earlier in this
+section.  The value in the external value cell is found through the
+usual access mechanisms (such as evaluating the symbol, calling
+<obj>symeval</obj>, etc.), because the internal value cell is made to contain a
+forwarding pointer to the external value cell that is current.  Such a
+forwarding pointer is present in a symbol's value cell whenever its
+current binding is being remembered by some closure; at other times,
+there won't be an invisible pointer, and the value resides directly in
+the symbol's internal value cell.
+</p>
+</section><a name="Examples of the Use of Closures"></a>
+
+
+<section chapter-number="13" name="Examples of the Use of Closures" number="2" title="Examples of the Use of Closures"><p>One thing we can do with closures is to implement a <arg>generator</arg>, which
+is a kind of function which is called successively to obtain successive elements
+of a sequence.
+We implement a function <obj>make-list-generator</obj>, which takes a list
+and returns a generator that returns successive
+elements of the list.  When it gets to the end it should return <obj>nil</obj>.
+</p>
+
+<p indent="1">        The problem is that in between calls to the generator, the generator
+must somehow remember where it is up to in the list.  Since all of its
+bindings are undone when it is exited, it cannot save this information in
+a bound variable.  It could save it in a global variable, but the problem
+is that if we want to have more than one list generator at a time, they
+will all try to use the same global variable and get in each other's way.
+</p>
+
+<p indent="1">        Here is how to solve this problem using closures:
+
+<lisp>(defun make-list-generator (l)
+    (declare (special l))
+    (closure '(l)
+             #'(lambda ()
+                 (prog1 (car l)
+                        (setq l (cdr l))))))
+</lisp><obj>(make-list-generator '(1 2 3))</obj> returns a generator which, on successive
+calls, returns 1, 2, 3, and <obj>nil</obj>.
+</p>
+
+<p>Now we can make as many list generators as we like; they won't get
+in each other's way because each has its own binding for <obj>l</obj>.
+Each of these bindings was created when the <obj>make-list-generator</obj>
+function was entered, and the bindings are remembered by the closures.
+</p>
+
+<p>The following example uses closures which share bindings:
+
+<lisp>(defvar a)
+(defvar b)
+
+(defun foo () (setq a 5))
+
+(defun bar () (cons a b))
+
+(let ((a 1) (b 1))
+   (setq x (closure '(a b) 'foo))
+   (setq y (closure '(a b) 'bar)))
+</lisp></p>
+
+<p>When the <obj>let</obj> is entered, new bindings are created for the symbols
+<obj>a</obj> and <obj>b</obj>, and two closures are created that both point to those
+bindings.  If we do <obj>(funcall x)</obj>, the function <obj>foo</obj> is
+be run, and it changes the contents of the remembered binding
+of <obj>a</obj> to <obj>5</obj>.  If we then do <obj>(funcall y)</obj>, the function <obj>bar</obj>
+returns <obj>(5 . 1)</obj>.  This shows that the binding of <obj>a</obj> seen
+by the closure <obj>y</obj> is the same binding seen by the closure <obj>x</obj>.  The
+top-level binding of <obj>a</obj> is unaffected.
+</p>
+
+<p>Here is how we can create a function that prints always using base 16:
+
+<lisp>(deff print-in-base-16
+      (let ((*print-base* 16.))
+        (closure '(*print-base*) 'print)))
+</lisp></p>
+</section><a name="Closure-Manipulating Functions"></a>
+
+<section chapter-number="13" name="Closure-Manipulating Functions" number="3" title="Closure-Manipulating Functions"><definition><define key="closure-fun" name="closure" type="fun"><args>var-list function</args>
+</define>
+
+<description>Creates and returns a closure of <arg>function</arg> over the variables
+in <arg>var-list</arg>.  Note that all variables on <arg>var-list</arg>
+must be declared special if the function is to compile correctly.
+</description></definition>
+<p>To test whether an object is a closure, use the <obj>closurep</obj> predicate
+(see <ref definition-in-file="fd-dtp" key="closurep-fun" title="Function closurep" type="fun"></ref>) or <obj>(typep <arg>object</arg> 'closure)</obj>.
+</p>
+<definition><define key="symeval-in-closure-fun" name="symeval-in-closure" type="fun"><args>closure symbol</args>
+</define>
+
+<description>Returns the binding of <arg>symbol</arg> in the environment of <arg>closure</arg>;
+that is, it returns what you would get if you restored the bindings
+known about by <arg>closure</arg> and then evaluated <arg>symbol</arg>.
+This allows you to ``look around inside'' a closure.
+If <arg>symbol</arg> is not closed over by <arg>closure</arg>, this is just like <obj>symeval</obj>.
+
+<arg>symbol</arg> may be a locative pointing to a value cell instead of a
+symbol (this goes for all the whatever-in-closure functions).
+</description></definition><definition><define key="set-in-closure-fun" name="set-in-closure" type="fun"><args>closure symbol x</args>
+</define>
+
+<description>Sets the binding of <arg>symbol</arg> in the environment of <arg>closure</arg>
+to <arg>x</arg>; that is, it does what would happen if you restored the bindings
+known about by <arg>closure</arg> and then set <arg>symbol</arg> to <arg>x</arg>.
+This allows you to change the contents of the bindings known about
+by a closure.
+If <arg>symbol</arg> is not closed over by <arg>closure</arg>, this is just like <obj>set</obj>.
+</description></definition><definition><define key="locate-in-closure-fun" name="locate-in-closure" type="fun"><args>closure symbol</args>
+</define>
+
+<description>Returns the location of the place in <arg>closure</arg> where the saved
+value of <arg>symbol</arg> is stored.  An equivalent form is
+<obj>(locf (symeval-in-closure <arg>closure</arg> <arg>symbol</arg>))</obj>.
+</description></definition><definition><define key="boundp-in-closure-fun" name="boundp-in-closure" type="fun"><args>closure symbol</args>
+</define>
+
+<description>Returns <obj>t</obj> if <arg>symbol</arg>'s binding in <arg>closure</arg> is not void.
+This is what <obj>(boundp <arg>symbol</arg>)</obj> would return if executed in
+<arg>closure</arg>'s saved environment.
+</description></definition><definition><define key="makunbound-in-closure-fun" name="makunbound-in-closure" type="fun"><args>closure symbol</args>
+</define>
+
+<description>Makes <arg>symbol</arg>'s binding in <arg>closure</arg> be void.
+This is what <obj>(makunbound <arg>symbol</arg>)</obj> would do if executed in
+<arg>closure</arg>'s saved environment.
+</description></definition><definition><define key="closure-alist-fun" name="closure-alist" type="fun"><args>closure</args>
+</define>
+
+<description>Returns an alist of <obj>(<arg>symbol</arg> . <arg>value</arg>)</obj> pairs describing the
+bindings that the closure performs when it is called.  This list is not
+the same one that is actually stored in the closure; that one contains
+pointers to value cells rather than symbols, and <obj>closure-alist</obj>
+translates them back to symbols so you can understand them.  As a result,
+clobbering part of this list does not change the closure.
+
+The list that is returned may contain void cells if some of the
+closed-over variables were void in the closure's environment.
+In this case, printing the value will get an error (accessing a cell
+that contains a void marker is always an error unless done in a
+special, careful way) but the value can still be passed around.
+</description></definition><definition><define key="closure-variables-fun" name="closure-variables" type="fun"><args>closure</args>
+</define>
+
+<description>Returns a list of variables closed over in <arg>closure</arg>.  This is
+<obj>equal</obj> to the first argument specified to the function <obj>closure</obj>
+when this closure was created.
+</description></definition><definition><define key="closure-function-fun" name="closure-function" type="fun"><args>closure</args>
+</define>
+
+<description>Returns the closed function from <arg>closure</arg>.  This is the function
+that was the second argument to <obj>closure</obj> when the closure was
+created.
+</description></definition><definition><define key="closure-bindings-fun" name="closure-bindings" type="fun"><args>closure</args>
+</define>
+
+<description>Returns the actual list of bindings to be performed when <arg>closure</arg> is entered.
+This list can be passed to <obj>sys:%using-binding-instances</obj>
+to enter the closure's environment without calling the closure.
+See <ref definition-in-file="fd-sub" key="sys:%using-binding-instances-fun" title="Function sys:%using-binding-instances" type="fun"></ref>.
+</description></definition><definition><define key="copy-closure-fun" name="copy-closure" type="fun"><args>closure</args>
+</define>
+
+<description>Returns a new closure that has the same function and variable values as
+<arg>closure</arg>.  The bindings are not shared between the old closure and
+the new one, so that if the old closure changes some closed variable's
+values, the values in the new closure do not change.
+</description></definition><definition><define key="let-closed-fun" name="let-closed" type="mac"><args>((variable value)...) function</args>
+</define>
+
+<description>When using closures, it is very common to bind a set of variables with
+initial values only in order to make a closure over those variables.
+Furthermore, the variables must be declared special.  <obj>let-closed</obj> is
+a special form which does all of this.  It is best described by example:
+
+<lisp>(let-closed ((a 5) b (c 'x))
+   (function (lambda () ...)))
+<standard>macro-expands into</standard>
+(let ((a 5) b (c 'x))
+  (declare (special a b c))
+  (closure '(a b c)
+    (function (lambda () ...))))
+</lisp>
+Note that the following code, which would often be useful, does not work
+as intended if <obj>x</obj> is not special outside the <obj>let-closed</obj>:
+
+<lisp>(let-closed ((x x))
+  (function ...))
+</lisp>This is because the reference to <obj>x</obj> as an initialization for the new
+binding of <obj>x</obj> is affected by the special declaration that the
+<obj>let-closed</obj> produces.  It therefore does not see any lexical binding
+of <obj>x</obj>.  This behavior is unfortunate, but it is required by the
+Common Lisp specifications.  To avoid the problem, write
+
+<lisp>(let ((y x))
+  (let-closed ((x y))
+    (function ...)))
+</lisp>or simply change the name of the variable outside the <obj>let-closed</obj>
+to something other than <obj>x</obj>.
+</description></definition></section><a name="stack-group"></a>
+
+
+<section chapter-number="13" name="stack-group" number="4" title="Entities"><index-entry index="concepts" title="entity"></index-entry>
+
+<p>An entity is almost the same thing as a closure; an entity behaves just
+like a closure when applied, but it has a recognizably different data
+type which allows certain parts of the system such as the printer and
+<obj>describe</obj> to treat it differently.  A closure is simply a kind of
+function, but an entity is assumed to be a message-receiving object.
+Thus, when the Lisp printer (see <ref chapter="24" definition-in-file="rdprt" key="printer" section="1" title="What the Printer Produces" type="section"></ref>) is given a closure, it
+prints a simple textual representation, but when it is handed an entity,
+it sends the entity a <obj>:print-self</obj> message, which the entity is
+expected to handle.  The <obj>describe</obj> function (see <ref definition-in-file="fd-hac" key="describe-fun" title="Function describe" type="fun"></ref>)
+also sends entities messages when it is handed them.  So when you want
+to make a message-receiving object out of a closure, as described on
+<ref definition-in-file="flavor" key="entity-usage" type="page"></ref>, you should use an entity instead.
+</p>
+
+<p>To a large degree, entities are made obsolete by flavors (see <ref chapter="22" definition-in-file="flavor" key="flavor" section="0" title="Objects, Message Passing, and Flavors" type="section"></ref>).
+Flavors have had considerably more attention paid to their efficiency and
+to good tools for using them.  If what you are doing is flavor-like, it
+is better to use flavors.
+</p>
+<definition><define key="entity-fun" name="entity" type="fun"><args>variable-list function</args>
+</define>
+
+<description>Returns a newly constructed entity.  This function is just like the
+function <obj>closure</obj> except that it returns an entity instead of a
+closure.
+
+The <arg>function</arg> argument should be a symbol which has a function
+definition and a value.  When <obj>typep</obj> is applied to this entity, it
+returns the value of that symbol.
+</description></definition>
+<p>To test whether an object is an entity, use the <obj>entityp</obj> predicate
+(see <ref definition-in-file="fd-dtp" key="entityp-fun" title="Function entityp" type="fun"></ref>).  The functions <obj>symeval-in-closure</obj>,
+<obj>closure-alist</obj>, <obj>closure-function</obj>, etc. also operate on entities.
+</p>
+</section></chapter>
+</document-part>

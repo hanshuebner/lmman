@@ -1,0 +1,1365 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="loop-chapter"></a><chapter name="loop-chapter" number="20" title="The LOOP Iteration Macro"><a name="Introduction"></a>
+
+
+<section chapter-number="20" name="Introduction" number="1" title="Introduction"><index-entry index="concepts" title="loop"></index-entry>
+
+<index-entry index="concepts" title="iteration"></index-entry>
+
+<p indent="1">        <obj>loop</obj> is a Lisp macro that provides a programmable
+iteration facility.  The same <obj>loop</obj> module operates compatibly in
+Zetalisp, Maclisp (PDP-10 and Multics), and NIL, and a
+moderately compatible package is under development for the MDL
+programming environment.  <obj>loop</obj> was inspired by the FOR
+facility of CLISP in InterLisp;  however, it is not compatible and
+differs in several details.
+</p>
+
+<p indent="1">        The general approach is that a form introduced by the word
+<obj>loop</obj> generates a single program loop, into which a large variety
+of features can be incorporated.  The loop consists of some
+initialization (<arg>prologue</arg>) code, a body that may be executed
+several times, and some exit (<arg>epilogue</arg>) code.  Variables may be
+declared local to the loop.  The special features of <obj>loop</obj> are concerned with loop
+variables, deciding when to end the iteration, putting user-written
+code into the loop, returning a value from the construct, and
+iterating a variable through various real or virtual sets of values.
+</p>
+
+<p indent="1">        The <obj>loop</obj> form consists of a series of clauses, each
+introduced by a ``keyword'' symbol.  These symbols are keywords from
+<obj>loop</obj>'s point of view; they are not keywords in the usual sense
+(symbols in the <obj>keyword</obj> package).  <obj>loop</obj> ignores the package
+when it compares a symbol against the known keywords.
+</p>
+
+<p>Forms appearing in or implied by the
+clauses of a <obj>loop</obj> form are classed as those to be executed as
+initialization code, body code, and/or exit code;  within each part of
+the template filled in by <obj>loop</obj>, they are executed strictly in
+the order implied by the original composition.  Thus, just as in
+ordinary Lisp code, side-effects may be used, and one piece of code
+may depend on following another for its proper operation.  This is the
+principal philosophic difference from InterLisp's FOR facility.
+</p>
+
+<p indent="1">        Note that <obj>loop</obj> forms are intended to look like stylized
+English rather than Lisp code.  There is a notably low density of
+parentheses, and many of the keywords are accepted in several synonymous
+forms to allow writing of more euphonious and grammatical English.  Some
+find this notation verbose and distasteful, while others find it
+flexible and convenient.  The former are invited to stick to <obj>do</obj>.
+</p>
+
+<p indent="1">        Here are some examples to illustrate the use of <obj>loop</obj>.
+
+
+<group><lisp>(defun print-elements-of-list (list-of-elements)
+    (loop for element in list-of-elements
+          do (print element)))
+</lisp>prints each element in its argument, which
+should be a list.  It returns <obj>nil</obj>.
+</group>
+
+<group><lisp>(defun gather-alist-entries (list-of-pairs)
+    (loop for pair in list-of-pairs
+          collect (car pair)))
+</lisp>takes an association list and
+returns a list of the keys;  that is, <obj>(gather-alist-entries
+'((foo 1 2) (bar 259) (baz)))</obj> returns <obj>(foo bar baz)</obj>.
+</group>
+
+<group><lisp>(defun extract-interesting-numbers (start-value end-value)
+   (loop for number from start-value to end-value
+         when (interesting-p number) collect number))
+</lisp>takes two arguments, which should be
+integers, and returns a list of all the numbers in that range
+(inclusive) which satisfy the predicate <obj>interesting-p</obj>.
+</group>
+
+<group><lisp>(defun find-maximum-element (an-array)
+   (loop for i from 0 below (array-dimension-n 1 an-array)
+         maximize (aref an-array i)))
+</lisp>returns the maximum of the elements
+of its argument, a one-dimensional array.
+</group>
+
+<group><lisp>(defun my-remove (object list)
+   (loop for element in list
+         unless (equal object element) collect element))
+</lisp>is like the standard function <obj>remove</obj>, except
+that it copies the entire list.
+</group>
+
+<group><lisp>(defun find-frob (list)
+   (loop for element in list
+         when (frobp element) return element
+         finally (ferror nil &quot;No frob found in the list ~S&quot;
+                         list)))
+</lisp>returns the first element of its list argument which
+satisfies the predicate <obj>frobp</obj>.  If none is found, an error is
+signaled.
+</group></p>
+
+<p>Common Lisp defines <obj>loop</obj> as equivalent to <obj>do-forever</obj>: it is used
+with a body consisting only of forms to be evaluated until a nonlocal
+exit happens.  This is incompatible with the traditional <obj>loop</obj> macro
+which this chapter is about.  However, it is possible to tell which
+meaning of <obj>loop</obj> the programmer intended: in the traditional <obj>loop</obj>
+macro, it must be a symbol, while in the Common Lisp <obj>loop</obj> it is
+useless to use a symbol there.  Therefore, if the first argument of
+a <obj>loop</obj> form is not a symbol, it is treated as a Common Lisp <obj>loop</obj>.
+</p>
+<page></page></section><a name="Clauses"></a>
+
+
+<section chapter-number="20" name="Clauses" number="2" title="Clauses"><p indent="1">        Internally, <obj>loop</obj> constructs a <obj>prog</obj> which includes
+variable bindings, pre-iteration (initialization) code,
+post-iteration (exit) code, the body of the iteration, and stepping
+of variables of iteration to their next values (which happens on
+every iteration after the body is executed).
+</p>
+
+<p indent="1">        A <arg>clause</arg> consists of a keyword symbol and any Lisp
+forms and keywords that it deals with.  For example,
+
+<lisp>(loop for x in l do (print x)),
+</lisp>contains two clauses, <example>for x in l</example> and <example>do (print x)</example>.
+Certain of the parts of the clause will be described as being
+<arg>expressions</arg>, e.g. <obj>(print x)</obj> in the above.  An expression can
+be a single Lisp form, or a series of forms implicitly collected with
+<obj>progn</obj>.  An expression is terminated by the next following atom,
+which is taken to be a keyword.  This syntax allows only the first
+form in an expression to be atomic, but makes misspelled keywords
+more easily detectable.
+</p>
+
+<p indent="1">        <obj>loop</obj> uses print-name equality to compare keywords so
+that <obj>loop</obj> forms may be written without package prefixes;  in
+Lisp implementations that do not have packages, <obj>eq</obj> is used for
+comparison.
+</p>
+
+<p indent="1">        Bindings and iteration variable steppings may be performed
+either sequentially or in
+parallel.  This affects how the stepping of one iteration variable
+may depend on the value of another.  The syntax for distinguishing
+the two will be described with the corresponding clauses.  When a set
+of variables are to be bound in parallel, all of the initial values
+are computed and then all the bindings are established.  Subsequent
+bindings will be performed inside of that binding environment.
+When the same variables are stepped, all the new values are computed
+and then the variables are set.
+</p>
+
+
+
+<subsection name="NIL" title="Iteration-Driving Clauses"><p indent="1">        These clauses all create a <arg>variable of iteration</arg>, which
+is bound locally to the loop and takes on a new value on each
+successive iteration.  Note that if more than one iteration-driving
+clause is used in the same loop, several variables are created that
+all step together through their values;  when any of the iterations
+terminates, the entire loop terminates.  Nested iterations are not
+generated;  for those, you need a second <obj>loop</obj> form in the body of
+the loop.  In order not to produce strange interactions, iteration-driving clauses are required to precede any clauses that produce
+body code:  that is, all except those that produce prologue or
+epilogue code (<obj>initially</obj> and <obj>finally</obj>), bindings
+(<obj>with</obj>), the <obj>named</obj> clause, and the iteration termination
+clauses (<obj>while</obj> and <obj>until</obj>).
+</p>
+
+<p indent="1">        Clauses which drive the iteration may be arranged to perform
+their testing and stepping either in series or in parallel.  They are
+by default grouped in series, which allows the stepping computation of
+one clause to use the just-computed values of the iteration variables
+of previous clauses.  They may be made to step in parallel, as is
+the case with the <obj>do</obj> special form, by ``joining'' the iteration
+clauses with the keyword <obj>and</obj>.  The form this typically takes is
+something like
+
+<lisp>(loop ... for x = (f) and for y = <arg>init</arg> then (g x) ...)
+</lisp>which sets <obj>x</obj> to <obj>(f)</obj> on every iteration, and binds <obj>y</obj>
+to the value of <arg>init</arg> for the first iteration, and on every
+iteration thereafter sets it to <obj>(g x)</obj>, where <obj>x</obj> still has
+the value from the <arg>previous</arg> iteration.  Thus, if the calls to
+<obj>f</obj> and <obj>g</obj> are not order-dependent, this would be best
+written as
+
+<lisp>(loop ... for y = <arg>init</arg> then (g x) for x = (f) ...)
+</lisp>because, as a general rule, parallel stepping has more overhead than
+sequential stepping.  Similarly, the example
+
+<lisp>(loop for sublist on some-list
+      and for previous = 'undefined then sublist
+      ...)
+</lisp>which is equivalent to the <obj>do</obj> construct
+
+<lisp>(do ((sublist some-list (cdr sublist))
+     (previous 'undefined sublist))
+    ((null sublist) ...)
+  ...)
+</lisp>in terms of stepping, would be better written as
+
+<lisp>(loop for previous = 'undefined then sublist
+      for sublist on some-list
+      ...)
+</lisp></p>
+
+<p indent="1">        When iteration-driving clauses are joined with <obj>and</obj>, if
+the token following the <obj>and</obj> is not a keyword that introduces an
+iteration driving clause, it is assumed to be the same as the keyword
+that introduced the most recent clause;  thus, the above example
+showing parallel stepping could have been written as
+
+<lisp>(loop for sublist on some-list
+      and previous = 'undefined then sublist
+      ...)
+</lisp></p>
+
+<p indent="1">        The order of evaluation in iteration-driving clauses is as follows:
+those expressions that are only evaluated once are evaluated in order
+at the beginning of the form, during the variable-binding phase, while
+those expressions that are evaluated each time around the loop are
+evaluated in order in the body.
+</p>
+
+<p indent="1">        One common and simple iteration-driving clause is
+<obj>repeat</obj>:
+
+<table><tbody><tr><td><obj>repeat <arg>expression</arg></obj></td>
+<td><index-entry index="keywords" title="repeat"></index-entry>
+Evaluates <arg>expression</arg> (during the variable binding phase),
+and causes the <obj>loop</obj> to iterate that many times.
+<arg>expression</arg> is expected to evaluate to an integer.  If
+<arg>expression</arg> evaluates to a zero or negative result, the body code
+will not be executed.
+</td></tr></tbody></table></p>
+
+<p indent="1">        All remaining iteration-driving clauses are subdispatches of
+the keyword <obj>for</obj>, which is synonomous with <obj>as</obj>.
+
+<index-entry index="keywords" title="for as"></index-entry>
+In all of them a <arg>variable of iteration</arg> is specified.  Note that,
+in general, if an iteration-driving clause implicitly supplies an
+endtest, the value of this iteration variable is undefined as the loop is exited
+(i.e., when the epilogue code is run).  This is
+discussed in more detail in section
+<ref definition-in-file="looptm" key="loop-iteration-framework-section" section="5" title="20.5" type="css"></ref>.
+</p>
+
+<p indent="1">        Here are all of the varieties of <obj>for</obj> clauses.  Optional
+parts are enclosed in curly brackets.
+</p>
+
+<table><tbody>
+<tr><td><obj>for <arg>var</arg> in <arg>expr1</arg> {by <arg>expr2</arg>}</obj></td>
+<td><index-entry index="keywords" title="for"></index-entry>
+Iterates over each of the elements in the list <arg>expr1</arg>.  If
+the <obj>by</obj> subclause is present, <arg>expr2</arg> is evaluated once
+on entry to the loop
+to supply the function to be used to fetch successive sublists,
+instead of <obj>cdr</obj>.
+
+</td></tr><tr><td><obj>for <arg>var</arg> on <arg>expr1</arg> {by <arg>expr2</arg>}</obj></td>
+<td><index-entry index="keywords" title="for"></index-entry>
+Like the previous <obj>for</obj> format, except that <arg>var</arg> is
+set to successive sublists of the list instead of successive elements.
+Note that
+<obj>loop</obj> uses a <obj>null</obj> rather than an <obj>atom</obj> test to
+implement both this and the preceding clause.
+
+</td></tr><tr><td><obj>for <arg>var</arg> = <arg>expr</arg></obj></td>
+<td><index-entry index="keywords" title="for"></index-entry>
+On each iteration, <arg>expr</arg> is evaluated and <arg>var</arg> is set to the result.
+
+</td></tr><tr><td><obj>for <arg>var</arg> = <arg>expr1</arg> then <arg>expr2</arg></obj></td>
+<td><index-entry index="keywords" title="for"></index-entry>
+<arg>var</arg> is bound to <arg>expr1</arg> when the loop is entered, and set to
+<arg>expr2</arg> (re-evaluated) at all but the first iteration.  Since
+<arg>expr1</arg> is evaluated during the binding phase, it cannot reference
+other iteration variables set before it;  for that, use the following:
+
+</td></tr><tr><td><obj>for <arg>var</arg> first <arg>expr1</arg> then <arg>expr2</arg></obj></td>
+<td><index-entry index="keywords" title="for"></index-entry>
+Sets <arg>var</arg> to <arg>expr1</arg> on the first iteration, and to
+<arg>expr2</arg> (re-evaluated) on each succeeding iteration.  The
+evaluation of both expressions is performed <arg>inside</arg> of the
+<obj>loop</obj> binding environment, before the <obj>loop</obj> body.  This
+allows the first value of <arg>var</arg> to come from the first value of
+some other iteration variable, allowing such constructs as
+
+<lisp>(loop for term in poly
+      for ans first (car term) 
+              then (gcd ans (car term))
+      finally (return ans))
+</lisp>
+</td></tr><tr><td><obj>for <arg>var</arg> from <arg>expr1</arg> {to <arg>expr2</arg>} {by <arg>expr3</arg>}</obj></td>
+<td><index-entry index="keywords" title="for"></index-entry>
+This performs numeric iteration.  <arg>var</arg> is initialized to
+<arg>expr1</arg>, and on each succeeding iteration is incremented by
+<arg>expr3</arg> (default <obj>1</obj>).  If the <obj>to</obj> phrase is given, the
+iteration terminates when <arg>var</arg> becomes greater than <arg>expr2</arg>.
+Each of the expressions is evaluated only once, and the <obj>to</obj> and
+<obj>by</obj> phrases may be written in either order.  Alternative keywords
+may be used in place of <obj>to</obj>; this choice controls the direction
+of stepping and the step at which the loop terminates.
+<obj>downto</obj> instead of <obj>to</obj> says that <arg>var</arg> is decremented by
+the step value, and the endtest is adjusted accordingly.  If
+<obj>below</obj> is used instead of <obj>to</obj>, or <obj>above</obj> instead of
+<obj>downto</obj>, the iteration terminates before <arg>expr2</arg> is
+reached, rather than after.  Note that the <obj>to</obj> variant
+appropriate for the direction of stepping must be used for the endtest
+to be formed correctly;  i.e. the code will not work if <arg>expr3</arg>
+is negative or zero.  If no limit-specifying clause is given, then the
+direction of the stepping may be specified as decreasing by
+using <obj>downfrom</obj> instead of <obj>from</obj>.  <obj>upfrom</obj> may also be
+used instead of <obj>from</obj>;  it forces the stepping direction to be
+increasing.
+
+</td></tr><tr><td><obj>for <arg>var</arg> being <arg>expr</arg> and its <arg>path</arg> ...</obj></td><td></td></tr><tr><td><obj>for <arg>var</arg> being {each|the} <arg>path</arg> ...</obj></td>
+<td><index-entry index="keywords" title="for"></index-entry>
+Provides a user-definable iteration facility.  <arg>path</arg> names
+the manner in which the iteration is to be performed.  The ellipsis
+indicates where various path dependent preposition/expression pairs
+may appear.  See the section on Iteration Paths
+(<ref definition-in-file="looptm" key="iteration-path-page" type="page"></ref>) for complete documentation.
+</td></tr></tbody></table></subsection>
+
+
+<subsection name="NIL" title="Bindings"><index-entry index="keywords" title="with"></index-entry>
+
+<p indent="1">        The <obj>with</obj> keyword may be used to establish initial
+bindings, that is, variables that are local to the loop but are only
+set once, rather than on each iteration.  The <obj>with</obj> clause looks like:
+
+<lisp><obj>with <arg>var1</arg> {= <arg>expr1</arg>}
+     {and <arg>var2</arg> {= <arg>expr2</arg>}}...</obj>
+</lisp>If no <arg>expr</arg> is given, the variable is initialized to <obj>nil</obj>.
+</p>
+
+<p indent="1">        <obj>with</obj> bindings linked by <obj>and</obj> are performed in
+parallel; those not linked are performed sequentially.  That is,
+
+<lisp>(loop with a = (foo) and b = (bar) and c
+      ...)
+</lisp>binds the variables like
+
+<lisp>(let ((a (foo)) (b (bar)) c) ...)
+</lisp>whereas
+
+<lisp>(loop with a = (foo) with b = (bar a) with c ...)
+</lisp>binds the variables like
+
+<lisp>(let ((a (foo)))
+  (let ((b (bar)))
+    (let (c) ...)))
+</lisp>All <arg>expr</arg>'s in <obj>with</obj> clauses are evaluated in the order they
+are written, in lambda expressions surrounding the generated
+<obj>prog</obj>.  The <obj>loop</obj> expression
+
+<lisp>(loop with a = <arg>xa</arg> and b = <arg>xb</arg>
+      with c = <arg>xc</arg>
+      for d = <arg>xd</arg> then (f d)
+        and e = <arg>xe</arg> then (g e d)
+      for p in <arg>xp</arg>
+      with q = <arg>xq</arg>
+      ...)
+</lisp>produces the following binding contour, where <obj>t1</obj> is a
+<obj>loop</obj>-generated temporary:
+
+<lisp>(let ((a xa) (b xb))
+  (let ((c xc))
+    (let ((d xd) (e xe))
+      (let ((p nil) (t1 xp))
+        (let ((q xq))
+          ...)))))
+</lisp>Because all expressions in <obj>with</obj> clauses are evaluated during the
+variable binding phase, they are best placed near the front of the
+<obj>loop</obj> form for stylistic reasons.
+</p>
+
+<p indent="1">        For binding more than one variable with no particular
+initialization, one may use the construct
+
+<lisp><obj>with <arg>variable-list</arg> {and ...}</obj>
+</lisp>as in
+
+<lisp>with (i j k t1 t2) ...
+</lisp>These are cases of <arg>destructuring</arg> which <obj>loop</obj> handles
+specially;  destructuring and data type keywords are discussed in
+section <ref definition-in-file="looptm" key="loop-destructuring-section" section="4" title="20.4" type="css"></ref>.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Entrance and Exit"><table><tbody><tr><td><obj>initially <arg>expression</arg></obj></td>
+<td><index-entry index="keywords" title="initially"></index-entry>
+Puts <arg>expression</arg> into the <arg>prologue</arg> of the iteration.  It
+will be evaluated before any other initialization code except for
+initial bindings.  For the sake of good style, the <obj>initially</obj>
+clause should therefore be placed after any <obj>with</obj> clauses but
+before the main body of the loop.
+
+</td></tr><tr><td><obj>finally <arg>expression</arg></obj></td>
+<td><index-entry index="keywords" title="finally"></index-entry>
+Puts <arg>expression</arg> into the <arg>epilogue</arg> of the loop, which is
+evaluated when the iteration terminates (other than by an explicit
+<obj>return</obj>).  For stylistic reasons, then, this clause should appear
+last in the loop body.  Note that certain clauses may generate code
+which terminates the iteration without running the epilogue code;
+this behavior is noted with those clauses.  Most notable of these are
+those described in the section <ref definition-in-file="looptm" key="aggregated-boolean-tests-section" section="2" title="20.2" type="css"></ref>,
+Aggregated Boolean Tests.  This clause may be used to cause the loop
+to return values in a non-standard way:
+
+<lisp>(loop for n in l
+      sum n into the-sum
+      count t into the-count
+      finally (return (quotient the-sum the-count)))
+</lisp></td></tr></tbody></table></subsection>
+
+<subsection name="NIL" title="Side Effects"><a name="side-effects-section"></a>
+<table><tbody><tr><td><obj>do <arg>expression</arg></obj></td><td></td></tr><tr><td><obj>doing <arg>expression</arg></obj></td>
+<td><index-entry index="keywords" title="do doing"></index-entry>
+<arg>expression</arg> is evaluated each time through the loop, as shown in
+the <obj>print-elements-of-list</obj> example on
+<ref definition-in-file="looptm" key="print-elements-of-list-example" type="page"></ref>.
+</td></tr></tbody></table></subsection>
+
+<subsection name="NIL" title="Values"><a name="values-section"></a>
+<p indent="1">        The following clauses accumulate a return value for the
+iteration in some manner.  The general form is
+
+<lisp><obj><arg>type-of-collection expr</arg> {into <arg>var</arg>}</obj>
+</lisp>where <arg>type-of-collection</arg> is a <obj>loop</obj> keyword, and <arg>expr</arg>
+is the thing being accumulated somehow.  If no <obj>into</obj> is
+specified, then the accumulation will be returned when the <obj>loop</obj>
+terminates.  If there is an <obj>into</obj>, then when the epilogue of the
+<obj>loop</obj> is reached, <arg>var</arg> (a variable automatically bound
+locally in the loop) will have been set to the accumulated
+result and may be used by the epilogue code.  In this way, a user may
+accumulate and somehow pass back multiple values from a single
+<obj>loop</obj>, or use them during the loop.  It is safe to reference
+these variables during the loop, but they should not be modified
+until the epilogue code of the loop is reached.
+For example,
+
+<lisp>(loop for x in list
+      collect (foo x) into foo-list
+      collect (bar x) into bar-list
+      collect (baz x) into baz-list
+    finally (return (list foo-list bar-list baz-list)))
+</lisp>has the same effect as
+
+<lisp>(do ((#:g0001 list (cdr #:g0001))
+     (x) (foo-list) (bar-list) (baz-list))
+    ((null #:g0001)
+     (list (nreverse foo-list)
+           (nreverse bar-list)
+           (nreverse baz-list)))
+   (setq x (car #:g0001))
+   (setq foo-list (cons (foo x) foo-list))
+   (setq bar-list (cons (bar x) bar-list))
+   (setq baz-list (cons (baz x) baz-list)))
+</lisp>except that <obj>loop</obj> arranges to form the lists in the correct
+order, obviating the <obj>nreverse</obj>s at the end, and allowing the
+lists to be examined during the computation.  (This is how the
+expression would print; this text would not read in properly because a
+new uninterned symbol would be created by each use of <example>#:</example>.)
+</p>
+
+<table><tbody>
+<tr><td><obj>collect <arg>expr</arg> {into <arg>var</arg>}</obj></td><td></td></tr><tr><td><obj>collecting ...</obj></td>
+<td><index-entry index="keywords" title="collect collecting"></index-entry>
+Causes the values of <arg>expr</arg> on each iteration to be collected
+into a list.
+
+</td></tr><tr><td><obj>nconc <arg>expr</arg> {into <arg>var</arg>}</obj></td><td></td></tr><tr><td><obj>nconcing ...</obj></td><td></td></tr><tr><td><obj>append ...</obj></td><td></td></tr><tr><td><obj>appending ...</obj></td>
+<td><index-entry index="keywords" title="nconc nconcing append appending"></index-entry>
+Like <obj>collect</obj>, but the results are <obj>nconc</obj>'ed or
+<obj>append</obj>'ed together as appropriate.
+
+<lisp>(loop for i from 1 to 3
+      nconc (list i (* i i)))
+  =&gt; (1 1 2 4 3 9)
+</lisp>
+</td></tr><tr><td><obj>count <arg>expr</arg> {into <arg>var</arg>}</obj></td><td></td></tr><tr><td><obj>counting ...</obj></td>
+<td><index-entry index="keywords" title="count counting"></index-entry>
+If <arg>expr</arg> evaluates non-<obj>nil</obj>, a counter is incremented.
+
+</td></tr><tr><td><obj>sum <arg>expr</arg> {into <arg>var</arg>}</obj></td><td></td></tr><tr><td><obj>summing ...</obj></td>
+<td><index-entry index="keywords" title="sum summing"></index-entry>
+Evaluates <arg>expr</arg> on each iteration and accumulates the sum of all
+the values.
+
+</td></tr><tr><td><obj>maximize <arg>expr</arg> {into <arg>var</arg>}</obj></td><td></td></tr><tr><td><obj>minimize ...</obj></td>
+<td><index-entry index="keywords" title="maximize minimize"></index-entry>
+Computes the maximum (or minimum) of <arg>expr</arg> over all
+iterations.
+Note that if
+the loop iterates zero times, or if conditionalization prevents the
+code of this clause from being executed, the result will be
+meaningless.
+</td></tr></tbody></table>
+<p indent="1">        Not only may there be multiple accumulations in a
+<obj>loop</obj>, but a single accumulation may come from multiple
+places <arg>within the same <obj>loop</obj> form</arg>.  Obviously, the types of
+the collection must be compatible.  <obj>collect</obj>, <obj>nconc</obj>, and
+<obj>append</obj> may all be mixed, as may <obj>sum</obj> and <obj>count</obj>, and
+<obj>maximize</obj> and <obj>minimize</obj>.  For example,
+
+<lisp>(loop for x in '(a b c) for y in '((1 2) (3 4) (5 6))
+      collect x
+      append y)
+  =&gt; (a 1 2 b 3 4 c 5 6)
+</lisp>
+<group>The following computes the average of the entries in the list
+<arg>list-of-frobs</arg>:
+
+<lisp>(loop for x in list-of-frobs
+      count t into count-var
+      sum x into sum-var
+    finally (return (cli:// sum-var count-var)))
+</lisp></group></p>
+</subsection>
+
+
+<subsection name="NIL" title="Endtests"><p indent="1">        The following clauses may be used to provide additional
+control over when the iteration gets terminated, possibly causing
+exit code (due to <obj>finally</obj>) to be performed and possibly returning
+a value (e.g., from <obj>collect</obj>).
+</p>
+
+<table><tbody><tr><td><obj>while <arg>expr</arg></obj></td>
+<td><index-entry index="keywords" title="while"></index-entry>
+If <arg>expr</arg> evaluates to <obj>nil</obj>, the loop is exited, performing
+exit code (if any) and returning any accumulated value.  The
+test is placed in the body of the loop where it is written.  It may
+appear between sequential <obj>for</obj> clauses.
+
+</td></tr><tr><td><obj>until <arg>expr</arg></obj></td>
+<td><index-entry index="keywords" title="until"></index-entry>
+Identical to <obj>while (not <arg>expr</arg>)</obj>.
+</td></tr></tbody></table>
+<p indent="1">        This may be needed, for example, to step through a strange
+data structure, as in
+
+<lisp>(loop until (top-of-concept-tree? concept)
+      for concept = <arg>expr</arg> then (superior-concept concept)
+      ...)
+</lisp>Note that the placement of the <obj>until</obj> clause before the <obj>for</obj>
+clause is valid in this case because of the definition of this
+particular variant of <obj>for</obj>, which <arg>binds</arg> <obj>concept</obj> to
+its first value rather than setting it from inside the <obj>loop</obj>.
+</p>
+
+<p indent="1">        The following may also be of use in terminating the iteration:
+<definition>
+<define key="loop-finish-fun" name="loop-finish" type="mac"></define>
+
+<description><obj>(loop-finish)</obj> causes the iteration to terminate ``normally'', like
+implicit termination by an iteration-driving clause, or by the
+use of <obj>while</obj> or <obj>until</obj>--the epilogue code (if any) will be
+run, and any implicitly collected result will be returned as the value
+of the <obj>loop</obj>.
+For example,
+
+<lisp>(loop for x in '(1 2 3 4 5 6)
+      collect x
+      do (cond ((= x 4) (loop-finish))))
+ =&gt; (1 2 3 4)
+</lisp>This particular example would be better written as <obj>until (= x 4)</obj>
+in place of the <obj>do</obj> clause.
+</description></definition></p>
+</subsection>
+
+<subsection name="NIL" title="Aggregated Boolean Tests"><a name="aggregated-boolean-tests-section"></a>
+<p indent="1">        All of these clauses perform some test and may immediately
+terminate the iteration depending on the result of that test.
+</p>
+
+<table><tbody><tr><td><obj>always <arg>expr</arg></obj></td>
+<td><index-entry index="keywords" title="always"></index-entry>
+Causes the loop to return <obj>t</obj> if <arg>expr</arg> <obj>always</obj> evaluates
+non-<obj>null</obj>.  If <arg>expr</arg> evaluates to <obj>nil</obj> the loop
+immediately returns <obj>nil</obj>, without running the epilogue code (if
+any, as specified with the <obj>finally</obj> clause);  otherwise, <obj>t</obj>
+will be returned when the loop finishes, after the epilogue code has
+been run.
+
+</td></tr><tr><td><obj>never <arg>expr</arg></obj></td>
+<td><index-entry index="keywords" title="never"></index-entry>
+Causes the loop to return <obj>t</obj> if <arg>expr</arg> <obj>never</obj> evaluates
+non-<obj>null</obj>.  This is equivalent to <obj>always (not <arg>expr</arg>)</obj>.
+
+</td></tr><tr><td><obj>thereis <arg>expr</arg></obj></td>
+<td><index-entry index="keywords" title="thereis"></index-entry>
+If <arg>expr</arg> evaluates non-<obj>nil</obj>, then the iteration is
+terminated, and that value is returned without running the epilogue
+code.
+</td></tr></tbody></table></subsection>
+
+
+<subsection name="NIL" title="Conditionalization"><p indent="1">        These clauses may be used to ``conditionalize'' the following
+clause.  They may precede any of the side-effecting or value-producing
+clauses, such as <obj>do</obj>, <obj>collect</obj>, <obj>always</obj>, or
+<obj>return</obj>.
+</p>
+
+<table><tbody><tr><td><obj>when <arg>expr</arg></obj></td><td></td></tr><tr><td><obj>if <arg>expr</arg></obj></td>
+<td><index-entry index="keywords" title="when if"></index-entry>
+If <arg>expr</arg> evaluates to <obj>nil</obj>, the following clause will be
+skipped, otherwise not.
+
+</td></tr><tr><td><obj>unless <arg>expr</arg></obj></td>
+<td><index-entry index="keywords" title="unless"></index-entry>
+This is equivalent to <obj>when (not <arg>expr</arg>))</obj>.
+</td></tr></tbody></table>
+<p indent="1">        Multiple conditionalization clauses may appear in sequence.
+If one test fails, then any following tests in the immediate sequence,
+as well as the clause being conditionalized, are skipped.
+</p>
+
+<p indent="1">        Multiple clauses may be conditionalized under the same test by
+joining them with <obj>and</obj>, as in
+
+<lisp>(loop for i from a to b
+      when (zerop (remainder i 3))
+        collect i and do (print i))
+</lisp>which returns a list of all multiples of <obj>3</obj> from <obj>a</obj> to
+<obj>b</obj> (inclusive) and prints them as they are being collected.
+</p>
+
+<p indent="1">        If-then-else conditionals may be written using the <obj>else</obj> keyword, as in
+
+<lisp>(loop for i from a to b
+      when (oddp i)
+        collect i into odd-numbers
+      else collect i into even-numbers)
+</lisp>Multiple clauses may appear in an <obj>else</obj>-phrase, using <obj>and</obj> to join them
+in the same way as above.
+</p>
+
+<p indent="1">        Conditionals may be nested.  For example,
+
+<lisp>(loop for i from a to b
+      when (zerop (remainder i 3))
+        do (print i)
+        and when (zerop (remainder i 2))
+              collect i)
+</lisp>returns a list of all multiples of <obj>6</obj> from <obj>a</obj> to <obj>b</obj>,
+and prints all multiples of <obj>3</obj> from <obj>a</obj> to <obj>b</obj>.
+</p>
+
+<p indent="1">        When <obj>else</obj> is used with nested conditionals, the ``dangling else''
+ambiguity is resolved by matching the <obj>else</obj> with the innermost <obj>when</obj>
+not already matched with an <obj>else</obj>.  Here is a complicated example.
+
+<lisp>(loop for x in l
+      when (atom x)
+        when (memq x *distinguished-symbols*)
+          do (process1 x)
+        else do (process2 x)
+      else when (memq (car x) *special-prefixes*)
+             collect (process3 (car x) (cdr x))
+             and do (memoize x)
+           else do (process4 x))
+</lisp></p>
+
+<p indent="1">        Useful with the conditionalization clauses is the <obj>return</obj>
+clause, which causes an explicit return of its argument as
+the value of the iteration, bypassing any epilogue code.  That is,
+
+<lisp><obj>when <arg>expr1</arg> return <arg>expr2</arg></obj>
+</lisp>is equivalent to
+
+<lisp><obj>when <arg>expr1</arg> do (return <arg>expr2</arg>)</obj>
+</lisp></p>
+
+<p indent="1">        Conditionalization of one of the ``aggregated boolean value''
+clauses simply causes the test that would cause the iteration to
+terminate early not to be performed unless the condition succeeds.
+For example,
+
+<lisp>(loop for x in l
+      when (significant-p x)
+        do (print x) (princ &quot;is significant.&quot;)
+        and thereis (extra-special-significant-p x))
+</lisp>does not make the <obj>extra-special-significant-p</obj> check unless the
+<obj>significant-p</obj> check succeeds.
+</p>
+
+<group>        The format of a conditionalized clause is typically something
+like
+
+<lisp><obj>when <arg>expr1</arg> <arg>keyword</arg> <arg>expr2</arg></obj>
+</lisp>If <arg>expr2</arg> is the keyword <obj>it</obj>, then a variable is generated to
+hold the value of <arg>expr1</arg>, and that variable gets substituted for
+<arg>expr2</arg>.  Thus, the composition
+
+<lisp><obj>when <arg>expr</arg> return it</obj>
+</lisp>is equivalent to the clause
+
+<lisp><obj>thereis <arg>expr</arg></obj>
+</lisp>and one may collect all non-null values in an iteration by saying
+
+<lisp><obj>when <arg>expression</arg> collect it</obj>
+</lisp>If multiple clauses are joined with <obj>and</obj>, the <obj>it</obj> keyword
+may only be used in the first.  If multiple <obj>when</obj>s,
+<obj>unless</obj>es, and/or <obj>if</obj>s occur in sequence, the value
+substituted for <obj>it</obj> will be that of the last test performed.
+The <obj>it</obj> keyword is not recognized in an <obj>else</obj>-phrase.
+</group></subsection>
+
+
+<subsection name="NIL" title="Miscellaneous Other Clauses"><table><tbody><tr><td><obj>named <arg>name</arg></obj></td>
+<td><index-entry index="keywords" title="named"></index-entry>
+Defines a <obj>block</obj> named <arg>name</arg> around the code for the <obj>loop</obj>,
+so that one may use <obj>return-from</obj> to return explicitly out of
+this particular <obj>loop</obj>.  This is obsolete now that <obj>block</obj>
+exists; it is cleaner to write <obj>(<obj>block</obj> <arg>name</arg> ...)</obj>
+around the <obj>loop</obj>.
+
+Note that every <obj>loop</obj> generates a <obj>block</obj> named <obj>nil</obj>,
+so the function <obj>return</obj> can always be used to exit the innermost
+<obj>loop</obj> (assuming no other construct generating a <obj>block</obj> <obj>nil</obj> intervenes).
+
+</td></tr><tr><td><obj>return <arg>expression</arg></obj></td>
+<td><index-entry index="keywords" title="return"></index-entry>
+Immediately returns the value of <arg>expression</arg> as the value of the
+loop, without running the epilogue code.  This is most useful with
+some sort of conditionalization, as discussed in the previous
+section.  Unlike most of the other clauses, <obj>return</obj> is not
+considered to ``generate body code'', so it is allowed to occur between
+iteration clauses, as in
+
+<lisp>(loop for entry in list
+      when (not (numberp entry))
+        return (ferror ...)
+      as frob = (times entry 2)
+      ...)
+</lisp>Although <obj>ferror</obj> is called only for effect, <obj>return</obj> is used
+so that it can be called from that point in the <obj>loop</obj>.
+
+If one instead desires the loop to have some return value when it
+finishes normally, one may place a call to the <obj>return</obj> function in the
+epilogue (with the <obj>finally</obj> clause, <ref definition-in-file="looptm" key="loop-finally-clause" type="page"></ref>).
+</td></tr></tbody></table><page></page></subsection></section><a name="Loop Synonyms"></a>
+
+<section chapter-number="20" name="Loop Synonyms" number="3" title="Loop Synonyms"><definition><define key="define-loop-macro-fun" name="define-loop-macro" type="mac"><args>keyword</args>
+</define>
+
+<description>May be used to make <arg>keyword</arg>, a <obj>loop</obj> keyword (such as
+<obj>for</obj>), into a Lisp macro that may introduce a <obj>loop</obj> form.
+For example, after evaluating
+
+<lisp>(define-loop-macro for),
+</lisp>one may now write an iteration as
+
+<lisp>(for i from 1 below n do ...)
+</lisp></description></definition>
+<p indent="1">        This facility exists primarily for diehard users of a
+predecessor of <obj>loop</obj>.  Its unconstrained use is not recommended,
+as it tends to decrease the transportability of the code and
+needlessly uses up a function name.
+</p>
+<page></page></section><a name="Destructuring"></a>
+
+<section chapter-number="20" name="Destructuring" number="4" title="Destructuring"><a name="loop-destructuring-section"></a>
+<p indent="1">        <arg>Destructuring</arg> provides one with the ability to
+``simultaneously'' assign or bind multiple variables to components of
+some data structure.  Typically this is used with list structure.
+For example,
+
+<lisp>(loop with (foo . bar) = '(a b c) ...)
+</lisp>has the effect of binding <obj>foo</obj> to <obj>a</obj> and <obj>bar</obj> to <obj>(b
+c)</obj>.
+</p>
+
+<p indent="1">        <obj>loop</obj>'s destructuring support is intended to parallel and
+perhaps augment that provided by the host Lisp implementation, with a goal
+of minimally providing destructuring over list structure patterns.
+Thus, in Lisp implementations with no system destructuring support at
+all, one may still use list-structure patterns as <obj>loop</obj> iteration
+variables and in <obj>with</obj> bindings.
+</p>
+
+<p indent="1">        One may specify the data types of the components of a pattern
+by using a corresponding pattern of the data type keywords in place of
+a single data type keyword.  This syntax remains unambiguous because
+wherever a data type keyword is possible, a <obj>loop</obj> keyword is
+the only other possibility.  Thus, if one wants to do
+
+<lisp>(loop for x in l
+      as i = (car x)
+      and j = (cadr x)
+      and k = (cddr x)
+      ...)
+</lisp>and no reference to <obj>x</obj> is needed, one may instead write
+
+<lisp>(loop for (i j . k) in l ...)
+</lisp>To allow some abbreviation of the data type pattern, an atomic
+component of the data type pattern is considered to state that all
+components of the corresponding part of the variable pattern are of
+that type.  That is, the previous form could be written as
+
+<lisp>(loop for (i j . k) in l ...)
+</lisp>
+
+<group><lisp>(defun map-over-properties (fn symbol)
+   (loop for (propname propval) on (plist symbol) by 'cddr
+         do (funcall fn symbol propname propval)))
+</lisp>maps <arg>fn</arg> over the properties on <arg>symbol</arg>, giving it arguments
+of the symbol, the property name, and the value of that property.
+</group></p>
+<page></page></section><a name="The Iteration Framework"></a>
+
+<section chapter-number="20" name="The Iteration Framework" number="5" title="The Iteration Framework"><a name="loop-iteration-framework-section"></a>
+<p indent="1">        This section describes the way <obj>loop</obj> constructs
+iterations.  It is necessary if you will be writing your own iteration
+paths, and may be useful in clarifying what <obj>loop</obj> does with its
+input.
+</p>
+
+<p indent="1">        <obj>loop</obj> considers the act of <arg>stepping</arg> to have four
+possible parts.  Each iteration-driving clause has some or all of these
+four parts, which are executed in this order:
+
+<table><tbody><tr><td><arg>pre-step-endtest</arg></td><td>This is an endtest which determines if it is safe to step to the next
+value of the iteration variable.
+</td></tr><tr><td><arg>steps</arg></td><td>Variables that get stepped.  This is internally manipulated as a
+list of the form <obj>(<arg>var1</arg> <arg>val1</arg> <arg>var2</arg> <arg>val2</arg>
+...)</obj>;  all of those variables are stepped in parallel, meaning that
+all of the <arg>val</arg>s are evaluated before any of the <arg>var</arg>s are
+set.
+</td></tr><tr><td><arg>post-step-endtest</arg></td><td>Sometimes you can't see if you are done until you step to the next
+value;  that is, the endtest is a function of the stepped-to value.
+</td></tr><tr><td><arg>pseudo-steps</arg></td><td>Other things that need to be stepped.  This is typically used for
+internal variables that are more conveniently stepped here, or to
+set up iteration variables that are functions of some internal
+variable(s) actually driving the iteration.  This is a list
+like <arg>steps</arg>, but the variables in it do not get stepped in
+parallel.
+</td></tr></tbody></table></p>
+
+<p indent="1">        The above alone is actually insufficient in just about all
+the iteration-driving clauses that <obj>loop</obj> handles.  What is missing
+is that in most cases the stepping and testing for the first time
+through the loop is different from that of all other times.  So, what
+<obj>loop</obj> deals with is two four-tuples as above;  one for the first
+iteration, and one for the rest.  The first may be thought of as
+describing code that immediately precedes the loop in the <obj>prog</obj>,
+and the second following the body code--in fact, <obj>loop</obj> does
+just this, but severely perturbs it in order to reduce code
+duplication.  Two lists of forms are constructed in parallel:  one is
+the first-iteration endtests and steps, the other the
+remaining-iterations endtests and steps.  These lists have dummy
+entries in them so that identical expressions will appear in the same
+position in both.  When <obj>loop</obj> is done parsing all of the clauses,
+these lists get merged back together such that corresponding identical
+expressions in both lists are not duplicated unless they are ``simple''
+and it is worth doing.
+</p>
+
+<p indent="1">        Thus, one <arg>may</arg> get some duplicated code if one has
+multiple iterations.  Alternatively, <obj>loop</obj> may decide to use and
+test a flag variable that indicates whether one iteration has been
+performed.  In general, sequential iterations have less overhead than
+parallel iterations, both from the inherent overhead of stepping
+multiple variables in parallel, and from the standpoint of potential
+code duplication.
+</p>
+
+<p indent="1">        One other point that must be noted about parallel stepping is
+that although the user iteration variables are guaranteed to be
+stepped in parallel, the placement of the endtest for any particular
+iteration may be either before or after the stepping.  A notable case
+of this is
+
+<lisp>(loop for i from 1 to 3 and dummy = (print 'foo)
+      collect i)
+  =&gt; (1 2 3)
+</lisp>but prints <obj>foo</obj> <arg>four</arg> times.  Certain other constructs, such
+as <obj>for <arg>var</arg> on</obj>, may or may not do this depending on the
+particular construction.
+</p>
+
+<p indent="1">        This problem also means that it may not be safe to examine an
+iteration variable in the epilogue of the loop form.  As a general
+rule, if an iteration-driving clause implicitly supplies an endtest,
+then one cannot know the state of the iteration variable when the loop
+terminates.  Although one can guess on the basis of whether the
+iteration variable itself holds the data upon which the endtest is
+based, that guess <arg>may</arg> be wrong.  Thus,
+
+<lisp>(loop for subl on <arg>expr</arg>
+      ...
+      finally (f subl))
+</lisp>is incorrect, but
+
+<lisp>(loop as frob = <arg>expr</arg> while (g frob)
+      ...
+      finally (f frob))
+</lisp>is safe because the endtest is explicitly dissociated from the
+stepping.
+</p>
+<page></page></section><a name="defstruct"></a>
+
+
+<section chapter-number="20" name="defstruct" number="6" title="Iteration Paths"><p indent="1">        Iteration paths provide a mechanism for user extension of
+iteration-driving clauses.  The interface is constrained so that the
+definition of a path need not depend on much of the internals of
+<obj>loop</obj>.  The typical form of an iteration path is
+
+<lisp>for <arg>var</arg> being {each|the} <arg>path</arg> {<arg>preposition1</arg> <arg>expr1</arg>}...
+</lisp><arg>path</arg> is an atomic symbol which is defined as a <obj>loop</obj> path
+function.
+Any number of preposition/expression pairs may be
+present; the prepositions allowable for any particular path are
+defined by that path.  For example,
+
+<lisp>(loop for x being the array-elements of my-array from 1 to 10
+      ...)
+</lisp>To enhance readability, paths are usually defined in both the
+singular and plural forms;  this particular example could have been
+written as
+
+<lisp>(loop for x being each array-element of my-array from 1 to 10
+      ...)
+</lisp></p>
+
+<p indent="1">        Another format, which is not so generally applicable, is
+
+<lisp>for <arg>var</arg> being <arg>expr0</arg> and its <arg>path</arg> {<arg>preposition1</arg> <arg>expr1</arg>}...
+</lisp>In this format, <arg>var</arg> takes on the value of <arg>expr0</arg> the first
+time through the loop.  Support for this format is usually limited to
+paths for which the next value is obtained by operating on the previous value.
+Thus, we can hypothesize the <obj>cdrs</obj> path, such that
+
+<lisp>(loop for x being the cdrs of '(a b c . d) collect x)
+ =&gt; ((b c . d) (c . d) d)
+</lisp>but
+
+<lisp>(loop for x being '(a b c . d) and its cdrs collect x)
+ =&gt; ((a b c . d) (b c . d) (c . d) d)
+</lisp>To satisfy the anthropomorphic among you, <obj>his</obj>, <obj>her</obj>, or
+<obj>their</obj> may be substituted for the <obj>its</obj> keyword, as may
+<obj>each</obj>.  Egocentricity is not condoned.  Some example uses of
+iteration paths are shown in section <ref definition-in-file="looptm" key="predefined-paths-section" section="6" title="20.6" type="css"></ref>.
+</p>
+
+<p indent="1">        Very often, iteration paths step internal variables which the
+user does not specify, such as an index into some data-structure.
+Although in most cases the user does not wish to be concerned with
+such low-level matters, it is occasionally useful to have a handle on
+such things.  <obj>loop</obj> provides an additional syntax with which one
+may provide a variable name to be used as an ``internal'' variable by an
+iteration path, with the <obj>using</obj> ``prepositional phrase''.
+
+<index-entry index="loop-path-preposition" title="using"></index-entry>
+The <obj>using</obj> phrase is placed with the other phrases associated
+with the path, and contains any number of keyword/variable-name pairs:
+
+<lisp>(loop for x being the array-elements of a using (index i)
+      ...)
+</lisp>which says that the variable <obj>i</obj> should be used to hold the index
+of the array being stepped through.  The particular keywords which may
+be used are defined by the iteration path;  the <obj>index</obj> keyword is
+recognized by all <obj>loop</obj> sequence paths (section
+<ref definition-in-file="looptm" key="loop-sequence-section" section="6" title="20.6" type="css"></ref>).  Note that any individual <obj>using</obj>
+phrase applies to only one path;  it is parsed along with the
+``prepositional phrases''.  It is an error if the path does not call for
+a variable using that keyword.
+</p>
+
+<p indent="1">        By special dispensation, if a <arg>path</arg> is not recognized,
+then the <obj>default-loop-path</obj> path will be invoked upon a syntactic
+transformation of the original input. Essentially, the <obj>loop</obj> fragment
+
+<index-entry index="loop-path-preposition" title="in"></index-entry>
+
+<lisp>for <arg>var</arg> being <arg>frob</arg>
+</lisp>is taken as if it were
+
+<lisp>for <arg>var</arg> being default-loop-path in <arg>frob</arg>
+</lisp>and
+
+<lisp>for <arg>var</arg> being <arg>expr</arg> and its <arg>frob</arg> ...
+</lisp>is taken as if it were
+
+<lisp>for <arg>var</arg> being <arg>expr</arg> and its default-loop-path in <arg>frob</arg>
+</lisp>Thus, this ``undefined path hook'' only works if the
+<obj>default-loop-path</obj> path is defined.  Obviously, the use of this
+``hook'' is competitive, since only one such hook may be in use, and the
+potential for syntactic ambiguity exists if <arg>frob</arg> is the name of
+a defined iteration path.  This feature is not for casual use;  it is
+intended for use by large systems that wish to use a special
+syntax for some feature they provide.
+</p>
+
+
+<subsection name="NIL" title="Pre-Defined Paths"><a name="predefined-paths-section"></a>
+<p indent="1">        <obj>loop</obj> comes with two pre-defined iteration path
+functions;  one implements a <obj>mapatoms</obj>-like iteration path
+facility and the other is used for defining iteration paths for
+stepping through sequences.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="The Interned-Symbols Path"><index-entry index="loop-path" title="interned-symbols"></index-entry>
+
+<index-entry index="loop-path-preposition" title="in"></index-entry>
+
+<p indent="1">        The <obj>interned-symbols</obj> iteration path is like a
+<obj>mapatoms</obj> for <obj>loop</obj>.
+
+<lisp>(loop for sym being interned-symbols ...)
+</lisp>iterates over all of the symbols in the current package and its
+superiors.
+This is the same set
+of symbols over which <obj>mapatoms</obj> iterates, although not
+necessarily in the same order.  The particular package to look in may
+be specified as in
+
+<lisp>(loop for sym being the interned-symbols in <arg>package</arg> ...)
+</lisp>which is like giving a second argument to <obj>mapatoms</obj>.
+</p>
+
+<p>You can restrict the iteration to the symbols directly present in
+the specified package, excluding inherited symbols, using the
+<obj>local-interned-symbols</obj> path:
+
+<lisp>(loop for sym being the local-interned-symbols  {in <arg>package</arg>}
+      ...)
+</lisp>Example:
+
+<lisp>(defun my-apropos (sub-string &amp;optional (pkg package))
+    (loop for x being the interned-symbols in pkg
+          when (string-search sub-string x)
+            when (or (boundp x) (fboundp x) (plist x))
+              do (print-interesting-info x)))
+</lisp>In the Zetalisp and NIL implementations of <obj>loop</obj>, a package
+specified with the <obj>in</obj> preposition may be anything acceptable to
+the <obj>pkg-find-package</obj> function.  The code generated by this path
+will contain calls to internal <obj>loop</obj> functions, with the effect
+that it will be transparent to changes to the implementation of
+packages.  In the Maclisp implementation, the obarray <arg>must</arg> be an
+array pointer, <arg>not</arg> a symbol with an <obj>array</obj> property.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="The Hash-Elements Path"><index-entry index="loop-path" title="hash-elements"></index-entry>
+
+<index-entry index="loop-path-preposition" title="of"></index-entry>
+
+<index-entry index="loop-path-preposition" title="with-key"></index-entry>
+
+<p indent="1">        The <obj>hash-elements</obj> path provides an effect like that of
+the function <obj>maphash</obj>.  It can find all the occupied entries in a hash table.
+
+<lisp>(loop for value being the hash-elements of <arg>hash-table</arg> ...)
+</lisp>iterates over all the occupied entries in <arg>hash-table</arg>.  Each time,
+<arg>value</arg> is the value stored in the entry.  To examine the keys of the
+entries as well, write
+
+<lisp>(loop for value being the hash-elements of <arg>hash-table</arg>
+      with-key keysym ...)
+</lisp>and then <obj>keysym</obj>'s value each will be the hash key that corresponds to <arg>value</arg>.
+</p>
+</subsection>
+
+<subsection name="NIL" title="Sequence Iteration"><a name="loop-sequence-section"></a>
+<p indent="1">        One very common form of iteration is done over the elements
+of some object that is accessible by means of an integer index.
+<obj>loop</obj> defines an iteration path function for doing this in a
+general way and provides a simple interface to allow users to define
+iteration paths for various kinds of ``indexable'' data.
+</p>
+<definition><define key="define-loop-sequence-path-fun" name="define-loop-sequence-path" type="mac"><args>path-name-or-names fetch-fun size-fun <standard>&amp;optional</standard> sequence-type default-var-type</args>
+</define>
+
+<description><arg>path-name-or-names</arg> is either an atomic path name or list of path
+names.  <arg>fetch-fun</arg> is a function of two arguments, the sequence
+and the index of the item to be fetched.  (Indexing is assumed to be
+zero-origined.)  <arg>size-fun</arg> is a function of one argument, the
+sequence;  it should return the number of elements in the sequence.
+<arg>sequence-type</arg> is the name of the data-type of the sequence, and
+<arg>default-var-type</arg> the name of the data-type of the elements of
+the sequence.  These are applicable to use of <obj>loop</obj> in other
+Lisp systems; on the Lisp Machine they might as well be omitted.
+</description></definition>
+<group>   The Zetalisp implementation of <obj>loop</obj> utilizes the
+Zetalisp array manipulation primitives to define both
+<obj>array-element</obj> and <obj>array-elements</obj> as iteration paths:
+
+<index-entry index="loop-path" title="array-elements"></index-entry>
+<pre><example>(define-loop-sequence-path (array-element array-elements)
+    aref array-active-length)</example>
+</pre>Then, the <obj>loop</obj> clause
+
+<index-entry index="loop-path-preposition" title="of"></index-entry>
+
+<lisp>for <arg>var</arg> being the array-elements of <arg>array</arg>
+</lisp>will step <arg>var</arg> over the elements of <arg>array</arg>, starting from
+element 0.  The sequence path function also accepts <obj>in</obj> as a
+synonym for <obj>of</obj>.
+</group>
+<p indent="1">        The range and stepping of the iteration may be specified with
+the use of all of the same keywords which are accepted by the <obj>loop</obj>
+arithmetic stepper (<obj>for <arg>var</arg> from ...</obj>);  they are
+<obj>by</obj>, <obj>to</obj>, <obj>downto</obj>, <obj>from</obj>, <obj>downfrom</obj>,
+<obj>below</obj>, and <obj>above</obj>, and are interpreted in the same manner.
+Thus,
+
+<lisp>(loop for <arg>var</arg> being the array-elements of <arg>array</arg>
+          from 1 by 2
+      ...)
+</lisp>steps <arg>var</arg> over all of the odd elements of <arg>array</arg>, and
+
+<lisp>(loop for <arg>var</arg> being the array-elements of <arg>array</arg>
+          downto 0
+      ...)
+</lisp>steps in reverse order.
+
+<lisp>(define-loop-sequence-path (vector-elements vector-element)
+    vref vector-length notype notype)
+</lisp>is how the <obj>vector-elements</obj> iteration path can be defined in NIL
+(which it is).  One can then do such things as
+
+<lisp>(defun cons-a-lot (item &amp;restv other-items)
+    (and other-items
+         (loop for x being the vector-elements of other-items
+               collect (cons item x))))
+</lisp></p>
+
+<p indent="1">        All such sequence iteration paths allow one to specify the
+variable to be used as the index variable, by use of the <obj>index</obj>
+keyword with the <obj>using</obj> prepositional phrase, as described (with
+an example) on <ref definition-in-file="looptm" key="loop-using-crock" type="page"></ref>.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Defining Paths"><p indent="1">        This section and the next may not be of interest to those
+not interested in defining their own iteration paths.
+</p>
+
+<p indent="1">         In addition to the code which defines the iteration (section
+<ref definition-in-file="looptm" key="loop-iteration-framework-section" section="5" title="20.5" type="css"></ref>), a <obj>loop</obj> iteration clause (e.g.
+a <obj>for</obj> or <obj>as</obj> clause) produces variables to be bound and
+pre-iteration (<arg>prologue</arg>) code.  This breakdown allows a
+user-interface to <obj>loop</obj> which does not have to depend on or know
+about the internals of <obj>loop</obj>.  To complete this separation, the
+iteration path mechanism parses the clause before giving it to the user
+function that will return those items.  A function to generate code for
+a path may be declared to <obj>loop</obj> with the <obj>define-loop-path</obj>
+function:
+<definition><define key="define-loop-path-fun" name="define-loop-path" type="mac"><args>pathname-or-names path-function list-of-allowable-prepositions <standard>&amp;rest</standard> data</args>
+</define>
+
+<description>This defines <arg>path-function</arg> to be the handler for the path(s)
+<arg>path-or-names</arg>, which may be either a symbol or a list of
+symbols.  Such a handler should follow the conventions described
+below.  The <arg>datum-i</arg> are optional;  they are passed in to
+<arg>path-function</arg> as a list.
+</description></definition></p>
+
+<p>The handler will be called with the following arguments:
+
+<table><tbody><tr><td><arg>path-name</arg></td><td>The name of the path that caused the path function to be invoked.
+</td></tr><tr><td><arg>variable</arg></td><td>The ``iteration variable''.
+</td></tr><tr><td><arg>data-type</arg></td><td>The data type supplied with the iteration variable, or <obj>nil</obj> if
+none was supplied.  This is a facility of the <obj>loop</obj> intended for
+other Lisp systems in which declaring the type of a variable produces
+more efficient code.  It is not documented in this manual since it is
+never useful on the Lisp Machine.
+</td></tr><tr><td><arg>prepositional-phrases</arg></td><td>This is a list with entries of the form <arg>(preposition
+expression)</arg>, in the order in which they were collected.  This may
+also include some supplied implicitly (e.g. an <obj>of</obj> phrase when
+the iteration is inclusive, and an <obj>in</obj> phrase for the
+<obj>default-loop-path</obj> path); the ordering will show the order of
+evaluation that should be followed for the expressions.
+</td></tr><tr><td><arg>inclusive?</arg></td><td>This is <obj>t</obj> if <arg>variable</arg> should have the starting point of
+the path as its value on the first iteration (by virtue of being
+specified with syntax like <obj>for <arg>var</arg> being <arg>expr</arg> and its
+<arg>path</arg></obj>), <obj>nil</obj> otherwise.  When <obj>t</obj>, <arg>expr</arg>
+will appear in <arg>prepositional-phrases</arg> with the <obj>of</obj>
+preposition;  for example, <obj>for x being foo and its cdrs</obj> gets
+<arg>prepositional-phrases</arg> of <obj>((of foo))</obj>.
+</td></tr><tr><td><arg>allowed-prepositions</arg></td><td>This is the list of allowable prepositions declared for the path
+that caused the path function to be invoked.  It and <arg>data</arg>
+(immediately below) may be used by the path function such that a
+single function may handle similar paths.
+</td></tr><tr><td><arg>data</arg></td><td>This is the list of ``data'' declared for the path that caused the
+path function to be invoked.  It may, for instance, contain a
+canonicalized path, or a set of functions or flags to aid the
+path function in determining what to do.  In this way, the same
+path function may be able to handle different paths.
+</td></tr></tbody></table></p>
+
+<p indent="1">        The handler should return a list of either six or ten
+elements:
+
+<table><tbody><tr><td><arg>variable-bindings</arg></td><td>This is a list of variables that need to be bound.  The entries in it
+may be of the form <arg>variable</arg> or (<arg>variable</arg> <arg>expression</arg>).
+Note that it is
+the responsibility of the handler to make sure the iteration variable
+gets bound.  All of these variables will be bound in parallel;
+if initialization of one depends on others, it should be done with a
+<obj>setq</obj> in the <arg>prologue-forms</arg>.  Returning only the variable
+without any initialization expression is not allowed if the variable
+is a destructuring pattern.
+</td></tr><tr><td><arg>prologue-forms</arg></td><td>This is a list of forms that should be included in the <obj>loop</obj>
+prologue.
+</td></tr><tr><td><arg>the four items of the iteration specification</arg></td><td>These are the four items described in section
+<ref definition-in-file="looptm" key="loop-iteration-framework-section" section="5" title="20.5" type="css"></ref>,
+<ref definition-in-file="looptm" key="loop-iteration-framework-page" type="page"></ref>:  <arg>pre-step-endtest</arg>,
+<arg>steps</arg>, <arg>post-step-endtest</arg>, and <arg>pseudo-steps</arg>.
+</td></tr><tr><td><arg>another four items of iteration specification</arg></td><td>If these four items are given, they apply to the first iteration, and
+the previous four apply to all succeeding iterations;  otherwise, the
+previous four apply to <arg>all</arg> iterations.
+</td></tr></tbody></table></p>
+
+<p indent="1">        Here are the routines that are used by <obj>loop</obj> to compare
+keywords for equality.  In all cases, a <arg>token</arg> may be any Lisp
+object, but a <arg>keyword</arg> is expected to be an atomic symbol.  In
+certain implementations these functions may be implemented as macros.
+</p>
+<definition><define key="si:loop-tequal-fun" name="si:loop-tequal" type="fun"><args>token keyword</args>
+</define>
+
+<description>This is the <obj>loop</obj> token comparison function.  <arg>token</arg> is any Lisp
+object;  <arg>keyword</arg> is the keyword it is to be compared
+against.  It returns <obj>t</obj> if they represent the same token,
+comparing in a manner appropriate for the implementation.
+</description></definition><definition><define key="si:loop-tmember-fun" name="si:loop-tmember" type="fun"><args>token keyword-list</args>
+</define>
+
+<description>The <obj>member</obj> variant of <obj>si:loop-tequal</obj>.
+</description></definition><definition><define key="si:loop-tassoc-fun" name="si:loop-tassoc" type="fun"><args>token keyword-alist</args>
+</define>
+
+<description>The <obj>assoc</obj> variant of <obj>si:loop-tequal</obj>.
+</description></definition>
+<p indent="1">        If an iteration path function desires to make an internal
+variable accessible to the user, it should call the following function
+instead of <obj>gensym</obj>:
+
+<index-entry index="loop-path-preposition" title="using"></index-entry>
+<definition><define key="si:loop-named-variable-fun" name="si:loop-named-variable" type="fun"><args>keyword</args>
+</define>
+
+<description>This should only be called from within an iteration path function.  If
+<arg>keyword</arg> has been specified in a <obj>using</obj> phrase for this
+path, the corresponding variable is returned;  otherwise, <obj>gensym</obj>
+is called and that new symbol returned.  Within a given path function,
+this routine should only be called once for any given keyword.
+
+If the user specifies a <obj>using</obj> preposition containing any keywords
+for which the path function does not call <obj>si:loop-named-variable</obj>,
+<obj>loop</obj> will inform the user of his error.
+</description></definition></p>
+</subsection>
+
+
+<subsection name="NIL" title="Path Definition Example"><p indent="1">        Here is an example function that defines the
+<obj>string-characters</obj> iteration path.  This path steps a variable
+through all of the characters of a string.  It accepts the format
+
+<lisp>(loop for <arg>var</arg> being the string-characters of <arg>str</arg> ...)
+</lisp><page></page></p>
+
+<p indent="1">        The function is defined to handle the path by
+
+<lisp>(define-loop-path string-characters string-chars-path (of))
+<exdent amount="96"><caption>Here is the function: </caption>(defun string-chars-path (path-name variable data-type
+                          prep-phrases inclusive?
+                          allowed-prepositions data
+                          &amp;aux (bindings nil)
+                               (prologue nil)
+                               (string-var (gensym))
+                               (index-var (gensym))
+                               (size-var (gensym)))
+   allowed-prepositions data <standard>; unused variables</standard>
+   data-type
+   <standard>; To iterate over the characters of a string, we need</standard>
+   <standard>; to save the string, save the size of the string,</standard>
+   <standard>; step an index variable through that range, setting</standard>
+   <standard>; the user's variable to the character at that index.</standard>
+</exdent>   <standard>; We support exactly one ``preposition'', which is required,</standard>
+   <standard>; so this check suffices:</standard>
+   (cond ((null prep-phrases)
+          (ferror nil &quot;OF missing in ~S iteration path of ~S&quot;
+                  path-name variable)))
+   <standard>; We do not support ``inclusive'' iteration:</standard>
+   (cond ((not (null inclusive?))
+          (ferror nil
+            &quot;Inclusive stepping not supported in ~S path ~
+             of ~S (prep phrases = ~:S)&quot;
+            path-name variable prep-phrases)))
+   <standard>; Set up the bindings</standard>
+   (setq bindings (list (list variable nil)
+                        (list string-var (cadar prep-phrases))
+                        (list index-var 0)
+                        (list size-var 0)))
+   <standard>; Now set the size variable</standard>
+   (setq prologue (list `(setq ,size-var (string-length
+                                            ,string-var))))
+   <standard>; and return the appropriate stuff, explained below.</standard>
+   (list bindings prologue
+         `(= ,index-var ,size-var)
+         nil nil
+         (list variable `(aref ,string-var ,index-var)
+               index-var `(1+ ,index-var))))
+</lisp></p>
+
+<p indent="1">        The first element of the returned list is the bindings.  The
+second is a list of forms to be placed in the <arg>prologue</arg>.  The
+remaining elements specify how the iteration is to be performed.  This
+example is a particularly simple case, for two reasons:  the actual
+``variable of iteration'', <obj>index-var</obj>, is purely internal
+(being <obj>gensym</obj>med), and the stepping of it (<obj>1+</obj>) is such
+that it may be performed safely without an endtest.  Thus
+<obj>index-var</obj> may be stepped immediately after the setting of the
+user's variable, causing the iteration specification for the first
+iteration to be identical to the iteration specification for all
+remaining iterations.  This is advantageous from the standpoint of the
+optimizations <obj>loop</obj> is able to perform, although it is frequently
+not possible due to the semantics of the iteration (e.g., <obj>for
+<arg>var</arg> first <arg>expr1</arg> then <arg>expr2</arg></obj>) or to subtleties of
+the stepping.  It is safe for this path to step the user's variable in
+the <arg>pseudo-steps</arg> (the fourth item of an iteration specification)
+rather than the ``real'' steps (the second), because the step value can
+have no dependencies on any other (user) iteration variables.  Using
+the pseudo-steps generally results in some efficiency gains.
+</p>
+
+<p indent="1">        If one desired the index variable in the above definition to
+be user-accessible through the <obj>using</obj> phrase feature with the
+
+<index-entry index="loop-path-preposition" title="using"></index-entry>
+<obj>index</obj> keyword, the function would need to be changed in two
+ways.  First, <obj>index-var</obj> should be bound to
+<obj>(si:loop-named-variable 'index)</obj> instead of <obj>(gensym)</obj>.
+Secondly, the efficiency hack of stepping the index variable ahead of
+the iteration variable must not be done.  This is effected by changing
+the last form to be
+
+<lisp>(list bindings prologue
+      nil
+      (list index-var `(1+ ,index-var))
+      `(= ,index-var ,size-var)
+      (list variable `(aref ,string-var ,index-var))
+      nil
+      nil
+      `(= ,index-var ,size-var)
+      (list variable `(aref ,string-var ,index-var)))
+</lisp>Note that although the second <obj>`(= ,index-var ,size-var)</obj> could
+have been placed earlier (where the second <obj>nil</obj> is), it is best
+for it to match up with the equivalent test in the first iteration
+specification grouping.
+</p>
+<page></page></subsection></section></chapter>
+</document-part>

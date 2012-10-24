@@ -1,0 +1,203 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="query-chapter"></a>
+<chapter name="query-chapter" number="33" title="Querying the User"><index-entry index="concepts" title="querying the user"></index-entry>
+
+<index-entry index="concepts" title="yes-or-no"></index-entry>
+
+<p>The following functions provide a convenient and consistent interface for
+asking questions of the user.  Questions are printed and the answers are
+read on the stream <obj>*query-io*</obj>, which normally is synonymous with
+<obj>*terminal-io*</obj> but can be rebound to another stream for special applications.
+</p>
+
+<p>The macro <obj>with-timeout</obj> (see <ref definition-in-file="proces" key="with-timeout-fun" title="Macro with-timeout" type="mac"></ref>) can be used with
+the functions in this chapter to assume an answer if the user does
+not respond in a fixed period of time.
+</p>
+
+<p>We first describe two simple functions for yes-or-no questions, then
+the more general function on which all querying is built.
+</p>
+<definition><define key="y-or-n-p-fun" name="y-or-n-p" type="fun"><args><standard>&amp;optional</standard> format-string <standard>&amp;rest</standard> format-args</args>
+</define>
+
+<description>This is used for asking the user a question whose answer is either `y' for `yes'
+or `n' for `no'.  It prints a message by passing <arg>format-string</arg> and
+<arg>format-args</arg> to <obj>format</obj>, reads a one-character
+answer, echoes it as `<obj>Yes</obj>' or `<obj>No</obj>', and returns <obj>t</obj> if the
+answer is `yes' or <obj>nil</obj> if the answer is `no'.  The characters which
+mean `yes' are `Y', `T', <obj>Space</obj>, and <obj>Hand-up</obj>.  The characters
+which mean &quot;no&quot; are `N', <obj>Rubout</obj>, and <obj>Hand-down</obj>.  If any other
+character is typed, the function beeps and demands a `Y or N' answer.
+
+You should include a question mark and a space at the end of the message.
+<obj>y-or-n-p</obj> does type `(Y or N)' for you.
+
+<obj>*query-io*</obj> is used for all input and output.
+
+<obj>y-or-n-p</obj> should be used only for questions that the user knows are
+coming.  If the user is not going to be anticipating the question (e.g.
+if the question is ``Do you really want to delete all of your files?'' out
+of the blue) then <obj>y-or-n-p</obj> should not be used, because the user
+might type ahead a `T', `Y', `N', <obj>Space</obj>, or <obj>Rubout</obj>, and
+therefore accidentally answer the question.  In such cases, use
+<obj>yes-or-no-p</obj>.
+</description></definition><definition><define key="yes-or-no-p-fun" name="yes-or-no-p" type="fun"><args><standard>&amp;optional</standard> format-string <standard>&amp;rest</standard> format-args</args>
+</define>
+
+<description>This is used for asking the user a question whose answer is either
+`yes' or `no'.  It prints a message by passing <arg>format-string</arg> and
+<arg>format-args</arg> to <obj>format</obj>, beeps, and reads in a line
+from <obj>*query-io*</obj>.  If the line is `yes', it returns <obj>t</obj>.
+If the line is `no', it returns <obj>nil</obj>.  (Case is ignored, as are
+leading and trailing spaces and tabs.)  If the input line is anything else,
+<obj>yes-or-no-p</obj> beeps and demands a `yes or no' answer.
+
+You should include a question mark and a space at the end of the message.
+<obj>yes-or-no-p</obj> does type `(Yes or No)' for you.
+
+<obj>*query-io*</obj> is used for all input and output.
+
+To allow the user to answer a yes-or-no question with a single
+character, use <obj>y-or-n-p</obj>.  <obj>yes-or-no-p</obj> should be
+used for unanticipated or momentous questions; this is why it beeps
+and why it requires several keystrokes to answer it.
+</description></definition><definition><define key="fquery-fun" name="fquery" type="fun"><args>options format-string <standard>&amp;rest</standard> format-args</args>
+</define>
+
+<description>Asks a question, printed by <obj>(format *query-io* <arg>format-string</arg> <arg>format-args</arg>...)</obj>,
+and returns the answer.  <obj>fquery</obj> takes care of checking for valid answers,
+reprinting the question when the user clears the screen, giving help, and so
+forth.
+
+<arg>options</arg> is a list of alternating keywords and values, used to select among a variety
+of features.  Most callers pass a constant list as the <arg>options</arg>
+(rather than consing up a list whose contents varies).
+The keywords allowed are:
+
+<table><tbody><tr><td><obj>:type</obj></td><td>What type of answer is expected.  The currently-defined types are
+<obj>:tyi</obj> (a single character), <obj>:readline</obj> or
+<obj>:mini-buffer-or-readline</obj> (a line terminated by a carriage return).
+<obj>:tyi</obj> is the default.  <obj>:mini-buffer-or-readline</obj> is nearly
+the same as <obj>:readline</obj>, the only difference being that the former
+uses a minibuffer if used inside the editor. 
+
+</td></tr><tr><td><obj>:choices</obj></td><td>Defines the allowed answers.  The allowed forms of choices are complicated and
+explained below.  The default is the same set of choices as the <obj>y-or-n-p</obj>
+function (see above).  Note that the <obj>:type</obj> and <obj>:choices</obj> options should
+be consistent with each other.
+
+</td></tr><tr><td><obj>:list-choices</obj></td><td>If <obj>t</obj>, the allowed choices are listed (in parentheses) after the question.
+The default is <obj>t</obj>; supplying <obj>nil</obj> causes the choices not to be listed unless
+the user tries to give an answer which is not one of the allowed choices.
+
+</td></tr><tr><td><obj>:help-function</obj></td><td>Specifies a function to be called if the user hits the <obj>Help</obj> key.
+The default help-function simply lists the available choices.
+Specifying <obj>nil</obj> disables special treatment of <obj>Help</obj>.
+Specifying a function of three arguments--the stream, the list of choices,
+and the type-function--allows smarter help processing.  The type-function
+is the internal form of the <obj>:type</obj> option and can usually be ignored.
+
+</td></tr><tr><td><obj>:condition</obj></td><td>If non-<obj>nil</obj>, a signal name (see <ref definition-in-file="errors" key="signal-name" type="page"></ref>) to be signaled
+before asking the question.  A condition handler may handle the
+condition, specifying an answer for <obj>fquery</obj> to return, in which case
+the user is not asked.  The details are given below.  The default
+signal name is <obj>:fquery</obj>, which signals condition name <obj>:fquery</obj>.
+
+</td></tr><tr><td><obj>:fresh-line</obj></td><td>If <obj>t</obj>, <obj>*query-io*</obj> is advanced to a fresh line before asking the question.
+If <obj>nil</obj>, the question is printed wherever the cursor was left by previous typeout.
+The default is <obj>t</obj>.
+
+</td></tr><tr><td><obj>:beep</obj></td><td>If <obj>t</obj>, <obj>fquery</obj> beeps to attract the user's attention to the question.
+The default is <obj>nil</obj>, which means not to beep unless the user tries to
+give an answer which is not one of the allowed choices.
+
+</td></tr><tr><td><obj>:stream</obj></td><td>The value should be either an I/O stream or a symbol or expression
+that will evaluate to one.  <obj>fquery</obj> uses the specified stream
+instead of <obj>*query-io*</obj> for all its input and output.
+
+</td></tr><tr><td><obj>:clear-input</obj></td><td>If <obj>t</obj>, <obj>fquery</obj> throws away type-ahead before reading the user's response
+to the question.  Use this for unexpected questions.  The default is <obj>nil</obj>,
+which means not to throw away type-ahead unless the user tries to
+give an answer which is not one of the allowed choices.  In that case, type-ahead
+is discarded since the user probably wasn't expecting the question.
+
+</td></tr><tr><td><obj>:make-complete</obj></td><td>If <obj>t</obj> and <obj>*query-io*</obj> is a typeout-window, the window is ``made complete''
+after the question has been answered.  This tells the system that the contents
+of the window are no longer useful.  Refer to the window system documentation
+for further explanation.  The default is <obj>t</obj>.
+</td></tr></tbody></table>
+The argument to the <obj>:choices</obj> option is a list each of whose elements is
+a <arg>choice</arg>.  The cdr of a choice is a list of the user inputs which correspond
+to that choice.  These should be characters for <obj>:type :tyi</obj> or strings
+for <obj>:type :readline</obj>.  The car of a choice is either a symbol which <obj>fquery</obj>
+should return if the user answers with that choice, or a list whose first element
+is such a symbol and whose second element is the string to be echoed when the
+user selects the choice.  In the former case nothing is echoed.
+In most cases <obj>:type :readline</obj> would use the first
+format, since the user's input has already been echoed, and <obj>:type :tyi</obj> would
+use the second format, since the input has not been echoed and furthermore is
+a single character, which would not be mnemonic to see on the display.
+
+A choice can also be the symbol <obj>:any</obj>.  If used, it must be the
+last choice.  It means that any input is allowed, and should simply be
+returned as a string or character if it does not match any of the
+other choices.
+
+Perhaps this can be clarified by example.  The <obj>yes-or-no-p</obj> function uses
+this list of choices:
+
+<lisp>((t &quot;Yes&quot;) (nil &quot;No&quot;))
+</lisp>and the <obj>y-or-n-p</obj> function uses this list:
+
+<lisp>(((t &quot;Yes.&quot;) #\y #\t #\space #\hand-up)
+ ((nil &quot;No.&quot;) #\n #\rubout #\hand-down))
+</lisp>
+If a signal name is specified (or allowed to default to <obj>:fquery</obj>),
+before asking the question <obj>fquery</obj> will signal it.  (See <ref chapter="31" definition-in-file="errors" key="condition" section="1" title="Conditions" type="section"></ref>
+for information about conditions.)  <obj>make-condition</obj> will receive, in
+addition to the signal name, all the arguments given to <obj>fquery</obj>,
+including the list of options, the format string, and all the format
+arguments.  <obj>fquery</obj> provides one proceed type, <obj>:new-value</obj>, and if
+a condition handler proceeds, the argument it proceeds with is returned
+by <obj>fquery</obj>.
+
+If you want to use the formatted output functions instead of <obj>format</obj> to produce the
+promting message, write
+
+<lisp>(fquery <arg>options</arg> (format:outfmt <arg>exp-or-string</arg> <arg>exp-or-string</arg> ...))
+</lisp><obj>format:outfmt</obj> puts the output into a list of a string, which makes <obj>format</obj>
+print it exactly as is.  There is no need to supply additional arguments to the
+<obj>fquery</obj> unless it signals a condition.  In that case the arguments might be passed so
+that the condition handler can see them.  The condition handler will receive a list
+containing one string, the message, as its third argument instead of just a string.  If
+this argument is passed along to <obj>format</obj>, all the right things happen.
+</description></definition><definition><define key="fquery-condition" name="fquery" type="condition"><args>(<obj>condition</obj>)</args>
+</define>
+
+<description>This condition is signaled, by default, by <obj>fquery</obj>.
+The condition instance supports these operations:
+
+<table><tbody><tr><td><obj>:options</obj></td><td>Returns the list of options given to <obj>fquery</obj>.
+</td></tr><tr><td><obj>:format-string</obj></td><td>Returns the format string given to <obj>fquery</obj>.
+</td></tr><tr><td><obj>:format-args</obj></td><td>Returns the list of additional args for format, given to <obj>fquery</obj>.
+</td></tr></tbody></table>
+One proceed type is provided, <obj>:new-value</obj>.  It should be used with a
+single argument, which will be returned by <obj>fquery</obj> in lieue of asking
+the user.
+</description></definition><definition>
+<define key="format:y-or-n-p-options-var" name="format:y-or-n-p-options" type="const"></define>
+
+<description>A suitable list to pass as the first argument to <obj>fquery</obj> to make
+it behave like <obj>y-or-n-p</obj>.
+</description></definition><definition>
+<define key="format:yes-or-no-p-options-var" name="format:yes-or-no-p-options" type="const"></define>
+
+<description>A suitable list to pass as the first argument to <obj>fquery</obj> to make
+it behave like <obj>yes-or-no-p</obj>.
+</description></definition><definition>
+<define key="format:y-or-n-p-choices-var" name="format:y-or-n-p-choices" type="const"></define>
+
+<description>A list which <obj>y-or-n-p</obj> uses as the value of the <obj>:choices</obj> option.
+</description></definition></chapter>
+</document-part>

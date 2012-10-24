@@ -1,0 +1,899 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="trace"></a>
+
+
+<section chapter-number="31" name="trace" number="8" title="Tracing Function Execution"><index-entry index="concepts" title="tracing function execution"></index-entry>
+
+<p indent="1">        The trace facility allows the user to <arg>trace</arg> some functions.
+When a function is traced, certain special actions are taken when it is
+called and when it returns.  The default tracing action is to print a message when the
+function is called, showing its name and arguments, and another message when
+the function returns, showing its name and value(s).
+</p>
+
+<p indent="1">        The trace facility is closely compatible with Maclisp.  You invoke
+it through the <obj>trace</obj> and <obj>untrace</obj> special forms, whose syntax is described
+below.  Alternatively, you can use the trace system by clicking <obj>Trace</obj>
+in the system menu, or by using the <obj>Meta-X Trace</obj> command in the editor.
+This allows you to select the trace options from a menu instead of having
+to remember the following syntax.
+</p>
+<definition>
+<define key="trace-fun" name="trace" type="spec"></define>
+
+<description>A <obj>trace</obj> form looks like:
+
+<lisp>(trace <arg>spec-1</arg> <arg>spec-2</arg> ...)
+</lisp>
+Each <arg>spec</arg> can take any of the following forms:
+
+<table><tbody><tr><td><standard>a symbol</standard></td><td>This is a function name, with no options.  The function is traced in the
+default way, printing a message each time it is called and each time it returns.
+
+</td></tr><tr><td><standard>a list <obj>(<arg>function-name</arg> <arg>option-1</arg> <arg>option-2</arg> ...)</obj></standard></td><td><arg>function-name</arg> is a symbol and the <arg>options</arg> control how it is to be
+traced.  The various options are listed below.  Some options take arguments,
+which should be given immediately following the option name.
+
+</td></tr><tr><td><standard>a list <obj>(:function <arg>function-spec</arg> <arg>option-1</arg> <arg>option-2</arg> ...)</obj></standard></td><td>This is like the previous form except that <arg>function-spec</arg> need not be a symbol
+(see <ref chapter="12" definition-in-file="fd-fun" key="function-spec" section="2" title="Function Specs" type="section"></ref>).
+It exists because if <arg>function-name</arg> was a list in the previous form, it
+would instead be interpreted as the following form:
+
+</td></tr><tr><td><standard>a list <obj>((<arg>function-1</arg> <arg>function-2</arg>...) <arg>option-1</arg> <arg>option-2</arg> ...)</obj></standard></td><td>All of the functions are traced with the same options.  Each <arg>function</arg> can
+be either a symbol or a general function-spec.
+</td></tr></tbody></table></description></definition>
+<p indent="1">        The following <obj>trace</obj> options exist:
+
+<table><tbody><tr><td><obj>:break <arg>pred</arg></obj></td>
+<td><index-entry index="keywords" title=":break trace"></index-entry>
+Causes a breakpoint to be entered after printing
+the entry trace information but before applying the traced function to its
+arguments, if and only if <arg>pred</arg> evaluates to non-<obj>nil</obj>.  During the
+breakpoint, the symbol <obj>arglist</obj> is bound to a list of the arguments
+of the function.
+
+</td></tr><tr><td><obj>:exitbreak <arg>pred</arg></obj></td>
+<td><index-entry index="keywords" title=":exitbreak trace"></index-entry>
+This is just like <obj>break</obj> except that the
+breakpoint is entered after the function has been executed and the exit trace information
+has been printed, but before control returns.    During the
+breakpoint, the symbol <obj>arglist</obj> is bound to a list of the arguments
+of the function, and the symbol <obj>values</obj> is bound to a list of
+the values that the function is returning.
+
+</td></tr><tr><td><obj>:error</obj></td>
+<td><index-entry index="keywords" title=":error trace"></index-entry>
+Causes the error handler to be called when the function is entered.  Use
+<obj>Resume</obj> (or <obj>Control-C</obj>) to continue execution of the function.  If this option
+is specified, there is no printed trace output other than the error message
+printed by the error handler.  This is semi-obsolete, as <obj>breakon</obj> is
+more convenient and does more exactly the right thing.
+
+</td></tr><tr><td><obj>:step</obj></td>
+<td><index-entry index="keywords" title=":step trace"></index-entry>
+Causes the function to be single-stepped whenever it is called.
+See the documentation on the step facility, <ref chapter="31" definition-in-file="db-aid" key="stepper-section" section="11" title="Stepping Through an Evaluation" type="section"></ref>.
+
+</td></tr><tr><td><obj>:stepcond <arg>pred</arg></obj></td>
+<td><index-entry index="keywords" title=":stepcond trace"></index-entry>
+Causes the function to be single-stepped
+only if <arg>pred</arg> evaluates to non-<obj>nil</obj>.
+
+</td></tr><tr><td><obj>:entrycond <arg>pred</arg></obj></td>
+<td><index-entry index="keywords" title=":entrycond trace"></index-entry>
+Causes trace information to be printed on function
+entry only if <arg>pred</arg> evaluates to non-<obj>nil</obj>.
+
+</td></tr><tr><td><obj>:exitcond <arg>pred</arg></obj></td>
+<td><index-entry index="keywords" title=":exitcond trace"></index-entry>
+Causes trace information to be printed on function
+exit only if <arg>pred</arg> evaluates to non-<obj>nil</obj>.
+
+</td></tr><tr><td><obj>:cond <arg>pred</arg></obj></td>
+<td><index-entry index="keywords" title=":cond trace"></index-entry>
+This specifies both <obj>:exitcond</obj> and <obj>:entrycond</obj>
+together.
+
+</td></tr><tr><td><obj>:wherein <arg>function</arg></obj></td>
+<td><index-entry index="keywords" title=":wherein trace"></index-entry>
+Causes the function to be traced only when called, directly or indirectly,
+from the specified function <arg>function</arg>.  One can give several trace specs to
+<obj>trace</obj>, all specifying the same function but with different <obj>wherein</obj>
+options, so that the function is traced in different ways when called from
+different functions.
+
+This is different from <obj>advise-within</obj>, which only affects the function
+being advised when it is called directly from the other function.  The <obj>trace</obj>
+<obj>:wherein</obj> option means that when the traced function is called, the special
+tracing actions occur if the other function is the caller of this function,
+or its caller's caller, or its caller's caller's caller, etc.
+
+</td></tr><tr><td><obj>:argpdl <arg>pdl</arg></obj></td>
+<td><index-entry index="keywords" title=":argpdl trace"></index-entry>
+Specifies a symbol <arg>pdl</arg>, whose value is
+initially set to <obj>nil</obj> by <obj>trace</obj>.  When the function is traced, a
+list of the current recursion level for the function, the function's
+name, and a list of arguments is consed onto the <arg>pdl</arg> when the
+function is entered, and cdr'ed back off when the function is exited.
+The <arg>pdl</arg> can be inspected from within a breakpoint, for example, and
+used to determine the very recent history of the function. This option
+can be used with or without printed trace output.  Each function can be
+given its own pdl, or one pdl may serve several functions.
+
+</td></tr><tr><td><obj>:entryprint <arg>form</arg></obj></td>
+<td><index-entry index="keywords" title=":entryprint trace"></index-entry>
+The <arg>form</arg> is evaluated and the value is included in the trace message
+for calls to the function.  You can give this option multiple times,
+and all the <arg>form</arg>'s thus specified are evaluated and printed.
+<obj>\\</obj> precedes the values to separate them from the arguments.
+
+</td></tr><tr><td><obj>:exitprint <arg>form</arg></obj></td>
+<td><index-entry index="keywords" title=":exitprint trace"></index-entry>
+The <arg>form</arg> is evaluated and the value is included in the trace message
+for returns from the function.  You can give this option multiple times,
+and all the <arg>form</arg>'s thus specified are evaluated and printed.
+<obj>\\</obj> precedes the values to separate them from the returned values.
+
+</td></tr><tr><td><obj>:print <arg>form</arg></obj></td>
+<td><index-entry index="keywords" title=":print trace"></index-entry>
+The <arg>form</arg> is evaluated and the value is included in the trace messages
+for both calls to and returns from the function.  Equivalent to
+<obj>:exitprint</obj> and <obj>:entryprint</obj> at once.
+
+</td></tr><tr><td><obj>:entry <arg>list</arg></obj></td>
+<td><index-entry index="keywords" title=":entry trace"></index-entry>
+This specifies a list of arbitrary forms whose
+values are to be printed along with the usual entry-trace.  The list of
+resultant values, when printed, is preceded by <obj>\\</obj> to separate it
+from the other information.
+
+</td></tr><tr><td><obj>:exit <arg>list</arg></obj></td>
+<td><index-entry index="keywords" title=":exit trace"></index-entry>
+This is similar to <obj>entry</obj>, but specifies expressions
+whose values are printed with the exit-trace.  Again, the list of
+values printed is preceded by <obj>\\</obj>.
+
+</td></tr><tr><td><obj>:arg  :value  :both  nil</obj></td>
+<td><index-entry index="keywords" title=":arg trace"></index-entry>
+
+<index-entry index="keywords" title=":value trace"></index-entry>
+
+<index-entry index="keywords" title=":both trace"></index-entry>
+These specify which of the usual trace
+printouts should be enabled.  If <obj>:arg</obj> is specified, then on function
+entry the name of the function and the values of its arguments will be
+printed.  If <obj>:value</obj> is specified, then on function exit the returned
+value(s) of the function will be printed.  If <obj>:both</obj> is specified,
+both of these will be printed.  If <obj>nil</obj> is specified, neither will
+be printed.  If none of these four options are specified the default is
+to <obj>:both</obj>.  If any further <arg>options</arg> appear after one of these,
+they are not treated as options!  Rather, they are considered to
+be arbitrary forms whose values are to be printed on entry and/or exit
+to the function, along with the normal trace information. The values
+printed will be preceded by a <obj>//</obj>, and follow any values specified
+by <obj>:entry</obj> or <obj>:exit</obj>.
+
+Note that since these options ``swallow'' all
+following options, if one is given it should be the last option
+specified.
+</td></tr></tbody></table></p>
+
+<index-entry index="variables" title="arglist"></index-entry>
+
+<p>In the evaluation of the expression arguments to various <obj>trace</obj> options
+such as <obj>:cond</obj> and <obj>:break</obj>, the value of <obj>arglist</obj> is
+a list of the arguments given to the traced function.  Thus
+
+<lisp>(trace (foo :break (null (car arglist))))
+</lisp>would cause a break in <obj>foo</obj> if and only if the first argument to
+<obj>foo</obj> is <obj>nil</obj>.  If the <obj>:break</obj> option is used, the variable
+<obj>arglist</obj> is valid inside the break-loop.  If you <obj>setq</obj> <obj>arglist</obj>
+before actual function execution, the arguments seen by the function
+will change.
+</p>
+
+<index-entry index="variables" title="values"></index-entry>
+
+<p>In the evaluation of the expression arguments to various <obj>trace</obj> options
+such as <obj>:cond</obj> and <obj>:break</obj> on exit from the traced function,
+the variable <obj>values</obj> is bound to a
+list of the resulting values of the traced function.
+If the <obj>:exitbreak</obj> option is used, the variables <obj>values</obj> and <obj>arglist</obj> 
+are valid inside the break-loop.  If you <obj>setq</obj> <obj>values</obj>, the values returned
+by the function will change.
+</p>
+
+<p>The trace specifications may be ``factored'', as explained above.  For example,
+
+<lisp>(trace ((foo bar) :break (bad-p arglist) :value))
+<standard>is equivalent to</standard>
+(trace (foo :break (bad-p arglist) :value)
+       (bar :break (bad-p arglist) :value))
+</lisp>Since a list as a function name is interpreted as a list of
+functions, non-atomic function names (see <ref chapter="12" definition-in-file="fd-fun" key="function-spec" section="2" title="Function Specs" type="section"></ref>)
+are specified as follows:
+
+<lisp>(trace (:function (:method flavor :message) :break t))
+</lisp></p>
+
+<p><obj>trace</obj> returns as its value a list of names of all functions it traced.  If
+called with no arguments, as just <obj>(trace)</obj>, it returns a list of all the
+functions currently being traced.
+</p>
+
+<p>If you attempt to trace a function already being traced, <obj>trace</obj> calls
+<obj>untrace</obj> before setting up the new trace.
+</p>
+
+<p>Tracing is implemented with encapsulation (see <ref chapter="12" definition-in-file="fd-fun" key="encapsulate" section="9" title="Encapsulations" type="section"></ref>), so if the
+function is redefined (e.g. with <obj>defun</obj> or by loading it from a QFASL file)
+the tracing will be transferred from the old definition to the new definition.
+</p>
+
+<p>Tracing output is printed on the stream that is the value of <obj>*trace-output*</obj>.
+This is synonymous with <obj>*terminal-io*</obj> unless you change it.
+</p>
+<definition>
+<define key="untrace-fun" name="untrace" type="spec"></define>
+
+<description>Undoes the effects of <obj>trace</obj> and restores functions to
+their normal, untraced state.  <obj>untrace</obj> accepts multiple specifications,
+e.g. <obj>(untrace foo quux fuphoo)</obj>.  Calling <obj>untrace</obj> with no arguments
+will untrace all functions currently being traced.
+</description></definition><definition>
+<define key="trace-compile-flag-var" name="trace-compile-flag" type="var"></define>
+
+<description>If the value of <obj>trace-compile-flag</obj> is non-<obj>nil</obj>, the functions
+created by <obj>trace</obj> are compiled, allowing you to trace special
+forms such as <obj>cond</obj> without interfering with the execution of the
+tracing functions.  The default value of this flag is <obj>nil</obj>.
+
+See also the function <obj>compile-encapsulations</obj>, <ref definition-in-file="compil" key="compile-encapsulations-fun" title="Function compile-encapsulations" type="fun"></ref>.
+</description></definition></section><a name="Breakon"></a>
+
+
+<section chapter-number="31" name="Breakon" number="9" title="Breakon"><p>The function <obj>breakon</obj> allows you to request that the debugger be
+entered whenever a certain function is called.
+</p>
+<definition><define key="breakon-fun" name="breakon" type="fun"><args>function-spec <standard>&amp;optional</standard> condition-form</args>
+</define>
+
+<description>Encapsulates the definition of <arg>function-spec</arg> so that a trap-on-call
+occurs when it is called.  This enters the debugger.  A
+trap-on-exit will occur when the stack frame is exited.
+
+If <arg>condition-form</arg> is non-<obj>nil</obj>, its value should be a form to be
+evaluated each time <arg>function-spec</arg> is called. The trap occurs only if
+<arg>condition-form</arg> evaluates to non-<obj>nil</obj>.  Omitting the
+<arg>condition-form</arg> is equivalent to supplying <obj>t</obj>.  If <obj>breakon</obj> is
+called more than once for the same <arg>function-spec</arg> and different
+<arg>condition-form</arg>s, the trap occurs if any of the conditions are true.
+
+<obj>breakon</obj> with no arguments returns a list of the functions that
+are broken on.
+</description></definition>
+<p>Conditional breakons are useful for causing the trap to occur only in a
+certain stack group.  This sometimes allows debugging of functions
+that are being used frequently in background processes.
+
+<lisp>(breakon 'foo `(eq current-stack-group ',current-stack-group))
+</lisp></p>
+
+<p>If you wish to trap on calls to <obj>foo</obj> when called from the execution of
+<obj>bar</obj>, you can use <obj>(si:function-active-p 'bar)</obj> as the condition.
+If you want to trap only calls made directly from <obj>bar</obj>, the thing to
+do is
+
+<lisp>(breakon '(:within bar foo))
+</lisp>rather than a conditional breakon.
+</p>
+
+<p>To break only the <arg>n</arg>'th time <obj>foo</obj> is called, do
+
+<lisp>(defvar i <arg>n</arg>)
+(breakon 'foo '(zerop (decf i)))
+</lisp></p>
+
+<p>Another useful form of conditional breakon allows you to control
+trapping from the keyboard:
+
+<lisp>(breakon 'foo '(tv:key-state :mode-lock))
+</lisp>The trap occurs only when the <obj>Mode-Lock</obj> key is down.  This key
+is not normally used for much else.  With this technique, you can
+successfully trap on functions used by the debugger!
+</p>
+<definition><define key="unbreakon-fun" name="unbreakon" type="fun"><args>function-spec <standard>&amp;optional</standard> conditional-form</args>
+</define>
+
+<description>Remove the <obj>breakon</obj> set on <arg>function-spec</arg>.  If
+<arg>conditional-form</arg> is specified, remove only that condition.  Breakons
+with other conditions are not removed.
+
+With no arguments, <obj>unbreakon</obj> removes all breakons from all
+functions.
+</description></definition>
+<p>To cause the encapsulation which implements the breakon to be compiled,
+call <obj>compile-encapsulations</obj> or set <obj>compile-encapsulations-flag</obj>
+non-<obj>nil</obj>.  See <ref definition-in-file="compil" key="compile-encapsulations-fun" title="Function compile-encapsulations" type="fun"></ref>.  This may eliminate
+some of the problems that occur if you breakon a function such as
+<obj>prog</obj> that is used by the evaluator.  (A conditional to trap only in
+one stack group will help here also.)
+</p>
+</section><a name="advise"></a>
+
+
+<section chapter-number="31" name="advise" number="10" title="Advising a Function"><index-entry index="concepts" title="advice to functions"></index-entry>
+
+<p>To advise a function is to tell it to do something extra in addition to its
+actual definition.  It is done by means of the function <obj>advise</obj>.  The
+something extra is called a piece of advice, and it can be done before, after,
+or around the definition itself.  The advice and the definition are independent,
+in that changing either one does not interfere with the other.  Each function
+can be given any number of pieces of advice.
+</p>
+
+<p>Advising is fairly similar to tracing, but its purpose is different.  Tracing is
+intended for temporary changes to a function to give the user information about
+when and how the function is called and when and with what value it returns.
+Advising is intended for semi-permanent changes to what a function actually
+does.  The differences between tracing and advising are motivated by this
+difference in goals.
+</p>
+
+<p>Advice can be used for testing out a change to a function in a way
+that is easy to retract.  In this case, you would call <obj>advise</obj> from
+the terminal.  It can also be used for customizing a
+function that is part of a program written by someone else.  In this
+case you would be likely to put a call to <obj>advise</obj> in one of your
+source files or your login init file (see <ref definition-in-file="fd-hac" key="login-fun" title="Function login" type="fun"></ref>), rather than modifying the other
+person's source code.
+</p>
+
+<p>Advising is implemented with encapsulation (see <ref chapter="12" definition-in-file="fd-fun" key="encapsulate" section="9" title="Encapsulations" type="section"></ref>), so if the
+function is redefined (e.g. with <obj>defun</obj> or by loading it from a QFASL file)
+the advice will be transferred from the old definition to the new definition.
+</p>
+<definition>
+<define key="advise-fun" name="advise" type="mac"></define>
+
+<description>A function is advised by the special form
+
+<lisp>(advise <arg>function</arg> <arg>class</arg> <arg>name</arg> <arg>position</arg>
+  <arg>form1</arg> <arg>form2</arg>...)
+</lisp>None of this is evaluated.  <arg>function</arg> is the function to put the advice on.
+It is usually a symbol, but any function spec is allowed (see <ref chapter="12" definition-in-file="fd-fun" key="function-spec" section="2" title="Function Specs" type="section"></ref>).
+The <arg>forms</arg> are the advice; they get evaluated when the function is called.
+<arg>class</arg> should be either <obj>:before</obj>, <obj>:after</obj>, or <obj>:around</obj>, and says
+when to execute the advice (before, after, or around the execution of the
+definition of the function).  The meaning of <obj>:around</obj> advice is explained a
+couple of sections below.
+
+<arg>name</arg> is used to keep track of multiple pieces of advice on the same
+function.  <arg>name</arg> is an arbitrary symbol that is remembered as the
+name of this particular piece of advice.  If you have no name in mind,
+use <obj>nil</obj>; then we say the piece of advice is anonymous.  A given
+function and class can have any number of pieces of anonymous advice,
+but it can have only one piece of named advice for any one name.  If
+you try to define a second one, it replaces the first.  Advice for
+testing purposes is usually anonymous.  Advice used for customizing
+someone else's program should usually be named so that multiple
+customizations to one function have separate names.  Then, if you
+reload a customization that is already loaded, it does not get put on
+twice.
+
+<arg>position</arg> says where to put this piece of advice in relation to
+others of the same class already present on the same function.  If
+<arg>position</arg> is <arg>nil</arg>, the new advice goes in the default position: it
+usually goes at the beginning (where it is executed before the other
+advice), but if it is replacing another piece of advice with the same
+name, it goes in the same place that the old piece of advice was in.
+
+If you wish to specify the position, <arg>position</arg> can be the numerical index of
+which existing piece of advice to insert this one before.  Zero means
+at the beginning; a very large number means at the end.  Or,
+<arg>position</arg> can be the name of an existing piece of advice of the same
+class on the same function; the new advice is inserted before that
+one.
+
+
+<lisp><exdent amount="96"><caption><standard>For example,</standard> </caption>(advise factorial :before negative-arg-check nil
+  (if (minusp (first arglist))
+      (ferror nil &quot;factorial of negative argument&quot;)))
+</exdent></lisp>This modifies the (hypothetical) factorial function so that if it is
+called with a negative argument it signals an error instead of running
+forever.
+
+<obj>advise</obj> with no arguments returns a list of advised functions.
+</description></definition><definition>
+<define key="unadvise-fun" name="unadvise" type="mac"></define>
+
+
+<description><lisp>(unadvise <arg>function</arg> <arg>class</arg> <arg>position</arg>)
+</lisp>removes pieces of advice.  None of its arguments are evaluated.  <arg>function</arg>
+and <arg>class</arg> have the same meaning as they do in the function <obj>advise</obj>.
+<arg>position</arg> specifies which piece of advice to remove.  It can be the numeric
+index (zero means the first one) or it can be the name of the piece of advice.
+
+If some of the arguments
+are missing or <obj>nil</obj>, all pieces of advice which match the non-<obj>nil</obj> arguments
+are removed.  Thus, if <arg>function</arg> is missing or <obj>nil</obj>, all advice on all
+functions which match the specified <arg>class</arg> and <arg>position</arg> are removed.
+If <arg>position</arg> is missing or <obj>nil</obj>, then all advice of the specified class
+on the specified function is removed.  If only <arg>function</arg> is non-<obj>nil</obj>,
+all advice on that function is removed.
+</description></definition>
+<p>The following are the primitive functions for adding and removing advice.
+Unlike the above special forms, these are functions and can be conveniently
+used by programs.  <obj>advise</obj> and <obj>unadvise</obj> are actually macros that
+expand into calls to these two.
+</p>
+<definition><define key="si:advise-1-fun" name="si:advise-1" type="fun"><args>function class name position forms</args>
+</define>
+
+<description>Adds advice.  The arguments have the same meaning as in <obj>advise</obj>.
+Note that the <arg>forms</arg> argument is <arg>not</arg> a <obj>&amp;rest</obj> argument.
+</description></definition><definition><define key="si:unadvise-1-fun" name="si:unadvise-1" type="fun"><args> <standard>&amp;optional</standard> function class position</args>
+</define>
+
+<description>Removes advice.  If <arg>function</arg> or <arg>class</arg> or <arg>position</arg> is <obj>nil</obj>
+or unspecified, advice is removed from all functions or all classes of
+advice or advice at all positions are removed.
+</description></definition>
+<p>You can find out manually what advice a function has with <obj>grindef</obj>, which
+grinds the advice on the function as forms that are calls to
+<obj>advise</obj>.  These are in addition to the definition of the function.
+</p>
+
+<p>To cause the advice to be compiled, call <obj>compile-encapsulations</obj> or
+set <obj>compile-encapsulations-flag</obj> non-<obj>nil</obj>.  See
+<ref definition-in-file="compil" key="compile-encapsulations-fun" title="Function compile-encapsulations" type="fun"></ref>.
+</p>
+
+
+
+<subsection name="NIL" title="Designing the Advice"><p>For advice to interact usefully with the definition and intended
+purpose of the function, it must be able to interface to the data flow
+and control flow through the function.  We provide conventions for
+doing this.
+</p>
+
+<p>The list of the arguments to the function can be found in the variable
+<obj>arglist</obj>.  <obj>:before</obj> advice can replace this list, or an element of it, to
+change the arguments passed to the definition itself.  If you replace
+an element, it is wise to copy the whole list first with
+
+<lisp>(setq arglist (copylist arglist))
+</lisp>After the function's definition has been executed, the list of the
+values it returned can be found in the variable <obj>values</obj>.  <obj>:after</obj> advice
+can set this variable or replace its elements to cause different
+values to be returned.
+</p>
+
+<p>All the advice is executed within a <obj>block nil</obj> so any piece of advice can
+exit the entire function with <obj>return</obj>.  The arguments of the <obj>return</obj>
+are returned as the values of the function and no further advice
+is executed.  If a piece of <obj>:before</obj> advice does this then the
+function's definition is not even called.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title=":around Advice"><p>A piece of <obj>:before</obj> or <obj>:after</obj> advice is executed entirely before or
+entirely after the definition of the function.  <obj>:around</obj> advice is wrapped
+around the definition; that is, the call to the original definition of
+the function is done at a specified place inside the piece of <obj>:around</obj>
+advice.  You specify where by putting the symbol <obj>:do-it</obj> in that place.
+</p>
+
+<p>For example, <obj>(+ 5 :do-it)</obj> as a piece of <obj>:around</obj> advice would add <obj>5</obj> to
+the value returned by the function.  This could also be done by
+<obj>(setq values (list (+ 5 (car values))))</obj> as <obj>:after</obj> advice.
+</p>
+
+<p>When there is more than one piece of <obj>:around</obj> advice, the pieces are stored
+in a sequence just like <obj>:before</obj> and <obj>:after</obj> advice.  Then, the first
+piece of advice in the sequence is the one started first.  The second
+piece is substituted for <obj>:do-it</obj> in the first one.  The third one is
+substituted for <obj>:do-it</obj> in the second one.  The original definition is
+substituted for <obj>:do-it</obj> in the last piece of advice.
+</p>
+
+<p><obj>:around</obj> advice can access <obj>arglist</obj>, but <obj>values</obj> is not set up until the
+outermost <obj>:around</obj> advice returns.  At that time, it is set to the
+value returned by the <obj>:around</obj> advice.  It is reasonable for the advice to
+receive the values of the <obj>:do-it</obj> (e.g. with <obj>multiple-value-list</obj>) and
+fool with them before returning them (e.g. with <obj>values-list</obj>).
+</p>
+
+<p><obj>:around</obj> advice can <obj>return</obj> from the <obj>block</obj> at any time, whether the
+original definition has been executed yet or not.  It can also override
+the original definition by failing to contain <obj>:do-it</obj>.  Containing two
+instances of <obj>:do-it</obj> may be useful under peculiar circumstances.  If you
+are careless, the original definition may be called twice, but
+something like
+
+<lisp>(if (foo) (+ 5 :do-it) (* 2 :do-it))
+</lisp>will work reasonably.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Advising One Function Within Another"><p>It is possible to advise the function <obj>foo</obj> only for when it is called
+directly from a specific other function <obj>bar</obj>.  You do this by
+advising the function specifier <obj>(:within bar foo)</obj>.  That works by
+finding all occurrences of <obj>foo</obj> in the definition of <obj>bar</obj> and
+replacing them with <obj>#:altered-foo-within-bar</obj>.  (Note that this is an
+uninterned symbol.)  This can be done even if <obj>bar</obj>'s definition is
+compiled code.  The symbol <obj>#:altered-foo-within-bar</obj> starts off with
+the symbol <obj>foo</obj> as its definition; then the symbol
+<obj>#:altered-foo-within-bar</obj>, rather than <obj>foo</obj> itself, is advised.
+The system remembers that <obj>foo</obj> has been replaced inside <obj>bar</obj>, so
+that if you change the definition of <obj>bar</obj>, or advise it, then the
+replacement is propagated to the new definition or to the advice.  If
+you remove all the advice on <obj>(:within bar foo)</obj>, so that its
+definition becomes the symbol <obj>foo</obj> again, then the replacement is
+unmade and everything returns to its original state.
+</p>
+
+<p><obj>(grindef bar)</obj> prints <obj>foo</obj> where it originally appeared, rather than
+<obj>#:altered-foo-within-bar</obj>, so the replacement is not seen.  Instead,
+<obj>grindef</obj> prints calls to <obj>advise</obj> to describe all the advice that
+has been put on <obj>foo</obj> or anything else within <obj>bar</obj>.
+</p>
+
+<p>An alternate way of putting on this sort of advice is to use
+<obj>advise-within</obj>.
+</p>
+<definition>
+<define key="advise-within-fun" name="advise-within" type="mac"></define>
+
+
+<description><lisp>(advise-within <arg>within-function</arg> <arg>function-to-advise</arg>
+               <arg>class</arg> <arg>name</arg> <arg>position</arg>
+        <arg>forms...</arg>)
+</lisp>advises <arg>function-to-advise</arg> only when called directly from the function
+<arg>within-function</arg>.  The other arguments mean the same thing as with
+<obj>advise</obj>.  None of them are evaluated.
+</description></definition>
+<p>To remove advice from <obj>(:within bar foo)</obj>, you can use <obj>unadvise</obj> on that
+function specifier.  Alternatively, you can use <obj>unadvise-within</obj>.
+</p>
+<definition>
+<define key="unadvise-within-fun" name="unadvise-within" type="mac"></define>
+
+
+<description><lisp>(unadvise-within <arg>within-function</arg> <arg>function-to-advise</arg> <arg>class</arg> <arg>position</arg>)
+</lisp>removes advice
+that has been placed on <obj>(:within <arg>within-function</arg> <arg>function-to-advise</arg>)</obj>.
+Any of the four arguments may be missing or <obj>nil</obj>; then that argument is
+unconstrained.  All advice matching whichever arguments are non-<obj>nil</obj> is
+removed.  For example, <obj>(unadvise-within foo nil :before)</obj> removes
+all <obj>:before</obj>-advice from anything within <obj>foo</obj>.  <obj>(unadvise-within)</obj>
+removes all advice placed on anything within anything.  By contrast, <obj>(unadvise)</obj>
+removes all advice, including advice placed on a function for all callers.
+Advice placed
+on a function not within another specific function is never removed by
+<obj>unadvise-within</obj>.
+</description></definition>
+<p>The function versions of <obj>advise-within</obj> and <obj>unadvise-within</obj> are
+called <obj>si:advise-within-1</obj> and <obj>si:unadvise-within-1</obj>.  <obj>advise-within</obj> and
+<obj>unadvise-within</obj> are macros that expand into calls to the other two.
+</p>
+</subsection></section><a name="stepper-section"></a>
+
+
+<section chapter-number="31" name="stepper-section" number="11" title="Stepping Through an Evaluation"><index-entry index="concepts" title="stepping through evaluation"></index-entry>
+
+<p indent="1">        The Step facility gives you the ability to follow every step of
+the evaluation of a form, and examine what is going on.  It is
+analogous to a single-step proceed facility often found in
+machine-language debuggers.  If your program is doing something
+strange, and it isn't obvious how it's getting into its strange state,
+then the stepper is for you.
+</p>
+
+<p indent="1">        There are two ways to enter the stepper.  One is by use of the
+<obj>step</obj> function.
+</p>
+<definition><define key="step-fun" name="step" type="fun"><args>form</args>
+</define>
+
+<description>        This evaluates <arg>form</arg> with single stepping.  It returns
+the value of <arg>form</arg>.
+</description></definition>
+<p indent="1">        For example, if you have a function named <obj>foo</obj>, and typical arguments
+to it might be <obj>t</obj> and <obj>3</obj>, you could say
+
+<lisp>(step '(foo t 3))
+</lisp>to evaluate the form <obj>(foo t 3)</obj> with single stepping.
+</p>
+
+<p indent="1">        The other way to get into the stepper is to use the <obj>:step</obj> option 
+of <obj>trace</obj> (see <ref definition-in-file="db-aid" key="trace-fun" title="Special Form trace" type="spec"></ref>).  If a function is traced with the <obj>:step</obj> option, then
+whenever that function is called it will be single stepped.
+</p>
+
+<p indent="1">        Note that any function to be stepped must be interpreted; that is, it
+must be a lambda-expression.  Compiled code cannot be stepped by the stepper.
+</p>
+
+<p indent="1">        When evaluation is proceeding with single stepping, before any
+form is evaluated, it is (partially) printed out, preceded by a forward
+arrow (<example>→</example>) character When a macro is expanded, the expansion is
+printed out preceded by a double arrow (<example>↔</example>) character.  When a form
+returns a value, the form and the values are printed out preceded by a
+backwards arrow (<example>←</example>) character; if there is more than one value
+being returned, an and-sign (<example>⋀</example>) character is printed between the
+values.  When the stepper has evaluated the args to a form and is about
+to apply the function, it prints a lambda (<example>λ</example>) because entering the
+lambda is the next thing to be done.
+</p>
+
+<p indent="1">        Since the forms may be very long, the stepper does not print all
+of a form; it truncates the printed representation after a certain number
+of characters.  Also, to show the recursion pattern of who calls whom in
+a graphic fashion, it indents each form proportionally to its level
+of recursion.
+</p>
+
+<p indent="1">        After the stepper prints any of these things, it waits for a
+command from the user.  There are several commands to tell the stepper
+how to proceed, or to look at what is happening. The commands are:
+
+<table><tbody><tr><td><standard><obj>Control-N</obj> (Next)</standard></td><td>Steps to the Next event, then asks for another command.
+Events include beginning to evaluate a form at any level
+or finishing the evaluation of a form at any level.
+
+</td></tr><tr><td><standard><obj>Space</obj></standard></td><td><br></br>Steps to the next event at this level.  In other words, continue to
+evaluate at this level, but don't step anything at lower levels.  This is a good
+way to skip over parts of the evaluation that don't interest you.
+
+</td></tr><tr><td><standard><obj>Control-A</obj> (Args)</standard></td><td>Skips over the evaluation of the arguments of this form, but pauses in the stepper
+before calling the function that is the car of the form.
+
+</td></tr><tr><td><standard><obj>Control-U</obj> (Up)</standard></td><td>Continues evaluating until we go up one level.  This is like
+the space command, only more so; it skips over anything on the current level
+as well as lower levels.
+
+</td></tr><tr><td><standard><obj>Control-X</obj> (eXit)</standard></td><td>Exits; finishes evaluation without any more stepping.
+
+</td></tr><tr><td><standard><obj>Control-T</obj> (Type)</standard></td><td>Retypes the current form in full (without truncation).
+
+</td></tr><tr><td><standard><obj>Control-G</obj> (Grind)</standard></td><td>Grinds (i.e. prettyprints) the current form.
+
+</td></tr><tr><td><standard><obj>Control-E</obj> (Editor)</standard></td><td>Switches windows, to the editor.
+
+</td></tr><tr><td><standard><obj>Control-B</obj> (Breakpoint)</standard></td><td>Enters a <obj>break</obj> loop from which you can examine the values of
+variables and other aspects of the current environment.  From
+within this loop, the following variables are available:
+
+<table><tbody><tr><td><obj>step-form</obj></td><td>the current form.
+</td></tr><tr><td><obj>step-values</obj></td><td>the list of returned values.
+</td></tr><tr><td><obj>step-value</obj></td><td>the first returned value.
+</td></tr></tbody></table>If you change the values of these variables, you will affect execution.
+
+</td></tr><tr><td><standard><obj>Control-L</obj></standard></td><td>Clears the screen and redisplays the last 10. pending forms (forms
+that are being evaluated).
+
+</td></tr><tr><td><standard><obj>Meta-L</obj></standard></td><td>Like Control-L, but doesn't clear the screen.
+
+</td></tr><tr><td><standard><obj>Control-Meta-L</obj></standard></td><td>Like Control-L, but redisplays all pending forms.
+
+</td></tr><tr><td><standard><obj>?</obj> or <obj>Help</obj></standard></td><td>Prints documentation on these commands.
+</td></tr></tbody></table></p>
+
+<p indent="1">        It is strongly suggested that you write some little function
+and try the stepper on it.  If you get a feel for what the stepper does
+and how it works, you will be able to tell when it is the right thing to use
+to find bugs.
+</p>
+</section><a name="evalhook-section"></a>
+
+
+<section chapter-number="31" name="evalhook-section" number="12" title="Evalhook"><p>The <obj>evalhook</obj> facility provides a ``hook'' into the evaluator; it is a
+way you can get a Lisp form of your choice to be executed whenever the
+evaluator is called.  The stepper uses <obj>evalhook</obj>, and usually it is
+the only thing that ever needs to.  However, if you want to write your
+own stepper or something similar, this is the primitive facility that
+you can use to do so.  The way this works is a bit hairy, but unless
+you need to write your own stepper you don't have to worry about it.
+</p>
+<definition>
+<define key="evalhook-var" name="evalhook" type="var"></define>
+<define key="*evalhook*-var" name="*evalhook*" type="var"></define>
+
+<description>If the value of <obj>evalhook</obj> is non-<obj>nil</obj>, then special things happen
+in the evaluator.  Its value is called the <arg>hook function</arg>.  When a
+form (any form, even a number or a symbol) is to be evaluated, the hook
+function is called instead.  Whatever values the hook function returns
+are taken to be the results of the evaluation.  Both <obj>evalhook</obj> and
+<obj>applyhook</obj> are bound to <obj>nil</obj> before the hook function is actually
+called.
+
+The hook function receives two arguments: the form that was to be
+evaluated, and the lexical environment of evaluation.  These two
+arguments allow the hook function to perform later, if it wishes,
+the very same evaluation that the hook was called instead of.
+</description></definition><definition>
+<define key="applyhook-var" name="applyhook" type="var"></define>
+<define key="*applyhook*-var" name="*applyhook*" type="var"></define>
+
+<description>If the value of <obj>applyhook</obj> is non-<obj>nil</obj>, it is called the
+next time the interpreter is about to apply a function to its
+evaluated arguments.  Whatever values the apply hook function
+returns are taken to be the results of calling the other function.
+Both <obj>evalhook</obj> and <obj>applyhook</obj> are bound to <obj>nil</obj> before the
+hook function is actually called.
+
+The hook function receives three arguments: the function that was
+going to be called, the list of arguments it was going to receive,
+and the lexical environment of evaluation.  These
+arguments allow the hook function to perform later, if it wishes,
+the very same evaluation that the hook was called instead of.
+</description></definition>
+<p>When either the evalhook or the applyhook is called, both variables are
+bound to <obj>nil</obj>.  They are also rebound to <obj>nil</obj> by <obj>break</obj> and by
+the debugger, and <obj>setq</obj>'ed to <obj>nil</obj> when errors are dismissed
+by throwing to the Lisp top level loop.  This provides the ability to
+escape from this mode if something bad happens.
+</p>
+
+<p>In order not to impair the efficiency of the Lisp interpreter,
+several restrictions are imposed on the evalhook and applyhook.
+They apply only to evaluation--whether in a read-eval-print loop,
+internally in evaluating arguments in forms, or by explicit use
+of the function <obj>eval</obj>.  They <arg>do not</arg> have any effect
+on compiled function references, on use of the function <obj>apply</obj>,
+or on the mapping functions.
+</p>
+<definition><define key="evalhook-fun" name="evalhook" type="fun"><args>form evalhook applyhook <standard>&amp;optional</standard> environment</args>
+</define>
+
+<description>Evaluates <arg>form</arg> in the specified <arg>environment</arg>, with <arg>evalhook</arg> and <arg>applyhook</arg> in
+effect for all recursive evaluations of subforms of <arg>form</arg>.  However, the
+<arg>evalhook</arg> is not called for the evaluation of <arg>form</arg> itself.
+
+<arg>environment</arg> is a list which represents the lexical environment
+to be in effect for the evaluation of <arg>form</arg>.  <obj>nil</obj> means an
+empty lexical environment, in which no lexical bindings exist.  This
+is the environment used when <obj>eval</obj> itself is called.  Aside from
+<obj>nil</obj>, the only reasonable way to get a value to pass for
+<arg>environment</arg> is to use the last argument passed to a hook
+function.  You must take care not to use it after the context in
+which it was made is exited, because environments normally contain
+stack lists which become garbage after their stack frames are
+popped.
+
+<arg>environment</arg> has no effect on the evaluation of a variable which
+is regarded as special.  This is always done by examining the value
+cell.  However, environment contains the record of the local special
+declarations currently in effect, so it does enter in the decision
+of whether a variable is special.
+
+
+<lisp><exdent amount="96"><caption>Here is an example of the use of <obj>evalhook</obj>: </caption><standard>;; This function evaluates a form while printing debugging information.</standard>
+(defun hook (x)
+   (terpri)
+   (evalhook x 'hook-function nil))
+
+<standard>;; Notice how this function calls <obj>evalhook</obj> to evaluate the form <obj>f</obj>,</standard>
+<standard>;; so as to hook the sub-forms.</standard>
+(defun hook-function (f env)
+   (let ((v (multiple-value-list
+              (evalhook f 'hook-function nil env))))
+     (format t &quot;form: ~S~%values: ~S~%&quot; f v)
+     (values-list v)))
+</exdent></lisp>
+The following output might be seen from <obj>(hook '(cons (car '(a . b)) 'c))</obj>:
+
+<lisp>form: (quote (a . b))
+values: ((a . b))
+form: (car (quote (a . b)))
+values: (a)
+form: (quote c)
+values: (c)
+(a . c)
+</lisp></description></definition><definition><define key="applyhook-fun" name="applyhook" type="fun"><args>function list-of-args evalhook applyhook <standard>&amp;optional</standard> environment</args>
+</define>
+
+<description>Applies <arg>function</arg> to <arg>list-of-args</arg> in the specified <arg>environment</arg>, with <arg>evalhook</arg>
+and <arg>applyhook</arg> in effect for all recursive evaluations of subforms of <arg>function</arg>'s body.
+However, <arg>applyhook</arg> is not called for this application of function itself.
+For more information, refer to the definition of <obj>evalhook</obj>, immediately above.
+</description></definition></section><a name="understanding-compiled-code"></a>
+
+
+<section chapter-number="31" name="understanding-compiled-code" number="13" title="The MAR"><index-entry index="concepts" title="MAR"></index-entry>
+
+<p indent="1">        The MAR facility allows any word or contiguous set of words to
+be monitored constantly, and can cause an error if the words are
+referenced in a specified manner.  The name MAR is from the similar
+device on the ITS PDP-10's; it is an acronym for `Memory Address
+Register'.  The MAR checking is done by the Lisp Machine's memory
+management hardware, so the speed of general execution is not
+significantly slowed down when the MAR is enabled.  However, the speed
+of accessing pages of memory containing the locations being checked is
+slowed down somewhat, since every reference involves a microcode trap.
+</p>
+
+<p indent="1">        These are the functions that control the MAR:
+</p>
+<definition><define key="set-mar-fun" name="set-mar" type="fun"><args>location cycle-type <standard>&amp;optional</standard> n-words</args>
+</define>
+
+<description>Sets the MAR on <arg>n-words</arg> words, starting at <arg>location</arg>.
+<arg>location</arg> may be any object.  Often it will be a locative pointer
+to a cell, probably created with the <obj>locf</obj> special form.
+<arg>n-words</arg> currently defaults to 1,
+but eventually it may default to the size of the object.
+<arg>cycle-type</arg> says under what conditions to trap.  <obj>:read</obj> means that
+only reading the location should cause an error, <obj>:write</obj> means that
+only writing the location should, <obj>t</obj> means that both should.
+To set the MAR to detect <obj>setq</obj> (and binding) of the variable <obj>foo</obj>, use
+
+<lisp>(set-mar (variable-location foo) :write)
+</lisp></description></definition><definition>
+<define key="clear-mar-fun" name="clear-mar" type="fun"></define>
+
+<description>Turns off the MAR.  Warm-booting the machine disables the
+MAR but does not turn it off, i.e. references to the MARed pages
+are still slowed down.  <obj>clear-mar</obj> does not currently speed
+things back up until the next time the pages are swapped out;
+this may be fixed some day.
+</description></definition><definition>
+<define key="mar-mode-fun" name="mar-mode" type="fun"></define>
+
+<description><obj>(mar-mode)</obj> returns a symbol indicating the current state of
+the MAR.  It returns one of:
+
+<table><tbody><tr><td><obj>nil</obj></td><td>The MAR is not set.
+</td></tr><tr><td><obj>:read</obj></td><td>The MAR will cause an error if there is a read.
+</td></tr><tr><td><obj>:write</obj></td><td>The MAR will cause an error if there is a write.
+</td></tr><tr><td><obj>t</obj></td><td>The MAR will cause an error if there is any reference.
+</td></tr></tbody></table></description></definition>
+<p>Note that using the MAR makes the pages on which it is set
+somewhat slower to access, until the next time they are
+swapped out and back in again after the MAR is shut off.
+Also, use of the MAR currently breaks the read-only feature
+if those pages were read-only.
+</p>
+
+<p>Proceeding from a MAR break allows the memory reference that got an error
+to take place, and continues the program with the MAR still effective.  When
+proceeding from a write, you have the choice of whether to allow the
+write to take place or to inhibit it, leaving the location with its old
+contents.
+</p>
+<definition><define key="sys:mar-break-condition" name="sys:mar-break" type="condition"><args>(<obj>condition</obj>)</args>
+</define>
+
+<description>This is the condition, not an error, signaled by a MAR break.
+
+The condition instance supports these operations:
+
+<table><tbody><tr><td><obj>:object</obj></td><td>The object one of whose words was being referenced.
+
+</td></tr><tr><td><obj>:offset</obj></td><td>The offset within the object of the word being referenced.
+
+</td></tr><tr><td><obj>:value</obj></td><td>The value read, or to be written.
+
+</td></tr><tr><td><obj>:direction</obj></td><td>Either <obj>:read</obj> or <obj>:write</obj>.
+</td></tr></tbody></table>
+The proceed type <obj>:no-action</obj> simply proceeds, continuing with the
+interrupted program as if the MAR had not been set.  If the trap was due
+to writing, the proceed type <obj>:proceed-no-write</obj> is also provided, and
+causes the program to proceed but does not store the value in the memory
+location.
+</description></definition>
+<p>Most--but not all--write operations first do a read.  <obj>setq</obj> and
+<obj>rplaca</obj> both do.  This means that if the MAR is in <obj>:read</obj>
+mode it catches writes as well as reads; however, they trap
+during the reading phase, and consequently the data to be written are
+not yet known.  This also means that setting the MAR to <obj>t</obj> mode
+causes most writes to trap twice, first for a read and then again for a
+write.  So when the MAR says that it trapped because of a read, this
+means a read at the hardware level, which may not look like a read in
+your program.
+</p>
+</section>
+</document-part>

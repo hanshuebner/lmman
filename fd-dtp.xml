@@ -1,0 +1,844 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="object-chapter"></a><chapter name="object-chapter" number="2" title="Primitive Object Types"><a name="Data Types"></a>
+
+
+<section chapter-number="2" name="Data Types" number="1" title="Data Types"><p>This section enumerates some of the various different primitive types of
+objects in Zetalisp.  The types explained below include
+symbols, conses, various types of numbers, two kinds of compiled code
+objects, locatives, arrays, stack groups, and closures.
+
+<index-entry index="concepts" title="symbol"></index-entry>
+
+<index-entry index="concepts" title="print name"></index-entry>
+
+<index-entry index="concepts" title="definition"></index-entry>
+
+<index-entry index="concepts" title="property list"></index-entry>
+</p>
+
+<p indent="1">        A <arg>symbol</arg> (these are sometimes called ``atoms'' or ``atomic
+symbols'' by other texts) has a <arg>print name</arg>, a <arg>value</arg>, a
+<arg>definition</arg>, a <arg>property list</arg>, and a <arg>package</arg>.
+</p>
+
+<p indent="1">        The print name is a string, which may be obtained by the
+function <obj>symbol-name</obj> (<ref definition-in-file="fd-sym" key="symbol-name-fun" title="Function symbol-name" type="fun"></ref>).  This string serves as the
+<arg>printed representation</arg> (see <ref chapter="24" definition-in-file="rdprt" key="printer" section="1" title="What the Printer Produces" type="section"></ref>) of the symbol.
+</p>
+
+<p>Each symbol
+has a <arg>value</arg>, which may be any
+Lisp object.  This is the value of the symbol when regarded as a dynamic variable.
+It is also referred to sometimes as the ``contents of the
+value cell'', since internally every symbol has a cell called the <arg>value
+cell</arg>, which holds the value.  It is accessed by the <obj>symeval</obj>
+function (<ref definition-in-file="fd-sym" key="symeval-fun" title="Function symeval" type="fun"></ref>), and updated by the <obj>set</obj> function
+(<ref definition-in-file="fd-sym" key="set-fun" title="Function set" type="fun"></ref>).  (That is, given a symbol, you use <obj>symeval</obj> to find out
+what its value is, and use <obj>set</obj> to change its value.)
+</p>
+
+<p>Each
+symbol has a <arg>definition</arg>, which may also be any Lisp object.  It is
+also referred to as the ``contents of the function cell'', since
+internally every symbol has a cell called the <arg>function cell</arg>, which
+holds the definition.  The definition can be accessed by the
+<obj>fsymeval</obj> function (<ref definition-in-file="fd-sym" key="fsymeval-fun" title="Function fsymeval" type="fun"></ref>), and updated with <obj>fset</obj>
+(<ref definition-in-file="fd-sym" key="fset-fun" title="Function fset" type="fun"></ref>), although usually the functions <obj>fdefinition</obj> and
+<obj>fdefine</obj> are employed (<ref definition-in-file="fd-fun" key="fdefine-fun" title="Function fdefine" type="fun"></ref>).
+</p>
+
+<p>The property list is a list of an even number of
+elements; it can be accessed directly by <obj>plist</obj> (<ref definition-in-file="fd-sym" key="plist-fun" title="Function plist" type="fun"></ref>), and
+updated directly by <obj>setplist</obj> (<ref definition-in-file="fd-sym" key="setplist-fun" title="Function setplist" type="fun"></ref>), although usually the
+functions <obj>get</obj>, <obj>putprop</obj>, and <obj>remprop</obj> (<ref definition-in-file="fd-con" key="get-fun" title="Function get" type="fun"></ref>) are used.
+The property list is used to associate any number of additional
+attributes with a symbol--attributes not used frequently enough to
+deserve their own cells as the value and definition do.
+</p>
+
+<p>  Symbols also have a
+package cell, which indicates which package of names the symbol
+belongs to.  This is explained further in the section on packages
+(chapter <ref chapter="28" definition-in-file="packd" key="package-chapter" title="Packages" type="chapter"></ref>) and can be disregarded by the casual user.
+</p>
+
+<p indent="1">        The primitive function for creating symbols is
+<obj>make-symbol</obj> (<ref definition-in-file="fd-sym" key="make-symbol-fun" title="Function make-symbol" type="fun"></ref>), although most symbols
+are created by <obj>read</obj>, <obj>intern</obj>, or
+<obj>fasload</obj> (which call <obj>make-symbol</obj> themselves.)
+</p>
+
+<p indent="1">        A <arg>cons</arg> is an object that cares about two
+other objects, arbitrarily named the <arg>car</arg> and the <arg>cdr</arg>.
+These objects can be accessed with <obj>car</obj> and <obj>cdr</obj> (<ref definition-in-file="fd-con" key="car-fun" title="Function car" type="fun"></ref>), and updated
+with <obj>rplaca</obj> and <obj>rplacd</obj> (<ref definition-in-file="fd-con" key="rplaca-fun" title="Function rplaca" type="fun"></ref>).  The primitive function for creating
+conses is <obj>cons</obj> (<ref definition-in-file="fd-con" key="cons-fun" title="Function cons" type="fun"></ref>).
+</p>
+
+<p indent="1">        There are several kinds of numbers in Zetalisp.  <arg>Fixnums</arg>
+represent integers in the range of -2^24 to 2^24-1.  <arg>Bignums</arg>
+represent integers of arbitrary size, but they are more expensive to use
+than fixnums because they occupy storage and are slower.  The system
+automatically converts between fixnums and bignums as required.
+<arg>Floats</arg> are floating-point numbers.  <arg>Short floats</arg> are another
+kind of floating-point numbers, with less range and precision, but less
+computational overhead.  <arg>Ratios</arg> are exact rational numbers that are
+represented with a numerator and a denominator, which are integers.
+<arg>Complexnums</arg> are numbers that have explicitly represented real and
+imaginary parts, which can be any real numbers of the same type.  See
+<ref chapter="8" definition-in-file="fd-num" key="number" section="0" title="Numbers" type="section"></ref> for full details of these types and the conversions between
+them.
+</p>
+
+<index-entry index="concepts" title="character object"></index-entry>
+
+<p>A <arg>character object</arg> is much like a fixnum except that its type
+is distinguishable.  Common Lisp programs use character objects to
+represent characters.  Traditional programs usually use fixnums to
+represent characters, although they can create an manipulate character
+objects when they desire.  Character objects behave like fixnums
+when used in arithmetic; only a few operations make any distinction.
+They do, however, print distinctively.  See <ref chapter="11" definition-in-file="fd-str" key="characters" section="1" title="Characters" type="section"></ref> for more information.
+</p>
+
+<index-entry index="concepts" title="FEF"></index-entry>
+
+<p indent="1">        The usual form of compiled, executable code is a Lisp object,
+called a ``Function Entry Frame'' or ``FEF'' for historical reasons.  A FEF
+contains the code for one function.  This is analogous to what Maclisp
+calls a ``subr pointer''.  FEFs are produced by the Lisp Compiler
+(<ref chapter="18" definition-in-file="compil" key="compiler" section="0" title="The Compiler" type="section"></ref>), and are usually found as the definitions of symbols.  The
+printed representation of a FEF includes its name so that it can be
+identified.
+</p>
+
+<p indent="1">        Another kind of Lisp object that represents executable code is
+a ``microcode entry''.
+These are the microcoded primitive functions of the Lisp system,
+and any user functions compiled into microcode.
+</p>
+
+<p indent="1">        About the only useful thing to do with any of these compiled code objects
+is to <arg>apply</arg> it to arguments.  However, some functions are
+provided for examining such objects, for user convenience.  See
+<obj>arglist</obj> (<ref definition-in-file="fd-fun" key="arglist-fun" title="Function arglist" type="fun"></ref>),
+<obj>args-info</obj> (<ref definition-in-file="fd-fun" key="args-info-fun" title="Function args-info" type="fun"></ref>),
+<obj>describe</obj> (<ref definition-in-file="fd-hac" key="describe-fun" title="Function describe" type="fun"></ref>),
+and <obj>disassemble</obj> (<ref definition-in-file="fd-hac" key="disassemble-fun" title="Function disassemble" type="fun"></ref>).
+</p>
+
+<p indent="1">        A <arg>locative</arg> (see <ref chapter="15" definition-in-file="fd-loc" key="locative" section="0" title="Locatives" type="section"></ref>) is a kind of a pointer to a single memory cell
+anywhere in the system.  The contents of this cell can be accessed by <obj>cdr</obj>
+(see <ref definition-in-file="fd-con" key="cdr-fun" title="Function cdr" type="fun"></ref>) and updated by <obj>rplacd</obj> (see <ref definition-in-file="fd-con" key="rplacd-fun" title="Function rplacd" type="fun"></ref>).
+</p>
+
+<p indent="1">        An <arg>array</arg> (see <ref chapter="9" definition-in-file="fd-arr" key="array" section="0" title="Arrays" type="section"></ref>)
+is a set of cells indexed by a tuple of integer subscripts.
+The contents of the cells may be accessed and changed individually.  There are several
+types of arrays.  Some have cells that may contain any object, while others (numeric
+arrays) may only contain small positive numbers.  Strings are a type of array;
+the elements are character objects.
+</p>
+
+<p indent="1">        A <arg>list</arg> is not a primitive data type, but rather a data structure
+made up out of conses and the symbol <obj>nil</obj>.  See <ref chapter="5" definition-in-file="fd-con" key="list-and-tree" section="0" title="Manipulating List Structure" type="section"></ref>.
+</p>
+</section><a name="Data Type Predicates"></a>
+
+
+<section chapter-number="2" name="Data Type Predicates" number="2" title="Data Type Predicates"><index-entry index="concepts" title="predicate"></index-entry>
+
+<p indent="1">        A <arg>predicate</arg> is a function that tests for some condition involving
+its arguments and returns the symbol <obj>t</obj> if the condition is true, or
+the symbol <obj>nil</obj> if it is not true.  The following predicates are for
+testing what data type an object has.
+</p>
+
+<p indent="1">        By convention, the names of predicates usually end in the letter `p' (which
+stands for `predicate').
+
+<index-entry index="concepts" title="naming convention"></index-entry>
+</p>
+
+<p indent="1">        The following predicates are for testing data types.  These predicates
+return <obj>t</obj> if the argument is of the type indicated by the name of the function,
+<obj>nil</obj> if it is of some other type.
+
+<index-entry index="concepts" title="data type"></index-entry>
+</p>
+<definition><define key="symbolp-fun" name="symbolp" type="fun"><args>object</args>
+</define>
+
+
+<description><index-entry index="concepts" title="symbol"></index-entry>
+<obj>t</obj> if <arg>object</arg> is a symbol, otherwise <obj>nil</obj>.
+</description></definition><definition><define key="nsymbolp-fun" name="nsymbolp" type="fun"><args>object</args>
+</define>
+
+<description><obj>nil</obj> if <arg>object</arg> is a symbol, otherwise <obj>t</obj>.
+</description></definition><definition><define key="listp-fun" name="listp" type="fun"><args>object</args>
+</define>
+
+
+<description><index-entry index="concepts" title="cons"></index-entry>
+<obj>t</obj> if <arg>object</arg> is a cons, otherwise <obj>nil</obj>.
+Note that this means <obj>(listp nil)</obj> is <obj>nil</obj> even though <obj>nil</obj> is the empty list.
+
+[This may be changed in the future to work like <obj>cli:listp</obj>.
+Since the current definition of <obj>listp</obj> is identical to that of <obj>consp</obj>,
+all uses of <obj>listp</obj> should be changed to <obj>consp</obj> unless the
+treatment of <obj>nil</obj> is not of concern.]
+</description></definition><definition><define key="cli:listp-fun" name="cli:listp" type="fun"><args>object</args>
+</define>
+
+<description>The Common Lisp version of <obj>listp</obj> returns <obj>t</obj> if <arg>object</arg>
+is <obj>nil</obj> or a cons.
+</description></definition><definition><define key="nlistp-fun" name="nlistp" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is anything besides a cons,
+otherwise <obj>nil</obj>.  <obj>(nlistp nil)</obj> returns <obj>t</obj>.
+
+[This may be changed in the future, if and when <obj>listp</obj> is changed.
+Since the current definition of <obj>nlistp</obj> is identical to that of <obj>atom</obj>,
+all uses of <obj>nlistp</obj> should be changed to <obj>atom</obj> unless the
+treatment of <obj>nil</obj> is not of concern.]
+</description></definition><definition><define key="atom-fun" name="atom" type="fun"><args>object</args>
+</define>
+
+
+<description><index-entry index="concepts" title="atom"></index-entry>
+<obj>t</obj> if <arg>object</arg> is not a cons,
+otherwise <obj>nil</obj>.  This is the same as <obj>(not (consp <arg>object</arg>))</obj>.
+</description></definition><definition><define key="consp-fun" name="consp" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is a cons, otherwise <obj>nil</obj>.  At the
+moment, this is the same as <obj>listp</obj>; but while <obj>listp</obj> may be
+changed, <obj>consp</obj> will <arg>never</arg> be true of <obj>nil</obj>.
+</description></definition><definition><define key="numberp-fun" name="numberp" type="fun"><args>object</args>
+</define>
+
+
+<description><index-entry index="concepts" title="number"></index-entry>
+<obj>t</obj> if <arg>object</arg> is any kind of number,
+otherwise <obj>nil</obj>.
+</description></definition><definition><define key="integerp-fun" name="integerp" type="fun"><args>object</args>
+</define><define key="fixp-fun" name="fixp" type="fun"><args>object</args>
+</define>
+
+<description>Return <obj>t</obj> if <arg>object</arg> is a representation of an integer, i.e. a
+fixnum or a bignum, otherwise <obj>nil</obj>.
+</description></definition><definition><define key="floatp-fun" name="floatp" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is a floating-point number,
+i.e. a full-size or short float, otherwise <obj>nil</obj>.
+</description></definition><definition><define key="fixnump-fun" name="fixnump" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is a fixnum, otherwise <obj>nil</obj>.
+</description></definition><definition><define key="bigp-fun" name="bigp" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is a bignum, otherwise <obj>nil</obj>.
+</description></definition><definition><define key="flonump-fun" name="flonump" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is a full-size float, otherwise <obj>nil</obj>.
+</description></definition><definition><define key="small-floatp-fun" name="small-floatp" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is a short float, otherwise <obj>nil</obj>.
+</description></definition><definition><define key="rationalp-fun" name="rationalp" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is an exact representation of a rational number;
+that is, if it is a fixnum, a bignum or a ratio.  Otherwise <obj>nil</obj>.
+</description></definition><definition><define key="complexp-fun" name="complexp" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is a complexnum, a number explicitly
+represented as complex.  Otherwise <obj>nil</obj>.
+</description></definition><definition><define key="realp-fun" name="realp" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is a number whose value is real,
+otherwise <obj>nil</obj>.  Any fixnum, bignum, float (of either format) or
+ratio satisfies this predicate.  So does a complexnum whose imaginary
+part is zero.
+</description></definition><definition><define key="characterp-fun" name="characterp" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is a character object, otherwise <obj>nil</obj>.
+</description></definition><definition><define key="stringp-fun" name="stringp" type="fun"><args>object</args>
+</define>
+
+
+<description><index-entry index="concepts" title="string"></index-entry>
+<obj>t</obj> if <arg>object</arg> is a string, otherwise <obj>nil</obj>.
+</description></definition><definition><define key="arrayp-fun" name="arrayp" type="fun"><args>object</args>
+</define>
+
+
+<description><index-entry index="concepts" title="array"></index-entry>
+<obj>t</obj> if <arg>object</arg> is an array, otherwise <obj>nil</obj>.
+Note that strings are arrays.
+</description></definition><definition><define key="vectorp-fun" name="vectorp" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is an array of rank 1.
+</description></definition><definition><define key="bit-vector-p-fun" name="bit-vector-p" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is an array of rank 1 that allows only 0 and 1 as elements.
+</description></definition><definition><define key="simple-vector-p-fun" name="simple-vector-p" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is an array of rank 1, with no fill pointer and not displaced,
+that can have any Lisp object as an element.
+</description></definition><definition><define key="simple-bit-vector-p-fun" name="simple-bit-vector-p" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is an array of rank 1, with no fill pointer and not displaced,
+that allows only 0 and 1 as elements.
+</description></definition><definition><define key="simple-string-p-fun" name="simple-string-p" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is a string with no fill pointer and not displaced.
+</description></definition><definition><define key="functionp-fun" name="functionp" type="fun"><args>object <standard>&amp;optional</standard> allow-special-forms</args>
+</define>
+
+
+<description><index-entry index="concepts" title="function"></index-entry>
+
+<index-entry index="concepts" title="applicable function"></index-entry>
+<obj>t</obj> if <arg>object</arg> is a function (essentially, something
+that is acceptable as the first argument to <obj>apply</obj>), otherwise <obj>nil</obj>.
+In addition to interpreted, compiled, and microcoded functions, <obj>functionp</obj>
+is true of closures, select-methods (see <ref definition-in-file="fd-fun" key="select-method" type="page"></ref>), and symbols whose function
+definition is <obj>functionp</obj>.
+
+<obj>functionp</obj> is not true of objects that can be called as functions but
+are not normally thought of as functions: arrays, stack groups,
+entities, and instances.  As a special case, <obj>functionp</obj> of a symbol
+whose function definition is an array returns <obj>t</obj>, because in this
+case the array is being used as a function rather than as an object.
+
+If <arg>allow-special-forms</arg> is specified and non-<obj>nil</obj>, then
+<obj>functionp</obj> will be true of macros and special-form functions (those
+with quoted arguments).  Normally <obj>functionp</obj> returns <obj>nil</obj> for
+these since they do not behave like functions.
+</description></definition><definition><define key="compiled-function-p-fun" name="compiled-function-p" type="fun"><args>object</args>
+</define><define key="subrp-fun" name="subrp" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is any compiled code object, otherwise <obj>nil</obj>.
+The name <obj>subrp</obj> is for Maclisp compatibility.
+</description></definition><definition><define key="special-form-p-fun" name="special-form-p" type="fun"><args>symbol</args>
+</define>
+
+<description><obj>t</obj> if <arg>symbol</arg> is defined as a function that takes some
+unevaluated args.  Macros do not count as special forms.
+</description></definition>
+<p><obj>macro-function</obj> can be used to test whether a symbol is defined as a
+macro, but you must be careful because it also returns a non-<obj>nil</obj> value
+for certain special forms.  See the definition <obj>macro-function</obj>
+(<ref definition-in-file="macros" key="macro-function-fun" title="Function macro-function" type="fun"></ref>) to find out how to do this properly.
+</p>
+<definition><define key="closurep-fun" name="closurep" type="fun"><args>object</args>
+</define>
+
+
+<description><index-entry index="concepts" title="closure"></index-entry>
+<obj>t</obj> if <arg>object</arg> is a closure, otherwise <obj>nil</obj>.
+</description></definition><definition><define key="entityp-fun" name="entityp" type="fun"><args>object</args>
+</define>
+
+
+<description><index-entry index="concepts" title="entity"></index-entry>
+<obj>t</obj> if <arg>object</arg> is an entity, otherwise <obj>nil</obj>.
+See <ref chapter="13" definition-in-file="fd-clo" key="entity" section="4" title="Entities" type="section"></ref> for information about entities.
+</description></definition><definition><define key="locativep-fun" name="locativep" type="fun"><args>object</args>
+</define>
+
+
+<description><index-entry index="concepts" title="locative"></index-entry>
+<obj>t</obj> if <arg>object</arg> is a locative, otherwise <obj>nil</obj>.
+</description></definition><definition><define key="commonp-fun" name="commonp" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is of a type that Common Lisp defines operations on.
+See the type specifier <obj>common</obj> (<ref definition-in-file="fd-dtp" key="common-type-spec" type="page"></ref>).
+</description></definition>
+<p>Other standard type predicates include <obj>packagep</obj> (see <ref definition-in-file="packd" key="packagep-fun" title="Function packagep" type="fun"></ref>),
+<obj>random-state-p</obj> (see <ref definition-in-file="fd-num" key="random-state-p-fun" title="Function random-state-p" type="fun"></ref>), <obj>hash-table-p</obj>
+(<ref definition-in-file="fd-con" key="hash-table-p-fun" title="Function hash-table-p" type="fun"></ref>), <obj>pathnamep</obj> (<ref definition-in-file="pathnm" key="pathnamep-fun" title="Function pathnamep" type="fun"></ref>),
+<obj>streamp</obj> (<ref definition-in-file="stream" key="streamp-fun" title="Function streamp" type="fun"></ref>) and <obj>readtablep</obj> (<ref definition-in-file="rdprt" key="readtablep-fun" title="Function readtablep" type="fun"></ref>).
+<obj>defstruct</obj> can define additional type predicates automatically
+(<ref definition-in-file="defstr" key="defstruct-predicates" type="page"></ref>).
+</p>
+</section><a name="type-specifiers"></a>
+
+
+<section chapter-number="2" name="type-specifiers" number="3" title="Type Specifiers"><index-entry index="concepts" title="type specifiers"></index-entry>
+
+<p>Data types can be represented symbolically by Lisp objects called <arg>type
+specifiers</arg>.  A type specifier describes a class of possible Lisp
+objects; the function <obj>typep</obj> tells whether a given object matches a
+given type specifier.
+</p>
+
+<p>Built-in type specifiers exist for the
+actual Lisp Machine data types.  The user can define additional
+type specifiers to represent arbitrary classifications of data.
+Type specifiers can also be combined into specifiers for more
+complex types.
+</p>
+
+<p>Some type specifiers are symbols: for example, <obj>number</obj>, <obj>cons</obj>,
+<obj>symbol</obj>, <obj>integer</obj>, <obj>character</obj>, <obj>compiled-function</obj>,
+<obj>array</obj>, <obj>vector</obj>.  Their meanings are mostly obvious, but a table
+follows below.  Type specifiers that are symbols are called <arg>simple</arg>
+type specifiers.
+</p>
+
+<p>Lists can also be type specifiers.  They are usually combinations or
+restrictions of other type specifiers.  The car of the list is the key
+to understanding what it means.  An example of a combination is <obj>(or
+array symbol)</obj>, which matches any array or any symbol.  An example of a
+restriction type is <obj>(integer 0 6)</obj>, which matches only integers
+between 0 and 6 (inclusive).
+</p>
+
+
+<subsection name="NIL" title="Standard Type Specifiers"><nopara></nopara>
+<p>Basic Data Types
+</p>
+
+<table><tbody><tr><td><obj>cons</obj></td><td>non-<obj>nil</obj> lists.
+</td></tr><tr><td><obj>symbol</obj></td><td>symbols.
+</td></tr><tr><td><obj>array</obj></td><td>all arrays, including strings.
+</td></tr><tr><td><obj>number</obj></td><td>numbers of all kinds.
+</td></tr><tr><td><obj>instance</obj></td><td>all instances of any flavor.
+</td></tr><tr><td><obj>structure</obj></td><td>named structures of any structure type.
+</td></tr><tr><td><obj>locative</obj></td><td>locatives.
+</td></tr><tr><td><obj>closure</obj></td><td>closures.
+</td></tr><tr><td><obj>entity</obj></td><td>entities.
+</td></tr><tr><td><obj>stack-group</obj></td><td>stack groups.
+</td></tr><tr><td><obj>compiled-function</obj></td><td>macrocode functions such as the compiler makes.
+</td></tr><tr><td><obj>microcode-function</obj></td><td>built-in functions implemented by the microcode.
+</td></tr><tr><td><obj>select</obj></td><td>select-method functions (defined by <obj>defselect</obj> or <obj>defselect-incremental</obj>).
+</td></tr><tr><td><obj>character</obj></td><td>character objects.
+</td></tr></tbody></table><need amount="1800"></need><nopara></nopara>
+<p>Other Useful Simple Types
+</p>
+
+<table><tbody><tr><td><obj>t</obj></td><td>all Lisp objects belongs to this type.
+</td></tr><tr><td><obj>nil</obj></td><td>nothing belongs to this type.
+</td></tr><tr><td><obj>string-char</obj></td><td>characters that can go in strings.
+</td></tr><tr><td><obj>standard-char</obj></td><td>characters defined by Common Lisp.
+These are the 95 ASCII printing characters (including <obj>Space</obj>),
+together with <obj>Return</obj>.
+</td></tr><tr><td><obj>null</obj></td><td><obj>nil</obj> is
+the only object that belongs to type <obj>null</obj>.
+</td></tr><tr><td><obj>list</obj></td><td>lists, including <obj>nil</obj>.  This type is the union of the types <obj>null</obj> and <obj>cons</obj>.
+</td></tr><tr><td><obj>sequence</obj></td><td>lists and vectors.  Many Common Lisp functions accept either a list or a
+vector as a way of describing a sequence of elements.
+</td></tr><tr><td><obj>keyword</obj></td><td>keywords (symbols belonging to package <obj>keyword</obj>).
+</td></tr><tr><td><obj>atom</obj></td><td>anything but conses.
+</td></tr></tbody></table><need amount="1800"></need><nopara></nopara>
+<p>Simple Number Types
+</p>
+
+<table><tbody><tr><td><obj>integer</obj></td><td>fixnums and bignums.
+</td></tr><tr><td><obj>ratio</obj></td><td>explicit rational numbers, such as <obj>1\2</obj> (<obj>1/2</obj> in Common Lisp syntax).
+</td></tr><tr><td><obj>rational</obj></td><td>integers and ratios.
+</td></tr><tr><td><obj>fixnum</obj></td><td>small integers, whose <obj>%data-type</obj> is <obj>dtp-fix</obj> and which occupy no storage.
+</td></tr><tr><td><obj>bignum</obj></td><td>larger integers, which occupy storage.
+</td></tr><tr><td><obj>bit</obj></td><td>very small integers--only <obj>0</obj> and <obj>1</obj> belong to this type.
+</td></tr><tr><td><obj>float</obj></td><td>any floating point number regardless of format.
+</td></tr><tr><td><obj>short-float</obj></td><td>short floats
+</td></tr><tr><td><obj>single-float</obj></td><td>full-size floats
+</td></tr><tr><td><obj>double-float</obj></td><td></td></tr><tr><td><obj>long-float</obj></td><td>defined by Common Lisp, but on the Lisp Machine synonymous with <obj>single-float</obj>.
+</td></tr><tr><td><obj>real</obj></td><td>any number whose value is real.
+</td></tr><tr><td><obj>complex</obj></td><td>a number explicitly stored as complex.
+It is possible for such a number to have zero as an imaginary part
+but only if it is a floating point zero.
+</td></tr><tr><td><obj>noncomplex</obj></td><td>a number which is not explicitly stored as complex.
+This is a subtype of <obj>real</obj>.
+</td></tr></tbody></table><need amount="1800"></need><nopara></nopara>
+<p>Restriction Types for Numbers
+</p>
+
+<table><tbody><tr><td><obj>(complex <arg>type-spec</arg>)</obj></td><td>complex numbers whose components match <arg>type-spec</arg>.
+Thus, <obj>(complex rational)</obj> is the type of complex numbers with
+rational components.  <obj>(complex t)</obj> is equivalent to <obj>complex</obj>.
+
+</td></tr><tr><td><obj>(integer <arg>low</arg> <arg>high</arg>)</obj></td><td>integers between <arg>low</arg> and <arg>high</arg>.
+<arg>low</arg> can be:
+
+<table><tbody><tr><td><obj><arg>integer</arg></obj></td><td><arg>integer</arg> is an inclusive lower limit
+</td></tr><tr><td><obj>(<arg>integer</arg>)</obj></td><td><arg>integer</arg> is an exclusive lower limit.
+</td></tr><tr><td><obj>*</obj></td><td>There is no lower limit.
+</td></tr></tbody></table>
+<arg>high</arg> has the same sorts of possibilities.
+If <arg>high</arg> is omitted, it defaults to <obj>*</obj>.  If both <arg>low</arg> and <arg>high</arg> are omitted,
+you have <obj>(integer)</obj>, which is equivalent to plain <obj>integer</obj>.  Examples:
+
+<lisp>(integer 0 *)      <standard>matches any nonnegative integer.</standard>
+(integer 0)        <standard>matches any nonnegative integer.</standard>
+(integer -4 3)     <standard>matches any integer between -4 and 3, inclusive.</standard>
+(integer -4 (4))   <standard>matches any integer between -4 and 3, inclusive.</standard>
+</lisp><obj>bit</obj> is equivalent to <obj>(integer 0 1)</obj>.
+
+</td></tr><tr><td><obj>(rational <arg>low</arg> <arg>high</arg>)</obj></td><td></td></tr><tr><td><obj>(float <arg>low</arg> <arg>high</arg>)</obj></td><td></td></tr><tr><td><obj>(short-float <arg>low</arg> <arg>high</arg>)</obj></td><td></td></tr><tr><td><obj>(single-float <arg>low</arg> <arg>high</arg>)</obj></td><td></td></tr><tr><td><obj>(double-float <arg>low</arg> <arg>high</arg>)</obj></td><td></td></tr><tr><td><obj>(long-float <arg>low</arg> <arg>high</arg>)</obj></td><td></td></tr><tr><td><obj>(noncomplex <arg>low</arg> <arg>high</arg>)</obj></td><td>These specify restrictive bounds for the types <obj>rational</obj>, <obj>float</obj> and so on.
+The bounds work on these types just the way they do on <obj>integer</obj>.
+Exclusive and inclusive bounds make a useful difference here:
+
+<lisp>(float (-4) (3))    <standard>matches any float between -4 and 3, exclusive.</standard>
+</lisp>No possible inclusive bounds could provide the same effect.
+
+</td></tr><tr><td><obj>(mod <arg>high</arg>)</obj></td><td>nonnegative integers less than <arg>high</arg>.  <arg>high</arg> should be an integer.
+<obj>(mod)</obj>, <obj>(mod *)</obj> and plain <obj>mod</obj> are allowed, but are equivalent
+to <obj>(integer 0)</obj>.
+
+</td></tr><tr><td><obj>(signed-byte <arg>size</arg>)</obj></td><td>integers that fit into a byte of <arg>size</arg> bits, of which one bit is the sign bit.
+<obj>(signed-byte 4)</obj> is equivalent to <obj>(integer -8 7)</obj>.
+<obj>(signed-byte *)</obj> and plain <obj>signed-byte</obj> are equivalent to <obj>integer</obj>.
+
+</td></tr><tr><td><obj>(unsigned-byte <arg>size</arg>)</obj></td><td>nonnegative integers that fit into a byte of <arg>size</arg> bits, with no sign bit.
+<obj>(unsigned-byte 3)</obj> is equivalent to <obj>(integer 0 7)</obj>.
+<obj>(unsigned-byte *)</obj> and plain <obj>unsigned-byte</obj> are equivalent to <obj>(integer 0)</obj>.
+</td></tr></tbody></table><need amount="1800"></need><nopara></nopara>
+<p>Simple Types for Arrays
+</p>
+
+<table><tbody><tr><td><obj>array</obj></td><td>all arrays.
+</td></tr><tr><td><obj>simple-array</obj></td><td>arrays that are not displaced and have no fill pointers.
+(Displaced arrays are defined in <ref chapter="9" definition-in-file="fd-arr" key="displaced-array" section="2" title="Extra Features of Arrays" type="section"></ref> and fill pointers on <ref definition-in-file="fd-arr" key="fill-pointer" type="page"></ref>).
+</td></tr><tr><td><obj>vector</obj></td><td>arrays of rank one.
+</td></tr><tr><td><obj>bit-vector</obj></td><td><obj>art-1b</obj> arrays of rank one.
+</td></tr><tr><td><obj>string</obj></td><td>strings; <obj>art-string</obj> and <obj>art-fat-string</obj> arrays of rank one.
+</td></tr><tr><td><obj>simple-bit-vector</obj></td><td>bit vectors that are simple arrays.
+</td></tr><tr><td><obj>simple-string</obj></td><td>strings that are simple arrays.
+</td></tr><tr><td><obj>simple-vector</obj></td><td>simple-arrays of rank one, whose elements' types are unrestricted.
+This is not the same as <obj>(and vector simple-array)</obj>!
+</td></tr></tbody></table><need amount="1800"></need><nopara></nopara>
+<p>Restriction Types for Arrays
+</p>
+
+<table><tbody><tr><td><obj>(array <arg>element-type</arg> <arg>dimensions</arg>)</obj></td><td>arrays whose
+rank and dimensions fit the restrictions described by <arg>dimensions</arg>
+and whose nature restricts possible elements to match <arg>element-type</arg>.
+
+The array elements condition has nothing to do with the actual values of
+the elements.  Rather, it is a question of whether the array's own type
+permits exactly such elements as would match <arg>element-type</arg>.  If
+anything could be stored in the array that would not match
+<arg>element-type</arg>, then the array does not match.  If anything that
+would match <arg>element-type</arg> could not be stored in the array, then the
+array does not match.
+
+For example, if <arg>element-type</arg> is <obj>(signed-byte 4)</obj>, the array must
+be an <obj>art-4b</obj> array.  An <obj>art-1b</obj> array will not do, even though
+its elements all do match <obj>(signed-byte 4)</obj>, because some objects such
+as the number 12 match <obj>(signed-byte 4)</obj> but could not be stored in an
+<obj>art-1b</obj> array.  Likewise an <obj>art-q</obj> array whose elements all happen
+to match <obj>(signed-byte 4)</obj> will not do, since new elements such as
+<obj>nil</obj> or 231 which fail to match could potentially be stored in the
+array.
+
+If <arg>element-type</arg> is <obj>t</obj>, the type to which all objects belong,
+then the array must be one in which any object can be stored:
+<obj>art-q</obj> or <obj>art-q-list</obj>.
+
+<obj>*</obj> as <arg>element-type</arg> means ``no restriction''.  Any type of
+array is then allowed, whether it restricts its elements or not.
+
+<arg>dimensions</arg> can be <obj>*</obj>, an integer or a list.
+If it is <obj>*</obj>, the rank and dimensions are not restricted.
+If it is an integer, it specifies the rank of the array.
+Then any array of that rank matches.
+
+If <arg>dimensions</arg> is a list, its length specifies the rank,
+and each element of <arg>dimensions</arg> restricts one dimension.
+If the element is an integer, that dimension's length must equal it.
+If the element is *, that dimension's length is not restricted.
+
+</td></tr><tr><td><obj>(simple-array <arg>element-type</arg> <arg>dimensions</arg>)</obj></td><td>the restrictions work as in <obj>(array <arg>element-type</arg> <arg>dimensions</arg>)</obj>,
+but in addition the array must be a simple array.
+
+</td></tr><tr><td><obj>(vector <arg>element-type</arg> <arg>size</arg>)</obj></td><td><arg>element-type</arg> works as above.  The array must be a vector.
+<arg>size</arg> must be an integer or *;
+if it is an integer, the array's length must equal <arg>size</arg>.
+
+</td></tr><tr><td><obj>(bit-vector <arg>size</arg>)</obj></td><td></td></tr><tr><td><obj>(simple-vector <arg>size</arg>)</obj></td><td></td></tr><tr><td><obj>(simple-bit-vector <arg>size</arg>)</obj></td><td></td></tr><tr><td><obj>(string <arg>size</arg>)</obj></td><td></td></tr><tr><td><obj>(simple-string <arg>size</arg>)</obj></td><td>These require the array to match type <obj>bit-vector</obj>, <obj>simple-vector</obj>, etc.
+This implicitly restricts the element type, so there is no point
+in allowing an <arg>element-type</arg> to be given in the type specifier.
+<arg>size</arg> works as in <obj>vector</obj>.
+</td></tr></tbody></table><need amount="1800"></need><nopara></nopara>
+<p>More Obscure Types
+</p>
+
+<table><tbody><tr><td><obj>package</obj></td><td>packages, such as <obj>find-package</obj> might return.
+</td></tr><tr><td><obj>readtable</obj></td><td>structures such as can be the value of <obj>readtable</obj>.
+</td></tr><tr><td><obj>pathname</obj></td><td>pathnames (instances of the flavor <obj>pathname</obj>).
+</td></tr><tr><td><obj>hash-table</obj></td><td>hash-tables (instances of the flavor <obj>hash-table</obj>).
+</td></tr><tr><td><obj><arg>flavor-name</arg></obj></td><td>instances of that flavor, or of any flavor that contains it.
+</td></tr><tr><td><obj><arg>defstruct-name</arg></obj></td><td>named structures of that type, or of any structure that includes
+that one using <obj>:include</obj>.
+</td></tr></tbody></table><need amount="1800"></need><nopara></nopara>
+<p>Common Lisp Compatibility Types
+</p>
+
+<table><tbody><tr><td><obj>random-state</obj></td><td>random-states.  See <obj>random</obj> (<ref definition-in-file="fd-num" key="random-fun" title="Function random" type="fun"></ref>).
+This is actually a special case of using a defstruct name
+as a type specifier, but it is mentioned specifically because
+Common Lisp defines this type.
+</td></tr><tr><td><obj>common</obj></td><td>All objects of types defined by Common Lisp.  This is all Lisp objects
+except closures, entities, stack groups, locatives, instances,
+select-methods, and compiled and microcode functions.  (A few kinds
+of instances, such as pathnames, are <obj>common</obj>, because Common Lisp does
+define how to manipulate pathnames, and it is considered irrelevant that
+the Lisp Machine happens to implement pathnames using instances.)
+</td></tr><tr><td><obj>stream</obj></td><td>Anything that looks like it might be a valid I/O stream.
+It is impossible to tell for certain whether an object
+is a stream, since any function with proper behavior
+may be used as a stream.  Therefore, use of this
+type specifier is discouraged.  It exists for the sake
+of Common Lisp.
+</td></tr></tbody></table><need amount="1800"></need><nopara></nopara>
+<p>Combination Type Specifiers
+</p>
+
+<table><tbody><tr><td><obj>(member <arg>objects</arg>)</obj></td><td>any one of <arg>objects</arg>, as compared with <obj>eql</obj>.
+Thus, <obj>(member t nil x)</obj> is matched only by
+<obj>t</obj>, <obj>nil</obj> or <obj>x</obj>.
+
+</td></tr><tr><td><obj>(satisfies <arg>predicate</arg>)</obj></td><td>objects on which the function <arg>predicate</arg> returns a non-<obj>nil</obj> value.
+Thus, <obj>(satisfies numberp)</obj> is equivalent
+as a type specifier to <obj>number</obj> (though the system could not tell that this is so).
+<arg>predicate</arg> must be a symbol, not a <obj>lambda</obj>-expression.
+
+</td></tr><tr><td><obj>(and <arg>type-specs</arg>...)</obj></td><td>objecs that match all of the <arg>type-specs</arg> individually.  Thus, <obj>(and
+integer (satisfies oddp))</obj> is the type of odd integers.
+
+</td></tr><tr><td><obj>(or <arg>type-specs</arg>...)</obj></td><td>objects that match at least one of the <arg>type-specs</arg> individually.
+Thus, <obj>(or number array)</obj> includes all numbers and all arrays.
+
+</td></tr><tr><td><obj>(not <arg>type-spec</arg>)</obj></td><td>objects that do not match <arg>type-spec</arg>.
+</td></tr></tbody></table></subsection>
+
+<subsection name="NIL" title="User-Defined Type Specifiers"><definition><define key="deftype-fun" name="deftype" type="mac"><args>type-name lambda-list body...</args>
+</define>
+
+<description>Defines <arg>type-name</arg> as a type specifier by providing code to expand it into
+another type specifier--a sort of type specifier macro.
+
+When a list starting with <arg>type-name</arg> is encountered as a type
+specifier, the <arg>lambda-list</arg> is matched against the cdr of the type
+specifier just as the lambda-list of an ordinary <obj>defmacro</obj>-defined
+macro is matched against the cdr of a form.  Then the <arg>body</arg> is
+executed and should return a new type specifier to be used instead of
+the original one.
+
+If there are optional arguments in <arg>lambda-list</arg> for which no default value
+is specified, they get <obj>*</obj> as a default value.
+
+If <arg>type-name</arg> by itself is encountered as a type specifier, it is
+treated as if it were <obj>(<arg>type-name</arg>)</obj>; that is to say, the
+<arg>lambda-list</arg> is matched against no arguments and then the <arg>body</arg>
+is executed.  So each argument in the <arg>lambda-list</arg> gets its
+default value, and there is an error if they are not all optional.
+
+
+<lisp><exdent amount="96"><caption>Example: </caption>(deftype vector (element-type size)
+  `(array ,element-type (,size)))
+<standard>could have been used to define <obj>vector</obj>.</standard>
+
+(deftype odd-natural-number-below (n)
+  `(and (integer 0 (,n)) (satisfies oddp)))
+
+(typep 5 '(odd-natural-number-below 6)) =&gt; t
+(typep 7 '(odd-natural-number-below 6)) =&gt; nil
+</exdent></lisp></description></definition></subsection>
+
+<subsection name="NIL" title="Testing Types with Type Specifiers"><definition><define key="type-of-fun" name="type-of" type="fun"><args>object</args>
+</define>
+
+<description>Returns a type specifier which <arg>object</arg> matches.
+Any given <arg>object</arg> matches many different type specifiers,
+including <obj>t</obj>, so you should not attempt to rely on knowing
+which type specifier would be returned for any particular object.
+The one actually returned is chosen so as to be informative
+for a human.  Programs should generally use <obj>typep</obj> rather than <obj>type-of</obj>.
+
+See also <obj>data-type</obj>, <ref definition-in-file="fd-sub" key="data-type-fun" title="Function data-type" type="fun"></ref>.
+</description></definition><definition><define key="typep-fun" name="typep" type="fun"><args>object type-spec</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> matches <arg>type-spec</arg>.  The fundamental
+purpose of type specifiers is to be used in <obj>typep</obj> or other
+functions and constructs that use <obj>typep</obj>.  Examples:
+
+<lisp>(typep 5 'number) =&gt; t
+(typep 5 '(integer 0 7)) =&gt; t
+(typep 5 'bit) =&gt; nil
+(typep 5 'array) =&gt; nil
+(typep &quot;foo&quot; 'array) =&gt; t
+(typep nil 'list) =&gt; t
+(typep '(a b) 'list) =&gt; t
+(typep 'lose 'list) =&gt; nil
+(typep 'x '(or symbol number)) =&gt; t
+(typep 5 '(or symbol number)) =&gt; t
+</lisp>
+If the value of <arg>type-spec</arg> is known at compile time, the compiler
+optimizes <obj>typep</obj> so that it does not decode the argument at run
+time.
+
+In Maclisp, <obj>typep</obj> is used with one argument.  It returns a symbol
+describing the type of the object it is given.  This is somewhat like
+what <obj>type-of</obj> does, except in Maclisp the intention was to compare
+the result with <obj>eq</obj> to test the type of an object.  The Lisp Machine
+supports this usage of <obj>typep</obj> for compatibility, but the returned
+symbol is a keyword (such as <obj>:list</obj>, for conses) which makes it
+actually incompatible.  This usage is considered obsolete and should
+be removed from programs.
+</description></definition><definition><define key="typecase-fun" name="typecase" type="mac"><args>key-form clauses...</args>
+</define>
+
+<description>Computes the value of <arg>key-form</arg> and then executes one (or none) of
+the <arg>clauses</arg> according to the type of the value (call it <arg>key</arg>).
+
+Each clause starts with a type specifier, not evaluated, which
+could be the second argument to <obj>typep</obj>.  In fact, that is how it is used.
+The rest of the clause is composed of forms.  The type specifiers of the
+clauses are matched sequentially against <arg>key</arg>.  If there is a match,
+the rest of that clause is executed and the values of the last form in it
+are returned from the <obj>typecase</obj> form.  If no clause matches,
+the <obj>typecase</obj> form returns <obj>nil</obj>.
+
+<obj>typecase</obj>, like <obj>typep</obj> is optimized carefully by the compiler.
+
+Note that <obj>t</obj>, the type specifier that matches all objects, is useful
+in the last clause of a <obj>typecase</obj>.  <obj>otherwise</obj> is also permitted
+instead of <obj>t</obj> by special dispensation, with the same meaning.
+
+
+<lisp><exdent amount="96"><caption>Example: </caption>(typecase foo
+  (symbol (get-pname foo))
+  (string foo)
+  (list (apply 'string-append (mapcar 'hack foo)))
+  ((integer 0) (hack-positive-integer foo))
+  (t (princ-to-string foo)))
+</exdent></lisp></description></definition><definition><define key="etypecase-fun" name="etypecase" type="mac"><args>key-form clauses...</args>
+</define>
+
+<description>Like <obj>typecase</obj> except that an uncorrectable error is signaled if every clause fails.
+<obj>t</obj> or <obj>otherwise</obj> clauses are not allowed.
+</description></definition><definition><define key="ctypecase-fun" name="ctypecase" type="mac"><args>place clauses...</args>
+</define>
+
+<description>Like <obj>etypecase</obj> except that the error is correctable.  The first
+argument is called <arg>place</arg> because it must be <obj>setf</obj>'able (see
+<ref definition-in-file="fd-eva" key="setf-fun" title="Macro setf" type="mac"></ref>).  If the user proceeds from the error, a new value is read
+and stored into <arg>place</arg>; then the clauses are tested again using the
+new value.  Errors repeat until a value is specified that makes some
+clause succeed.
+</description></definition></subsection>
+
+<subsection name="NIL" title="Coercion with Type Specifiers"><definition><define key="coerce-fun" name="coerce" type="fun"><args>object type-spec</args>
+</define>
+
+<description>Converts <arg>object</arg> to an ``equivalent'' object that matches <arg>type-spec</arg>.
+Common Lisp specifies exactly which types can be converted to
+which other types.  In general, a conversion that would lose information,
+such as turning a float into an integer, is not allowed as a coercion.
+Here is a complete list of types you can coerce to.
+
+
+<table><tbody><tr><td><obj>complex</obj></td><td></td></tr><tr><td><obj>(complex <arg>type</arg>)</obj></td><td>Real numbers can be coerced to complex.  If a rational is coerced to
+type <obj>complex</obj>, the result equals the rational, and is not complex at
+all.  This is because complex numbers with rational components are
+canonicalized to real if possible.  However, if a rational is coerced to
+<obj>(complex float)</obj> or <obj>(complex single-float)</obj> then an actual complex
+number does result.
+
+It is permissible of course to coerce a complex number to a complex type.
+The real and imaginary parts are coerced individually to <arg>type</arg>
+if <arg>type</arg> is specified.
+
+</td></tr><tr><td><obj>short-float</obj></td><td></td></tr><tr><td><obj>single-float</obj></td><td>Rational numbers can be coerced to floating point numbers
+and any kind of floating point number can be coerced to
+any other floating point format.
+
+</td></tr><tr><td><obj>float</obj></td><td>Rational numbers are converted to <obj>single-float</obj>'s;
+floats of all kinds are left alone.
+
+</td></tr><tr><td><obj>character</obj></td><td>Strings of length one can be coerced to characters.
+Symbols whose print-names have length one can also be.
+An integer can be coerced to a character; this results in a
+character whose character code is the specified integer.
+
+</td></tr><tr><td><obj>list</obj></td><td>Any vector can be coerced to type <obj>list</obj>.
+The resulting list has the same elements as the vector.
+
+</td></tr><tr><td><obj><standard><obj>vector</obj> or <obj>array</obj> or any restricted array type.</standard></obj></td><td>Any sequence (list or vector) can be coerced to any array or vector type.
+The new array has rank one and the same elements as the original sequence.
+
+If you specify a type of array with restricted element type, you may
+actually get an array which can hold other kinds of things as well.  For
+example, the Lisp Machine does not provide anything of type <obj>(array
+symbol)</obj>, but if you specify that, you will get an array which at least
+can hold symbols (but can hold other things as well).  If an element of
+the original sequence does not fit in the new array, an error is
+signaled.
+
+</td></tr><tr><td><obj>t</obj></td><td>Any object can be coerced to type <obj>t</obj>, without change
+to the object.
+</td></tr></tbody></table>
+If the value of <arg>type-spec</arg> is known at compile time, the compiler
+optimizes <obj>coerce</obj> so that it does not decode the argument at run
+time.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Comparing Type Specifiers"><p>Since a type describes a set of possible objects, it is possible
+to ask whether one type is contained in another type.  Another way
+to say this is, is one type a <arg>subtype</arg> of another?
+</p>
+<definition><define key="subtypep-fun" name="subtypep" type="fun"><args>type1 type2</args>
+</define>
+
+<description><obj>t</obj> if <arg>type1</arg> is a subtype of <arg>type2</arg>.
+
+The system cannot always tell whether <arg>type1</arg> is a subtype of
+<arg>type2</arg>.  When <obj>satisfies</obj> type specifiers are in use, this question
+is mathematically undecidable.  Because of this, it has not been
+considered worthwhile to make the system able to answer obscure subtype
+questions even when that is theoretically possible.  If the answer is
+not known, <obj>subtypep</obj> returns <obj>nil</obj>.
+
+Thus, <obj>nil</obj> could mean that <arg>type1</arg> is certainly not a subtype of
+<arg>type2</arg>, or it could mean that there is no way to tell whether it is a
+subtype.  <obj>subtypep</obj> returns a second value to distinguish these two
+situations: the second value is <obj>t</obj> if <obj>subtypep</obj>'s first value is
+definitive, <obj>nil</obj> if the system does not know the answer.
+
+Examples:
+
+<lisp>(subtypep 'cons 'list) =&gt; t t
+(subtypep 'null 'list) =&gt; t t
+(subtypep 'symbol 'list) =&gt; nil t
+
+(subtypep 'list 'number) =&gt; nil t
+<standard>because not all lists are numbers (in fact, no lists are numbers).</standard>
+
+(subtypep 'number 'rational) =&gt; nil t
+<standard>because not all numbers are rational.</standard>
+
+(subtypep '(satisfies foo) '(satisfies bar)) =&gt; nil nil
+<standard>because the system does not attempt to figure out your code</standard>.
+</lisp></description></definition></subsection></section></chapter>
+</document-part>

@@ -1,0 +1,160 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="locative-chapter"></a>
+<chapter name="locative-chapter" number="15" title="Locatives"><index-entry index="concepts" title="locative"></index-entry>
+
+<p indent="1">        A <arg>locative</arg> is a type of Lisp object used as a <arg>pointer</arg>
+to a <arg>cell</arg>.  Locatives are inherently a more low level construct
+than most Lisp objects; they require some knowledge of the nature of
+the Lisp implementation.
+</p>
+<a name="Cells and Locatives"></a>
+
+
+<section chapter-number="15" name="Cells and Locatives" number="1" title="Cells and Locatives"><index-entry index="concepts" title="cell"></index-entry>
+
+<p indent="1">        A <arg>cell</arg> is a machine word that can hold a (pointer to a)
+Lisp object.  For example, a symbol has five cells: the print name cell,
+the value cell, the function cell, the property list cell, and the
+package cell.  The value cell holds (a pointer to) the binding of the
+symbol, and so on.  Also, an array leader of length <arg>n</arg> has <arg>n</arg>
+cells, and an <obj>art-q</obj> array of <arg>n</arg> elements has <arg>n</arg> cells.
+(Numeric arrays do not have cells in this sense.)  A locative is
+an object that points to a cell; it lets you refer to a cell so that
+you can examine or alter its contents.
+</p>
+<definition><define key="contents-fun" name="contents" type="fun"><args>locative</args>
+</define>
+
+<description>Returns the contents of the cell which the locative points to.
+This is actually the same as <obj>cdr</obj>, for reasons explained below,
+but it is clearer to use <obj>contents</obj> when the argument is normally
+a locative.
+
+To modify the contents of the cell, use <obj>setf</obj> on <obj>contents</obj>:
+
+<lisp>(setf (contents loc) newvalue)
+</lisp></description></definition>
+<p>  The macro <obj>locf</obj> (see <ref definition-in-file="fd-eva" key="locf-fun" title="Macro locf" type="mac"></ref>) can be used to convert a form
+that accesses a cell to one that creates a locative pointer to that
+cell: for example,
+
+<lisp>(locf (fsymeval x))
+</lisp>evaluates to a locative that points to the function cell of the value of
+<obj>x</obj>; that is to say, it points to the place where <obj>(fsymeval x)</obj> is
+stored.
+</p>
+
+<p><obj>locf</obj> is very convenient because it saves the writer and reader of
+a program from having to remember the names of many functions that would
+create locatives to cells found in different fashions.
+</p>
+
+<p>One thing you should know is that it is not possible to make a locative
+to an element of a numeric array.  For example,
+
+<lisp>(setq foo (make-array 10 :type art-1b))
+(locf (aref foo 0))
+</lisp>signals an error.  Locatives may only point at entire words of memory,
+which contain standard Lisp data.
+</p>
+
+<p>Because of cdr-coding (see <ref chapter="5" definition-in-file="fd-con" key="cdr-code" section="4" title="Cdr-Coding" type="section"></ref>), a cons does not always
+contain an explicit cell which points to its cdr.  Therefore, it is
+impossible to obtain a locative which points to such a cell.  However,
+this is such a useful thing to do that <arg>the cons itself</arg> is usually
+treated as if it were a locative pointing to a cell which holds the
+cons's cdr.  <obj>(locf (cdr x))</obj> returns the value of <obj>x</obj>, and
+<obj>(contents x)</obj> returns the cdr when <arg>x</arg> is a cons, so
+<obj>(contents (locf (cdr x)))</obj> is the same as <obj>(cdr x)</obj>, as it should
+be.  Most functions that are normally given locatives also accept a cons
+and treat it as if it were a magic locative to the (nonexistent)
+cell containing the cdr of the cons.
+</p>
+
+<p>A cons always does contain a cell which points to the car, and
+<obj>(locf (car x))</obj> returns a locative whose pointer field is the
+same as that of <obj>x</obj>'s value.
+</p>
+</section><a name="Functions That Operate on Locatives"></a>
+
+<section chapter-number="15" name="Functions That Operate on Locatives" number="2" title="Functions That Operate on Locatives"><definition><define key="location-boundp-fun" name="location-boundp" type="fun"><args>locative</args>
+</define>
+
+<description>Returns <obj>t</obj> if the cell to which <arg>locative</arg> points contains
+anything except a void marker.
+
+The void marker is a special data type, <obj>dtp-null</obj>, which is stored
+in cells to say that their value is missing.  For example, an unbound
+variable actually has a void marker in its value cell, and
+<obj>(location-boundp (locf x))</obj> is equivalent to <obj>(variable-boundp x)</obj>.
+</description></definition><definition><define key="location-makunbound-fun" name="location-makunbound" type="fun"><args>locative <standard>&amp;optional</standard> pointer</args>
+</define>
+
+<description>Stores a void marker into the cell to which <arg>locative</arg> points.
+This consists of data type field <obj>dtp-null</obj> and a pointer copied
+from <arg>pointer</arg>.
+
+The pointer field of the void marker is
+used to tell the error handler what variable was unbound.
+In the case of a symbol's value cell or function cell, it should
+point to the symbol header.  In the case of a flavor method, it should
+point to the beginning of the block of data that holds the definition,
+which is a word containing the method's function spec.
+
+If the second arg is not specified, then where the void marker
+points is not defined.
+</description></definition>
+<p>Other functions with which locatives are expected or useful include
+<obj>get</obj> (the locative points to the cell in which the plist is stored),
+<obj>store-conditional</obj> (the locative points to the cell to be tested and
+modified), and <obj>%bind</obj> (the locative points to the cell to be bound).
+</p>
+</section><a name="Mixing Locatives with Lists"></a>
+
+
+<section chapter-number="15" name="Mixing Locatives with Lists" number="3" title="Mixing Locatives with Lists"><p indent="1">        Either of the functions <obj>car</obj> and <obj>cdr</obj> (see <ref definition-in-file="fd-con" key="car-fun" title="Function car" type="fun"></ref>) may
+be given a locative, and will return the contents of the cell at which
+the locative points.  They are both equivalent to <obj>contents</obj> when the
+argument is a locative.
+</p>
+
+<p indent="1">        Similarly, either of the functions <obj>rplaca</obj> and <obj>rplacd</obj> may
+be used to store an object into the cell at which a locative
+points.
+
+<lisp><exdent amount="96"><caption>For example, </caption>(rplaca locative y)
+</exdent><exdent amount="96"><caption>or </caption>(rplaca locative y)
+</exdent><exdent amount="96"><caption>is the same as </caption>(setf (contents locative) y)
+</exdent></lisp></p>
+
+<p indent="1">        If you are just using locatives, you should use <obj>contents</obj>
+rather than <obj>car</obj> or <obj>cdr</obj>.  But you can also mix locatives and
+conses.  For example, the same variable may usefully sometimes have a
+locative as its value and sometimes a cons.  Then it is useful that
+<obj>car</obj> and <obj>cdr</obj> work on locatives, and it also matters which one you
+use.  Pick the one that is right for the case of a cons.
+</p>
+
+<p>  For example, the following function conses up a list in the forward
+order by adding onto the end.  It needs to know where to put the pointer
+to the next cell.  Usually it goes in the previous cell's cdr, but
+the first cell gets put in the cell where the list is supposed to end
+up.  A locative is used as the pointer to this cell.  The first time
+through the loop, the <obj>rplacd</obj> is equivalent to <obj>(setq res ...)</obj>; on
+later times through the loop the <obj>rplacd</obj> tacks an additional cons
+onto the end of the list.
+
+<lisp>(defun simplified-version-of-mapcar (fcn lst)
+  (do ((lst lst (cdr lst))
+       (res nil)
+       (loc (locf res)))
+      ((null lst) res)
+    (setf (cdr loc)
+          (setq loc (ncons (funcall fcn (car lst)))))))
+</lisp></p>
+
+<p><obj>cdr</obj> is used here rather than <obj>contents</obj> because the normal
+case is that the argument is a list.
+</p>
+</section></chapter>
+</document-part>

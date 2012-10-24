@@ -1,0 +1,1468 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="flow-chapter"></a>
+<chapter name="flow-chapter" number="4" title="Flow of Control"><index-entry index="concepts" title="control structure"></index-entry>
+
+<index-entry index="concepts" title="flow of control"></index-entry>
+
+<p indent="1">        Lisp provides a variety of structures for flow of control.
+</p>
+
+<p indent="1">        Function application is the basic method for construction of
+programs.  Operations are written as the application of a function
+to its arguments.  Usually, Lisp programs are written as a large collection
+of small functions, each of which implements a simple operation.
+These functions operate by calling one another, and so larger
+operations are defined in terms of smaller ones.
+</p>
+
+<index-entry index="concepts" title="recursion"></index-entry>
+
+<p indent="1">        A function may always call itself in Lisp.  The calling of
+a function by itself is known as <arg>recursion</arg>; it is analogous
+to mathematical induction.
+</p>
+
+<index-entry index="concepts" title="iteration"></index-entry>
+
+<p indent="1">        The performing of an action repeatedly (usually with some
+changes between repetitions) is called <arg>iteration</arg>, and is provided as
+a basic control structure in most languages.  The <arg>do</arg> statement of
+PL/I, the <arg>for</arg> statement of ALGOL/60, and so on are examples of
+iteration primitives.  Lisp provides two general iteration facilities:
+<obj>do</obj> and <obj>loop</obj>, as well as a variety of special-purpose iteration
+facilities.  (<obj>loop</obj> is sufficiently complex that it is explained
+in its own chapter later in the manual; see <ref definition-in-file="looptm" key="loop-fun" type="page"></ref>.)
+</p>
+
+<index-entry index="concepts" title="conditional"></index-entry>
+
+<p indent="1">        A <arg>conditional</arg> construct is one which allows a program
+to make a decision, and do one thing or another based on some logical
+condition.  Lisp provides the simple one-way conditionals <obj>and</obj> and <obj>or</obj>,
+the simple two-way conditional <obj>if</obj>, and more general multi-way
+conditionals such as <obj>cond</obj> and <obj>selectq</obj>.
+The choice of which form to use in any particular situation is a matter
+of personal taste and style.
+</p>
+
+<index-entry index="concepts" title="non-local exit"></index-entry>
+
+<index-entry index="concepts" title="exit"></index-entry>
+
+<p indent="1">        There are some <arg>non-local exit</arg> control structures, analogous
+to the <arg>leave</arg>, <arg>exit</arg>, and <arg>escape</arg> constructs in many modern
+languages.
+Zetalisp provides for both static (lexical) non-local exits with
+<obj>block</obj> and <obj>return-from</obj> and dynamic non-local exits with <obj>catch</obj>
+and <obj>throw</obj>.  Another kind of non-local exit is the goto, provided
+by the <obj>tagbody</obj> and <obj>go</obj> constructs.
+</p>
+
+<p indent="1">        Zetalisp also provides a coroutine capability,
+explained in the section on <arg>stack-groups</arg> (<ref chapter="14" definition-in-file="fd-sg" key="stack-group" section="0" title="Stack Groups" type="section"></ref>), and
+a multiple-process facility (see <ref chapter="30" definition-in-file="proces" key="process" section="0" title="Processes" type="section"></ref>).  There is also a facility
+for generic function calling using message passing; see <ref chapter="22" definition-in-file="flavor" key="flavor" section="0" title="Objects, Message Passing, and Flavors" type="section"></ref>.
+</p>
+<a name="Compound Statements"></a>
+
+<section chapter-number="4" name="Compound Statements" number="1" title="Compound Statements"><definition><define key="progn-fun" name="progn" type="spec"><args>body...</args>
+</define>
+
+<description>The <arg>body</arg> forms are evaluated in order from left to right and the value
+of the last one is returned.
+<obj>progn</obj> is the primitive control structure construct for &quot;compound
+statements&quot;.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(foo (cdr a)
+     (progn (setq b (extract frob))
+            (car b))
+     (cadr b))
+</exdent></lisp>
+Lambda-expressions, <obj>cond</obj> forms, <obj>do</obj> forms, and
+many other control structure forms use <obj>progn</obj> implicitly, that is,
+they allow multiple forms in their bodies.
+</description></definition><definition><define key="prog1-fun" name="prog1" type="spec"><args>first-form body...</args>
+</define>
+
+<description><obj>prog1</obj> is similar to <obj>progn</obj>, but it returns the value of its <arg>first</arg> form rather
+than its last.
+It is most commonly used to evaluate an expression with side effects, and return
+a value which must be computed <arg>before</arg> the side effects happen.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(setq x (prog1 y (setq y x)))
+</exdent></lisp>interchanges the values of the variables <arg>x</arg> and <arg>y</arg>.  <obj>prog1</obj> never
+returns multiple values.
+</description></definition><definition><define key="prog2-fun" name="prog2" type="spec"><args>first-form second-form body...</args>
+</define>
+
+<description><obj>prog2</obj> is similar to <obj>progn</obj> and <obj>prog1</obj>, but it returns its
+<arg>second</arg> form.  It is included largely for compatibility with old programs.
+</description></definition></section><a name="Conditionals"></a>
+
+<section chapter-number="4" name="Conditionals" number="2" title="Conditionals"><definition>
+<define key="if-fun" name="if" type="spec"></define>
+
+<description><obj>if</obj> is the simplest conditional form.  The ``if-then'' form looks like:
+
+<lisp>(if <arg>predicate-form</arg> <arg>then-form</arg>)
+</lisp><arg>predicate-form</arg> is evaluated, and if the result is non-<obj>nil</obj>, the
+<arg>then-form</arg> is evaluated and its result is returned.  Otherwise, <obj>nil</obj>
+is returned.
+
+In the ``if-then-else'' form, it looks like
+
+<lisp>(if <arg>predicate-form</arg> <arg>then-form</arg> <arg>else-form</arg>)
+</lisp><arg>predicate-form</arg> is evaluated, and if the result is non-<obj>nil</obj>, the
+<arg>then-form</arg> is evaluated and its result is returned.  Otherwise, the
+<arg>else-form</arg> is evaluated and its result is returned.
+
+If there are more than three subforms, <obj>if</obj> assumes you want more than
+one <arg>else-form</arg>; if the predicate returns <obj>nil</obj>, they are evaluated
+sequentially and the result of the last one is returned.
+</description></definition><definition><define key="when-fun" name="when" type="mac"><args>condition body...</args>
+</define>
+
+<description>If <arg>condition</arg> evaluates to something non-<obj>nil</obj>, the <arg>body</arg> is
+executed and its value(s) returned.  Otherwise, the value of the <obj>when</obj>
+is <obj>nil</obj> and the <arg>body</arg> is not executed.
+</description></definition><definition><define key="unless-fun" name="unless" type="mac"><args>condition body...</args>
+</define>
+
+<description>If <arg>condition</arg> evaluates to <obj>nil</obj>, the <arg>body</arg> is
+executed and its value(s) returned.  Otherwise, the value of the <obj>unless</obj>
+is <obj>nil</obj> and the <arg>body</arg> is not executed.
+</description></definition><definition>
+<define key="cond-fun" name="cond" type="spec"></define>
+
+<description>The <obj>cond</obj> special form consists of the symbol <obj>cond</obj> followed by
+several <arg>clauses</arg>.  Each clause consists of a predicate form, called
+the <arg>condition</arg>, followed by zero or more <arg>body</arg> forms.
+
+
+<lisp>(cond (<arg>condition body body</arg>...)
+      (<arg>condition</arg>)
+      (<arg>condition body</arg> ...)
+      ... )
+</lisp>
+The idea is that each clause represents a case which
+is selected if its condition is satisfied and the conditions
+of all preceding clauses were not satisfied.  When a clause
+is selected, its body forms are evaluated.
+
+<obj>cond</obj> processes its clauses in order from left to right.  First,
+the condition of the current clause is evaluated.  If the result is
+<obj>nil</obj>, <obj>cond</obj> advances to the next clause.  Otherwise, the cdr of
+the clause is treated as a list of body forms which are
+evaluated in order from left to right.  After evaluating the
+body forms, <obj>cond</obj> returns without inspecting any remaining
+clauses.  The value of the <obj>cond</obj> form is the value of the
+last body form evaluated, or the value of the condition if there
+were no body forms in the clause.  If <obj>cond</obj> runs out of clauses,
+that is, if every condition evaluates to <obj>nil</obj>, and thus no case is
+selected, the value of the <obj>cond</obj> is <obj>nil</obj>. 
+
+<lisp><exdent amount="96"><caption>Example: </caption>(cond ((zerop x)    ;<standard>First clause:</standard>
+       (+ y 3))     ; (zerop x)<standard> is the condition.</standard>
+                    ; (+ y 3)<standard> is the body.</standard>
+      ((null y)     ;<standard>A clause with 2 body forms:</standard>
+       (setq y 4)   ;<standard> this</standard>
+       (cons x z))  ;<standard> and this.</standard>
+      (z)           ;<standard>A clause with no body forms: the condition is </standard>
+                    ;<standard> just <obj>z</obj>.  If <obj>z</obj> is non-<obj>nil</obj>, it is returned.</standard>
+      (t            ;<standard>A condition of </standard>t
+       105)         ;<standard> is always satisfied.</standard>
+   )                ;<standard>This is the end of the cond.</standard>
+</exdent></lisp></description></definition><definition>
+<define key="cond-every-fun" name="cond-every" type="mac"></define>
+
+<description><obj>cond-every</obj> has the same syntax as <obj>cond</obj>, but executes every clause whose
+condition is satisfied, not just the first.  If a condition is the symbol
+<obj>otherwise</obj>, it is satisfied if and only if no preceding condition is
+satisfied.  The value returned
+is the value of the last body form in the last clause whose condition
+is satisfied.  Multiple values are not returned.
+</description></definition><definition><define key="and-fun" name="and" type="spec"><args>form...</args>
+</define>
+
+<description><obj>and</obj> evaluates the <arg>form</arg>s one at a time,
+from left to right.  If any <arg>form</arg> evaluates to <obj>nil</obj>, <obj>and</obj>
+immediately returns <obj>nil</obj> without evaluating the remaining
+<arg>forms</arg>.  If all the <arg>forms</arg> evaluate to non-<obj>nil</obj> values, <obj>and</obj> returns
+the value of the last <arg>form</arg>.
+
+<obj>and</obj> can be used in two different ways.  You can use it as a logical
+<obj>and</obj> function, because it returns a true value only if all of its
+arguments are true:
+
+<lisp>(if (and socrates-is-a-person
+         all-people-are-mortal)
+    (setq socrates-is-mortal t))
+</lisp>
+Because the order of evaluation is well-defined, you can do
+
+<lisp>(if (and (boundp 'x)
+         (eq x 'foo))
+    (setq y 'bar))
+</lisp>knowing that the <obj>x</obj> in the <obj>eq</obj> form will not be evaluated if <obj>x</obj>
+is found to be void.
+
+You can also use <obj>and</obj> as a simple conditional form:
+
+<lisp>(and (setq temp (assq x y))
+     (rplacd temp z))
+</lisp>
+<lisp>(and bright-day
+     glorious-day
+     (princ &quot;It is a bright and glorious day.&quot;))
+</lisp>but <obj>when</obj> is usually preferable.
+
+Note: <obj>(and) =&gt; t</obj>, which is the identity for the <obj>and</obj> operation.
+</description></definition><definition><define key="or-fun" name="or" type="spec"><args>form...</args>
+</define>
+
+<description><obj>or</obj> evaluates the <arg>form</arg>s one by one from left to right.
+If a <arg>form</arg> evaluates to <obj>nil</obj>, <obj>or</obj> proceeds to evaluate the
+next <arg>form</arg>.  If there are no more <arg>form</arg>s, <obj>or</obj> returns <obj>nil</obj>.
+But if a <arg>form</arg> evaluates to a non-<obj>nil</obj> value, <obj>or</obj> immediately returns
+that value without evaluating any remaining <arg>form</arg>s.
+
+As with <obj>and</obj>, <obj>or</obj> can be used either as a logical <obj>or</obj> function,
+or as a conditional:
+
+
+<lisp>(or it-is-fish it-is-fowl)
+
+(or it-is-fish it-is-fowl
+    (print &quot;It is neither fish nor fowl.&quot;)
+</lisp>
+but it is often possible and cleaner to use <obj>unless</obj> in the latter case.
+
+<index-entry index="concepts" title="fish"></index-entry>
+
+Note:  <obj>(or) =&gt; nil</obj>, the identity for this operation.
+</description></definition><definition>
+<define key="selectq-fun" name="selectq" type="mac"></define>
+<define key="case-fun" name="case" type="mac"></define>
+<define key="caseq-fun" name="caseq" type="mac"></define>
+
+<description><obj>selectq</obj> is a conditional which chooses one of its clauses to execute
+by comparing the value of a form against various constants using <obj>eql</obj>.
+Its form is as follows:
+
+<lisp>(selectq <arg>key-form</arg>
+  (<arg>test body</arg>...)
+  (<arg>test body</arg>...)
+  (<arg>test body</arg>...)
+  ...)
+</lisp>The first thing <obj>selectq</obj> does is to evaluate <arg>key-form</arg>; call the resulting
+value <arg>key</arg>.  Then <obj>selectq</obj> considers
+each of the clauses in turn.  If <arg>key</arg> matches the clause's
+<arg>test</arg>, the body of the clause
+is evaluated, and <obj>selectq</obj> returns the value of the last
+body form.  If there are no matches, <obj>selectq</obj> returns <obj>nil</obj>.
+
+A <arg>test</arg> may be any of:
+
+<table><tbody><tr><td><standard>1) A symbol</standard></td><td>If the <arg>key</arg> is <obj>eql</obj> to the symbol, it matches.
+</td></tr><tr><td><standard>2) A number</standard></td><td>If the <arg>key</arg> is <obj>eql</obj> to the number, it matches.
+<arg>key</arg> must have the same type and the same value
+as the number.
+</td></tr><tr><td><standard>3) A list</standard></td><td>If the <arg>key</arg> is <obj>eql</obj> to one of the elements of the list,
+then it matches.  The elements of the list should be symbols
+or numbers.
+</td></tr><tr><td><standard>4) <obj>t</obj> or <obj>otherwise</obj></standard></td><td>The symbols <obj>t</obj> and <obj>otherwise</obj> are special tests which match anything.  
+Either symbol may be used, it makes no difference;
+<obj>t</obj> is mainly for compatibility with Maclisp's <obj>caseq</obj> construct.
+To be useful, this should be the last clause in the <obj>selectq</obj>.
+</td></tr></tbody></table>
+
+<lisp><exdent amount="96"><caption>Example: </caption>(selectq x
+  (foo (do-this))
+  (bar (do-that))
+  ((baz quux mum) (do-the-other-thing))
+  (otherwise (ferror nil &quot;Never heard of ~S&quot; x)))
+</exdent></lisp>is equivalent to
+
+<lisp>(cond ((eq x 'foo) (do-this))
+      ((eq x 'bar) (do-that))
+      ((memq x '(baz quux mum)) (do-the-other-thing))
+      (t (ferror nil &quot;Never heard of ~S&quot; x)))
+</lisp>
+Note that the <arg>tests</arg> are <arg>not</arg> evaluated; if you want them to
+be evaluated use <obj>select</obj> rather than <obj>selectq</obj>.
+
+<obj>case</obj> is the Common Lisp name for this construct.
+<obj>caseq</obj> is the Maclisp name; it identical
+to <obj>selectq</obj>, which is not totally compatible with Maclisp,
+because <obj>selectq</obj> accepts <obj>otherwise</obj> as well as <obj>t</obj>
+where <obj>caseq</obj> would not accept <obj>otherwise</obj>, and because Maclisp
+does some error-checking that <obj>selectq</obj> does not.  Maclisp programs
+that use <obj>caseq</obj> work correctly so long as they don't use the
+symbol <obj>otherwise</obj> as a key.
+</description></definition><definition><define key="ecase-fun" name="ecase" type="mac"><args>key-form clauses...</args>
+</define>
+
+<description>Like <obj>case</obj> except that an uncorrectable error is signaled if
+every clause fails.  <obj>t</obj> or <obj>otherwise</obj> clauses are not allowed.
+</description></definition><definition><define key="ccase-fun" name="ccase" type="mac"><args>place clauses...</args>
+</define>
+
+<description>Like <obj>ecase</obj> except that the error is correctable.  The first argument
+is called <arg>place</arg> because it must be <obj>setf</obj>'able.
+If the user proceeds from the error, a new value is read and stored into
+<arg>place</arg>; then the clauses are tested again using the new value.
+Errors repeat until a value is specified which makes some clause succeed.
+</description></definition><nopara></nopara>
+<p>Also see <obj>defselect</obj> (<ref definition-in-file="fd-fun" key="defselect-fun" title="Special Form defselect" type="spec"></ref>), a special form for defining a function
+whose body is like a <obj>selectq</obj>.
+</p>
+<definition>
+<define key="select-fun" name="select" type="mac"></define>
+
+<description><obj>select</obj> is like <obj>selectq</obj>, except that the elements of the
+<arg>tests</arg> are evaluated before they are used.
+
+This creates a syntactic ambiguity: if <obj>(bar baz)</obj> is seen the
+first element of a clause, is it a list of two forms, or is it one
+form?  <obj>select</obj> interprets it as a list of two forms.  If you
+want to have a clause whose test is a single form, and that form
+is a list, you have to write it as a list of one form.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(select (frob x)
+   (foo 1)
+   ((bar baz) 2)
+   (((current-frob)) 4)
+   (otherwise 3))
+</exdent></lisp>is equivalent to
+
+<lisp>(let ((var (frob x)))
+  (cond ((eq var foo) 1)
+        ((or (eq var bar) (eq var baz)) 2)
+        ((eq var (current-frob)) 4)
+        (t 3)))
+</lisp></description></definition><definition>
+<define key="selector-fun" name="selector" type="mac"></define>
+
+<description><obj>selector</obj> is like <obj>select</obj>, except that you get to specify the function
+used for the comparison instead of <obj>eq</obj>.  For example,
+
+<lisp>(selector (frob x) equal
+   (('(one . two)) (frob-one x))
+   (('(three . four)) (frob-three x))
+   (otherwise (frob-any x)))
+</lisp>is equivalent to
+
+<lisp>(let ((var (frob x)))
+  (cond ((equal var '(one . two)) (frob-one x))
+        ((equal var '(three . four)) (frob-three x))
+        (t (frob-any x))))
+</lisp></description></definition><definition>
+<define key="select-match-fun" name="select-match" type="mac"></define>
+
+<description><obj>select-match</obj> is like <obj>select</obj> but each clause can specify a pattern
+to match the key against.  The general form of use looks like
+
+<lisp>(select-match <arg>key-form</arg>
+  (<arg>pattern</arg> <arg>condition</arg> <arg>body</arg>...)
+  (<arg>pattern</arg> <arg>condition</arg> <arg>body</arg>...)
+  ...
+  (otherwise <arg>body</arg>...))
+</lisp>The value of <arg>key-form</arg> is matched against the <arg>patterns</arg> one at a
+time until a match succeeds and the accompanying <arg>condition</arg> evaluates
+to something non-<obj>nil</obj>.  At this point the <arg>body</arg> of that clause is
+executed and its value(s) returned.  If all the patterns/conditions
+fail, the <arg>body</arg> of the <obj>otherwise</obj> clause (if any) is executed.  A
+pattern can test the shape of the key object, and set variables
+which the <arg>condition</arg> form can refer to.  All the variables set by the
+patterns are bound locally to the <obj>select-match</obj> form.
+
+The patterns are matched using <obj>list-match-p</obj> (<ref definition-in-file="fd-con" key="list-match-p-fun" title="Macro list-match-p" type="mac"></ref>).
+
+
+<lisp><exdent amount="96"><caption>Example: </caption>(select-match '(a b c) 
+  (`(,x b ,x) t (vector x))
+  (`((,x ,y) b . ,ignore) t (list x y))
+  (`(,x b ,y) (symbolp x) (cons x y))
+  (otherwise 'lose-big))
+</exdent></lisp>returns <obj>(a . c)</obj>, having checked <obj>(symbolp 'a)</obj>.  The first clause
+matches only if the there are three elements, the first and third
+elements are <obj>equal</obj> and the second element is <obj>b</obj>.  The second
+matches only if the first element is a list of length two and the second
+element is <obj>b</obj>.  The third clause accepts any list of length three
+whose second element is <obj>b</obj>.  The fourth clause accepts anything that did
+not match the previous clauses.
+
+<obj>select-match</obj> generates highly optimized code using special
+instructions.
+</description></definition><definition>
+<define key="dispatch-fun" name="dispatch" type="mac"></define>
+
+<description><obj>(dispatch <arg>byte-specifier</arg> <arg>number</arg> <arg>clauses...</arg>)</obj> is the same
+as <obj>select</obj> (not <obj>selectq</obj>), but the key is obtained by evaluating
+<obj>(ldb <arg>byte-specifier number</arg>)</obj>.
+<arg>byte-specifier</arg> and <arg>number</arg> are both evaluated.  Byte specifiers
+and <obj>ldb</obj> are explained on <ref definition-in-file="fd-num" key="ldb-fun" title="Function ldb" type="fun"></ref>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(princ (dispatch (byte 2 13) cat-type
+           (0 &quot;Siamese.&quot;)
+           (1 &quot;Persian.&quot;)
+           (2 &quot;Alley.&quot;)
+           (3 (ferror nil
+                      &quot;~S is not a known cat type.&quot;
+                      cat-type))))
+</exdent></lisp>
+<index-entry index="concepts" title="kitty"></index-entry>
+
+It is not necessary to include all possible values of the byte which
+is dispatched on.
+</description></definition><definition>
+<define key="selectq-every-fun" name="selectq-every" type="mac"></define>
+
+<description><obj>selectq-every</obj> has the same syntax as <obj>selectq</obj>, but, like
+<obj>cond-every</obj>, executes every selected clause instead of just the first
+one.  If an <obj>otherwise</obj> clause is present, it is selected if and only
+if no preceding clause is selected.  The value returned is the value of
+the last form in the last selected clause.  Multiple values are not
+returned.  Example:
+
+<lisp>(selectq-every animal
+  ((cat dog) (setq legs 4))
+  ((bird man) (setq legs 2))
+  ((cat bird) (put-in-oven animal))
+  ((cat dog man) (beware-of animal)))
+</lisp></description></definition>
+
+<subsection name="NIL" title="Comparison Predicates"><definition><define key="eq-fun" name="eq" type="fun"><args>x y</args>
+</define>
+
+<description><obj>(eq <arg>x y</arg>) =&gt; t</obj> if and only if <arg>x</arg> and <arg>y</arg> are the same object.
+It should be noted that things that print the same are not necessarily <obj>eq</obj> to each other.
+In particular, numbers with the same value
+need not be <obj>eq</obj>, and two similar lists are usually not <obj>eq</obj>.
+
+<index-entry index="concepts" title="eq versus equal"></index-entry>
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(eq 'a 'b) =&gt; nil
+(eq 'a 'a) =&gt; t
+(eq (cons 'a 'b) (cons 'a 'b)) =&gt; nil
+(setq x (cons 'a 'b)) (eq x x) =&gt; t
+</exdent></lisp>
+Note that in Zetalisp equal fixnums are <obj>eq</obj>; this is not true in Maclisp.
+Equality does not imply <obj>eq</obj>-ness for other types of numbers.  To compare numbers,
+use <obj>=</obj>; see <ref definition-in-file="fd-num" key="=-fun" title="Function =" type="fun"></ref>.
+</description></definition><definition><define key="neq-fun" name="neq" type="fun"><args>x y</args>
+</define>
+
+<description><obj>(neq <arg>x y</arg>)</obj> = <obj>(not (eq <arg>x y</arg>))</obj>.  This is provided
+simply as an abbreviation for typing convenience.
+</description></definition><definition><define key="eql-fun" name="eql" type="fun"><args>x y</args>
+</define>
+
+<description><obj>eql</obj> is the same as <obj>eq</obj> except that if <arg>x</arg> and <arg>y</arg> are numbers
+of the same type they are <obj>eql</obj> if they are <obj>=</obj>.
+</description></definition><definition><define key="equal-fun" name="equal" type="fun"><args>x y</args>
+</define>
+
+<description>The <obj>equal</obj> predicate returns <obj>t</obj> if its arguments are similar
+(isomorphic) objects.
+
+<index-entry index="concepts" title="eq versus equal"></index-entry>
+
+<index-entry index="concepts" title="equal versus ="></index-entry>
+Two numbers are <obj>equal</obj> if they have the same value and type (for
+example, a float is never <obj>equal</obj> to a fixnum, even if <obj>=</obj> is true of them).
+For conses, <obj>equal</obj> is defined
+recursively as the two cars being <obj>equal</obj> and the two cdrs
+being equal.  Two strings are <obj>equal</obj> if they have the same length,
+and the characters composing them are the same; see <obj>string=</obj>,
+<ref definition-in-file="fd-str" key="string=-fun" title="Function string=" type="fun"></ref>.  Alphabetic case is significant.  All other objects
+are <obj>equal</obj> if and only if they are <obj>eq</obj>.  Thus <obj>equal</obj> could have
+been defined by:
+
+<lisp>(defun equal (x y)
+  (cond ((eq x y) t)
+        ((and (numberp x) (numberp y))
+         (= x y))
+        ((and (stringp x) (stringp y))
+         (string-equal x y))
+        ((and (consp x) (consp y))
+         (and (equal (car x) (car y))
+              (equal (cdr x) (cdr y))))))
+</lisp>
+As a consequence of the above definition, it can be seen that
+<obj>equal</obj> may compute forever when applied to looped list structure. 
+In addition, <obj>eq</obj> always implies <obj>equal</obj>; that is, if <obj>(eq a b)</obj>
+then <obj>(equal a b)</obj>.  An intuitive definition of <obj>equal</obj> (which is
+not quite correct) is that two objects are <obj>equal</obj> if they look the
+same when printed out.  For example:
+
+<lisp>(setq a '(1 2 3))
+(setq b '(1 2 3))
+(eq a b) =&gt; nil
+(equal a b) =&gt; t
+(equal &quot;Foo&quot; &quot;foo&quot;) =&gt; nil
+</lisp></description></definition><definition><define key="equalp-fun" name="equalp" type="fun"><args>x y</args>
+</define>
+
+<description><obj>equalp</obj> is a broader kind of equality than <obj>equal</obj>.  Two objects that
+are <obj>equal</obj> are always <obj>equalp</obj>.  In addition,
+numbers of different types are <obj>equalp</obj> if they are <obj>=</obj>.  Two character
+objects are <obj>equalp</obj> if they are <obj>char-equal</obj> (that is, they are compared
+ignoring font, case and meta bits).
+
+Two arrays of any sort are <obj>equalp</obj> if they have the same dimensions
+and corresponding elements are <obj>equalp</obj>.  In particular, this means
+that two strings are <obj>equalp</obj> if they match ignoring case and font information.
+
+<lisp>(equalp &quot;Foo&quot; &quot;foo&quot;) =&gt; t
+(equalp '1 '1.0) =&gt; t
+(equalp '(1 &quot;Foo&quot;) '(1.0 &quot;foo&quot;)) =&gt; t
+</lisp>
+Because <obj>equalp</obj> is a Common Lisp function, it regards a string as having
+character objects as its elements:
+
+<lisp>(equalp &quot;Foo&quot; #(#≠/F #≠/o #≠/o)) =&gt; t
+(equalp &quot;Foo&quot; #(#/F #/o #/o)) =&gt; nil
+</lisp></description></definition><definition><define key="not-fun" name="not" type="fun"><args>x</args>
+</define><define key="null-fun" name="null" type="fun"><args>x</args>
+</define>
+
+<description>        <obj>not</obj> returns <obj>t</obj> if <arg>x</arg> is <obj>nil</obj>, else <obj>nil</obj>.
+<obj>null</obj> is the same as <obj>not</obj>; both functions are included for the sake
+of clarity.  Use <obj>null</obj> to check whether something is <obj>nil</obj>; use <obj>not</obj>
+to invert the sense of a logical value.  Some people prefer to distinguish
+between <obj>nil</obj> as falsehood and <obj>nil</obj> as the empty list by writing:
+
+<lisp>(cond ((not (null lst)) ... )
+      ( ... ))
+<standard>rather than</standard>
+(cond (lst ... )
+      ( ... ))
+</lisp>        There is no loss of efficiency, since these compile into exactly
+the same instructions.
+</description></definition></subsection></section><a name="Iteration"></a>
+
+
+<section chapter-number="4" name="Iteration" number="3" title="Iteration"><index-entry index="concepts" title="iteration"></index-entry>
+<definition>
+<define key="do-fun" name="do" type="spec"></define>
+
+<description>The <obj>do</obj> special form provides a simple generalized iteration facility,
+with an arbitrary number of ``index variables'' whose values are saved
+when the <obj>do</obj> is entered and restored when it is left, i.e. they are
+bound by the <obj>do</obj>.  The index variables are used in the iteration
+performed by <obj>do</obj>.  At the beginning, they are initialized to
+specified values, and then at the end of each trip around the loop the
+values of the index variables are changed according to specified
+rules.  <obj>do</obj> allows the programmer to specify a predicate which
+determines when the iteration will terminate.  The value to be
+returned as the result of the form may, optionally, be specified. 
+
+<obj>do</obj> comes in two varieties, new-style and old-style.  The old-style
+<obj>do</obj> is obsolete and exists for Maclisp compatibility only.
+The more general, ``new-style'' <obj>do</obj> looks like:
+
+<lisp>(do ((<arg>var init repeat</arg>) ...)
+  (<arg>end-test exit-form</arg> ...)
+  <arg>body</arg>...)
+</lisp>
+The first item in the form is a list of zero or more index variable
+specifiers.  Each index variable specifier is a list of the name of a
+variable <arg>var</arg>, an initial value form <arg>init</arg>, which defaults to <obj>nil</obj>
+if it is omitted, and a repeat value form <arg>repeat</arg>.  If <arg>repeat</arg> is
+omitted, the <arg>var</arg> is not changed between repetitions.  If <arg>init</arg> is
+omitted, the <arg>var</arg> is initialized to <obj>nil</obj>.
+
+An index variable specifier can also be just the name of a variable,
+rather than a list.  In this case, the variable has an initial value of
+<obj>nil</obj>, and is not changed between repetitions.
+
+All assignment to the index variables is done in parallel.  At the
+beginning of the first iteration, all the <arg>init</arg> forms are evaluated,
+then the <arg>vars</arg> are bound to the values of the <arg>init</arg> forms, their
+old values being saved in the usual way.  Note that the <arg>init</arg> forms
+are evaluated <arg>before</arg> the <arg>vars</arg> are bound, i.e.  lexically
+<arg>outside</arg> of the <obj>do</obj>.  At the beginning of each succeeding
+iteration those <arg>vars</arg> that have <arg>repeat</arg> forms get set to the
+values of their respective <arg>repeat</arg> forms.  Note that all the
+<arg>repeat</arg> forms are evaluated before any of the <arg>vars</arg> is set.
+
+The second element of the <obj>do</obj>-form is a list of an end-testing
+predicate form <arg>end-test</arg>, and zero or more forms, called the
+<arg>exit-forms</arg>.  This resembles a <obj>cond</obj> clause.  At the beginning of
+each iteration, after processing of the variable specifiers, the
+<arg>end-test</arg> is evaluated.  If the result is <obj>nil</obj>, execution proceeds
+with the body of the <obj>do</obj>.  If the result is not <obj>nil</obj>, the
+<arg>exit-forms</arg> are evaluated from left to right and then <obj>do</obj> returns.
+The value of the <obj>do</obj> is the value of the last <arg>exit-form</arg>, or
+<obj>nil</obj> if there were no <arg>exit-forms</arg> (<arg>not</arg> the value of the
+<arg>end-test</arg>, as you might expect by analogy with <obj>cond</obj>).
+
+Note that the <arg>end-test</arg> gets evaluated before the first time the body
+is evaluated.  <obj>do</obj> first initializes the variables from the <arg>init</arg>
+forms, then it checks the <arg>end-test</arg>, then it processes the body, then
+it deals with the <arg>repeat</arg> forms, then it tests the <arg>end-test</arg>
+again, and so on.  If the <obj>end-test</obj> returns a non-<obj>nil</obj> value the
+first time, then the body is not executed.
+
+If the second element of the form is <obj>nil</obj>, there is no <arg>end-test</arg>
+nor <arg>exit-forms</arg>, and the <arg>body</arg> of the <obj>do</obj> is executed only
+once.  In this type of <obj>do</obj> it is an error to have <arg>repeats</arg>.  This
+type of <obj>do</obj> is no more powerful than <obj>let</obj>; it is obsolete
+and provided only for Maclisp compatibility.
+
+If the second element of the form is <obj>(nil)</obj>, the <arg>end-test</arg> is
+never true and there are no <arg>exit-forms</arg>.  The <arg>body</arg> of the <obj>do</obj>
+is executed over and over.  The resulting infinite loop can be terminated by use
+of <obj>return</obj> or <obj>throw</obj>.
+
+<obj>do</obj> implicitly creates a <obj>block</obj> with name <obj>nil</obj>, so <obj>return</obj>
+can be used lexically within a <obj>do</obj> to exit it immediately.  This
+unbinds the <obj>do</obj> variables and the <obj>do</obj> form returns whatever values
+were specified in the <obj>return</obj> form.  See <ref chapter="4" definition-in-file="fd-flo" key="block-and-return-section" section="4" title="Static Non-Local Exits" type="section"></ref>
+for more information on these matters.  The <arg>body</arg> of the <obj>do</obj> is
+actually treated as a <obj>tagbody</obj>, so that it may contain <obj>go</obj> tags
+(see <ref chapter="4" definition-in-file="fd-flo" key="go-to" section="5" title="Tags and Gotos" type="section"></ref>), but this usage is discouraged as it is often unclear.
+
+<lisp><exdent amount="96"><caption>Examples of the new form of <obj>do</obj>: </caption>(do ((i 0 (1+ i))       <standard>; This is just the same as the above example,</standard>
+     (n (array-length foo-array)))
+    ((= i n))           <standard>; but written as a new-style <obj>do</obj>.</standard>
+  (aset 0 foo-array i)) <standard>; Note how the <obj>setq</obj> is avoided.</standard>
+</exdent></lisp>
+<lisp>
+(do ((z list (cdr z)) <standard>; z starts as <obj>list</obj> and is cdr'd each time.</standard>
+     (y other-list)   <standard>; y starts as <obj>other-list</obj>, and is unchanged by the do.</standard>
+     (x)              <standard>; x starts as <obj>nil</obj> and is not changed by the <obj>do</obj>.</standard>
+     w)               <standard>; w starts as <obj>nil</obj> and is not changed by the <obj>do</obj>.</standard>
+    (nil)             <standard>; The end-test is <obj>nil</obj>, so this is an infinite loop.</standard>
+  <arg>body</arg>)    <standard>; Presumably the <arg>body</arg> uses <obj>return</obj> somewhere.</standard>
+</lisp>
+The construction
+
+<lisp>(do ((x e (cdr x))
+     (oldx x x))
+    ((null x))
+  <arg>body</arg>)
+</lisp>exploits parallel assignment to index variables.  On the first
+iteration, the value of <obj>oldx</obj> is whatever value <obj>x</obj> had before
+the <obj>do</obj> was entered.  On succeeding iterations, <obj>oldx</obj> contains
+the value that <obj>x</obj> had on the previous iteration. 
+
+The <arg>body</arg> of a <obj>do</obj> may contains no forms at all.  Very often an
+iterative algorithm can be most clearly expressed entirely in the
+<arg>repeats</arg> and <arg>exit-forms</arg> of a new-style <obj>do</obj>, and the <arg>body</arg>
+is empty.  For example,
+
+<lisp>(do ((x x (cdr x))
+     (y y (cdr y))
+     (z nil (cons (f x y) z))) ;<standard>exploits parallel assignment.</standard>
+    ((or (null x) (null y))
+     (nreverse z))             ;<standard>typical use of <obj>nreverse</obj>.</standard>
+    )                          ;<standard>no <obj>do</obj>-body required.</standard>
+<standard>is like <obj>(maplist 'f x y)</obj> (see <ref definition-in-file="fd-flo" key="maplist-fun" title="Function maplist" type="fun"></ref>).</standard>
+</lisp>
+The old-style <obj>do</obj> exists only for Maclisp
+compatibility.  It looks like:
+
+<lisp>(do <arg>var</arg> <arg>init</arg> <arg>repeat</arg> <arg>end-test</arg> <arg>body</arg>...)
+</lisp>The first time through the loop <arg>var</arg> gets the value of the <arg>init</arg> form; 
+the remaining times through the loop it gets the value of the <arg>repeat</arg> form,
+which is re-evaluated each time.  Note that the <arg>init</arg> form is evaluated
+before <arg>var</arg> is bound, i.e. lexically <arg>outside</arg> of the <obj>do</obj>.
+Each time around the loop, after <arg>var</arg> is set,
+<arg>end-test</arg> is evaluated.  If it is non-<obj>nil</obj>, the <obj>do</obj> finishes
+and returns <obj>nil</obj>.  If the <arg>end-test</arg> evaluated to <obj>nil</obj>, the <arg>body</arg> of
+the loop is executed. As with the new-style do, <obj>return</obj> and <obj>go</obj>
+may be used in the body, and they have the same meaning.
+</description></definition><nopara></nopara>
+<p>Also see <obj>loop</obj> (<ref definition-in-file="looptm" key="loop-fun" type="page"></ref>), a general iteration facility based on a keyword
+syntax rather than a list-structure syntax.
+</p>
+<definition>
+<define key="do*-fun" name="do*" type="spec"></define>
+
+<description>In a word, <obj>do*</obj> is to <obj>do</obj> as <obj>let*</obj> is to <obj>let</obj>.
+
+<obj>do*</obj> works like <obj>do</obj> but binds and steps the variables sequentially
+instead of in parallel.  This means that the <arg>init</arg> form for one
+variable can use the values of previous variables.  The <arg>repeat</arg> forms
+refer to the new values of previous variables instead of their old
+values.  Here is an example:
+
+<lisp>(do* ((x xlist (cdr x))
+      (y (car x) (car x)))
+  (print (list x y)))
+</lisp>On each iteration, <arg>y</arg>'s value is the car of <arg>x</arg>.  The same
+construction with <obj>do</obj> might get an error on entry since <arg>x</arg>
+might not be bound yet.
+</description></definition><definition>
+<define key="do-named-fun" name="do-named" type="spec"></define>
+
+<description><obj>do-named</obj> is like <obj>do</obj> but defines a <obj>block</obj> with a name
+explicitly specified by the programmer in addition to the <obj>block</obj>
+named <obj>nil</obj> which every <obj>do</obj> defines.  This makes it possible to
+use <obj>return-from</obj> to return from this <obj>do-named</obj> even from within
+an inner <obj>do</obj>.  An ordinary <obj>return</obj> there would return from the
+inner <obj>do</obj> instead.  <obj>do-named</obj> is obsolete now that <obj>block</obj>,
+which is more general and more coherent, exists.  See
+<ref chapter="4" definition-in-file="fd-flo" key="block-and-return-section" section="4" title="Static Non-Local Exits" type="section"></ref> for more information on <obj>block</obj> and
+<obj>return-from</obj>.
+
+The syntax of <obj>do-named</obj> is like <obj>do</obj> except that the symbol <obj>do-named</obj> is
+immediately followed by the <obj>block</obj> name, which should be a symbol.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(do-named george ((a 1 (1+ a))
+                  (d 'foo))
+                 ((&gt; a 4) 7)
+  (do ((c b (cdr c)))
+      ((null c))
+    ...
+    (return-from george (cons b d))
+    ...))
+</exdent><exdent amount="96"><caption>is equivalent to </caption>(block george
+  (do ((a 1 (1+ a))
+       (d 'foo))
+      ((&gt; a 4) 7)
+    (do ((c b (cdr c)))
+        ((null c))
+      ...
+      (return-from george (cons b d))
+      ...)))
+</exdent></lisp>
+<obj>t</obj> as the name of a <obj>do-named</obj> behaves somewhat peculiarly, and
+therefore should be avoided.
+</description></definition><definition>
+<define key="do*-named-fun" name="do*-named" type="spec"></define>
+
+<description>This special form offers a combination of the features of <obj>do*</obj> and
+those of <obj>do-named</obj>.  It is obsolete, as is <obj>do-named</obj>,
+since it is cleaner to use <obj>block</obj>.
+</description></definition><definition><define key="dotimes-fun" name="dotimes" type="mac"><args>(index count [value-expression]) body...</args>
+</define>
+
+<description><obj>dotimes</obj> is a convenient abbreviation for the most common integer
+iteration.  <obj>dotimes</obj> performs <arg>body</arg> the number of times given by
+the value of <arg>count</arg>, with <arg>index</arg> bound to <obj>0</obj>, <obj>1</obj>, etc. on
+successive iterations.  When the <arg>count</arg> is exhausted, the value of
+<arg>value-expression</arg> is returned; or <obj>nil</obj>, if <arg>value-expression</arg>
+is missing.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(dotimes (i (truncate m n))
+  (frob i))
+</exdent></lisp>is equivalent to:
+
+<lisp>(do ((i 0 (1+ i))
+     (count (truncate m n)))
+    ((≥ i count))
+  (frob i))
+</lisp>except that the name <obj>count</obj> is not used.  Note that <obj>i</obj> takes on
+values starting at zero rather than one, and that it stops before taking
+the value <obj>(truncate m n)</obj> rather than after.  You can use <obj>return</obj> and
+<obj>go</obj> and <obj>tagbody</obj>-tags inside the body, as with <obj>do</obj>.
+<obj>dotimes</obj> forms return the value of <arg>value-expression</arg>, or <obj>nil</obj>,
+unless returned from explicitly with <obj>return</obj>.  For example:
+
+<lisp>(dotimes (i 5)
+  (if (eq (aref a i) 'foo)
+      (return i)))
+</lisp>This form searches the array that is the value of <obj>a</obj>, looking for
+the symbol <obj>foo</obj>.  It returns the fixnum index of the first element
+of <obj>a</obj> that is <obj>foo</obj>, or else <obj>nil</obj> if none of the elements
+are <obj>foo</obj>.
+</description></definition><definition><define key="dolist-fun" name="dolist" type="mac"><args>(item list [value-expression]) body...</args>
+</define>
+
+<description><obj>dolist</obj> is a convenient abbreviation for the most common list
+iteration.  <obj>dolist</obj> performs <arg>body</arg> once for each element in the
+list which is the value of <arg>list</arg>, with <arg>item</arg> bound to the
+successive elements.  If the list is exhausted, the value of
+<arg>value-expression</arg> is returned; or <obj>nil</obj>, if
+<arg>value-expression</arg> is missing.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(dolist (item (frobs foo))
+  (mung item))
+</exdent></lisp>is equivalent to:
+
+<lisp>(do ((lst (frobs foo) (cdr lst))
+     (item))
+    ((null lst))
+  (setq item (car lst))
+  (mung item))
+</lisp>except that the name <obj>lst</obj> is not used.
+You can use <obj>return</obj> and <obj>go</obj> and <obj>tagbody</obj>-tags inside the body, as with <obj>do</obj>.
+</description></definition><definition><define key="do-forever-fun" name="do-forever" type="mac"><args>body...</args>
+</define>
+
+<description>Executes the forms in the body over and over, or until a non-local exit
+(such as <obj>return</obj>).
+</description></definition></section><a name="block-and-return-section"></a>
+
+
+<section chapter-number="4" name="block-and-return-section" number="4" title="Static Non-Local Exits"><index-entry index="concepts" title="static non-local exit"></index-entry>
+
+<index-entry index="concepts" title="non-local exit"></index-entry>
+
+<p>The static non-local exit allows code deep within a construct to jump
+to the end of that construct instantly, not executing anything except
+<obj>unwind-protect</obj>'s on the way.  The construct which defines a static level
+that can be exited non-locally is called <obj>block</obj> and the construct which
+exits it is called <obj>return-from</obj>.  The <obj>block</obj> being exited must be lexically
+visible from the <obj>return-from</obj> which says to exit it; this is what `static' means.  By contrast, <obj>catch</obj> and <obj>throw</obj> provide for dynamic non-local
+exits; refer to the following section.
+Here is an example of using a static non-local exit:
+</p>
+
+<lisp>(block top
+  (let ((v1 (do-1)))
+    (when (all-done v1) (return-from top v1))
+    (do-2))
+  (do-3)
+  ...
+  (do-last))
+</lisp><nopara></nopara>
+<p>If <obj>(all-done v1)</obj> returns non-<obj>nil</obj>, the entire <obj>block</obj>
+immediately returns the value of <obj>v1</obj>.  Otherwise, the rest of the
+body of the block is executed sequentially, and ultimately the value or
+values of <obj>(do-last)</obj> are returned.
+</p>
+
+<p>Note that the <obj>return-from</obj> form is very unusual: it does not ever
+return a value itself, in the conventional sense.  It isn't useful to
+write <obj>(setq a (return-from foo 3))</obj>, because when the
+<obj>return-from</obj> form is evaluated, the containing <obj>block</obj> is
+immediately exited, and the <obj>setq</obj> never happens.
+</p>
+
+<p>The fact that <obj>block</obj>'s and <obj>return-from</obj>'s are matched up lexically
+means you cannot do this:
+</p>
+
+<lisp>(defun foo (a)
+  (block foo1
+    (bar a)))
+
+(defun bar (x)
+  (return-from foo1 x))
+</lisp><nopara></nopara>
+<p>The <obj>(return-from foo1 x)</obj> gets an error because there is no lexically
+visible <obj>block</obj> named <obj>foo1</obj>.  The suitable <obj>block</obj> in the caller, <obj>foo</obj>,
+is not even noticed.
+</p>
+
+<p>Static handling allows the compiler to produce good code for <obj>return-from</obj>.
+It is also useful with functional arguments:
+</p>
+
+<lisp>(defun first-symbol (list)
+  (block done
+    (mapc #'(lambda (elt)
+              (if (symbolp elt) (return-from done elt)))
+          list)))
+</lisp><nopara></nopara>
+<p>The <obj>return-from done</obj> sees the <obj>block done</obj> lexically.
+Even if <obj>mapc</obj> had a <obj>block</obj> in it named <obj>done</obj> it would
+have no effect on the execution of <obj>first-symbol</obj>.
+</p>
+
+<p>When a function is defined with <obj>defun</obj> with a name which is a symbol,
+a <obj>block</obj> whose name is the function name is automatically placed around
+the body of the function definition.  For example,
+
+<lisp>(defun foo (a)
+  (if (evenp a) 
+      (return-from foo (list a)))
+  (1+ a))
+
+(foo 4) =&gt; (4)
+(foo 5) =&gt; 6
+</lisp></p>
+
+<p>A function written explicitly with <obj>lambda</obj> does not have a <obj>block</obj>
+unless you write one yourself.
+</p>
+
+<p>A named <obj>prog</obj>, or a <obj>do-named</obj>, implicitly defines a <obj>block</obj> with
+the specified name.  So you can exit those constructs with <obj>return-from</obj>.
+In fact, the ability to name <obj>prog</obj>'s was the original way to define
+a place for <obj>return-from</obj> to exit, before <obj>block</obj> was invented.
+</p>
+
+<p>Every <obj>prog</obj>, <obj>do</obj> or <obj>loop</obj>, whether named or not, implicitly
+defines a <obj>block</obj> named <obj>nil</obj>.  Thus, named <obj>prog</obj>'s define <arg>two</arg>
+<obj>block</obj>'s, one named <obj>nil</obj> and one named whatever name you specify.
+As a result, you can use <obj>return</obj> (an abbreviation for <obj>return-from nil</obj>)
+to return from the innermost lexically containing <obj>prog</obj>, <obj>do</obj> or
+<obj>loop</obj> (or from a <obj>block nil</obj> if you happen to write one).
+This function is like <obj>assq</obj>, but it returns an additional value
+which is the index in the table of the entry it found.  For example,
+
+<lisp>(defun assqn (x table)
+  (do ((l table (cdr l))
+       (n 0 (1+ n)))
+      ((null l) nil)
+    (if (eq (caar l) x)
+        (return (values (car l) n)))))
+</lisp></p>
+
+<p>There is one exception to this: a <obj>prog</obj>, <obj>do</obj> or <obj>loop</obj> with
+name <obj>t</obj> defines only the block named <obj>t</obj>, no block named <obj>nil</obj>.
+The compiler used to make use of this feature in expanding certain built-in
+constructs into others.
+</p>
+<definition><define key="block-fun" name="block" type="spec"><args>name body...</args>
+</define>
+
+<description>Executes <arg>body</arg>, returning the values of the last form in <arg>body</arg>,
+but permitting non-local exit using <obj>return-from</obj> forms present
+lexically within <arg>body</arg>.  <arg>name</arg> is not evaluated, and is used
+to match up <obj>return-from</obj> forms with their <obj>block</obj>'ss.
+
+<lisp>(block foo
+  (return-from foo 24) t) =&gt; 24
+(block foo t) =&gt; t
+</lisp></description></definition><definition><define key="return-from-fun" name="return-from" type="spec"><args>name values</args>
+</define>
+
+<description>Performs a non-local exit from the innermost lexically containing
+<obj>block</obj> whose name is <arg>name</arg>.  <arg>name</arg> is not evaluated.
+When the compiler is used, <obj>return-from</obj>'s are matched up with
+<obj>block</obj>'s at compile time.
+
+<arg>values</arg> is evaluated and its values
+become the values of the exited <obj>block</obj> form.
+
+A <obj>return-from</obj> form may appear as or inside an argument to a regular
+function, but if the <obj>return-from</obj> is executed then the function will never
+actually be called.  For example,
+
+<lisp>(block done
+  (foo (if a (return-from done t) nil)))
+</lisp><obj>foo</obj> is actually called only if <obj>a</obj>'s value is <obj>nil</obj>.
+This style of coding is not recommended when <obj>foo</obj> is actually a function.
+
+<obj>return-from</obj> can also be used with zero value forms, or with several
+value forms.  Then <arg>one</arg> value is returned from each value form.
+Originally <obj>return-from</obj> always returned only one value from each
+value form, even when there was only one value form.  Passing
+back all the values when there is a single <arg>values</arg> form is a later
+change, which is also the Common Lisp standard.  In fact, the single
+value form case is much more powerful and subsumes all the others.
+For example,
+
+<lisp>(return-from foo 1 2)
+<exdent amount="96"><caption>is equivalent to </caption>(return-from foo (values 1 2))
+</exdent><exdent amount="96"><caption>and </caption>(return-from foo)
+</exdent><exdent amount="96"><caption>is equivalent to </caption>(return-from foo (values))
+</exdent></lisp>It is unfortunate that the case of one value form is treated differently
+from all other cases, but the power of being able to propagate any
+number of values from a single form is worth it.
+
+To return precisely one value, use <obj>(return-from foo (values <arg>form</arg>))</obj>.
+It is legal to write simply <obj>(return-from foo)</obj>, which returns no
+values from the <obj>block</obj>.
+See <ref chapter="3" definition-in-file="fd-eva" key="multiple-value" section="7" title="Multiple Values" type="section"></ref> for more information.
+</description></definition><definition><define key="return-fun" name="return" type="spec"><args>values</args>
+</define>
+
+<description>Is equivalent to <obj>(return-from nil <arg>values</arg>)</obj>.
+It returns from a <obj>block</obj> whose name is <obj>nil</obj>.
+
+In addition, <obj>break</obj> (see <ref definition-in-file="fd-hac" key="break-fun" title="Function break" type="fun"></ref>) recognizes the typed-in form
+<obj>(return <arg>value</arg>)</obj> specially.  <obj>break</obj> evaluates <arg>value</arg>
+and returns it. 
+</description></definition><definition><define key="return-list-fun" name="return-list" type="spec"><args>list</args>
+</define>
+
+<description>This function is like <obj>return</obj> except that each element of <arg>list</arg>
+is returned as a separate value from the <obj>block</obj> that is exited.
+
+<obj>return-list</obj> is obsolete, since <obj>(return (values-list <arg>list</arg>))</obj>
+does the same thing.
+</description></definition></section><a name="go-to"></a>
+
+
+<section chapter-number="4" name="go-to" number="5" title="Tags and Gotos"><index-entry index="concepts" title="prog tag"></index-entry>
+
+<index-entry index="concepts" title="tag"></index-entry>
+
+<index-entry index="concepts" title="go to"></index-entry>
+
+<p>Jumping to a label or <arg>tag</arg> is another kind of static non-local exit.  Compared with
+<obj>return-from</obj>, it allows more flexibility in choosing where to send
+control to, but does not allow values to be sent along.  This is because
+the tag does not have any way of saying what to <arg>do</arg> with any
+values.
+</p>
+
+<index-entry index="concepts" title="statement"></index-entry>
+
+<p>To define a tag, the <obj>tagbody</obj> special form is used.
+In the body of a <obj>tagbody</obj>, all lists are treated as forms to be
+evaluated (called <arg>statements</arg> when they occur in this context).
+If no goto happens, all the forms are evaluated in sequence
+and then the <obj>tagbody</obj> form returns <obj>nil</obj>.  Thus, the statements
+are evaluated only for effect.
+</p>
+
+<p>An element of the <obj>tagbody</obj>'s body which is a symbol is not a statement
+but a tag instead.  It identifies a place in the sequence of statements
+which you can go to.  Going to a tag is accomplished by the form
+<obj>(go <arg>tag</arg>)</obj>, executed at any point lexically within the <obj>tagbody</obj>.
+</p>
+
+<p><obj>go</obj> transfers control immediately to the first statement following
+<arg>tag</arg> in its <obj>tagbody</obj>, pausing only to deal with any
+<obj>unwind-protect</obj>s that are being exited as a result.  If there are
+no more statements after <arg>tag</arg> in its <obj>tagbody</obj>, then that <obj>tagbody</obj>
+returns <obj>nil</obj> immediately.
+</p>
+
+<p>All lexically containing <obj>tagbody</obj>'s are eligible to contain the
+specified tag, with the innermost <obj>tagbody</obj> taking priority.  If no
+suitable tag is found, an error is signaled.  The compiler matches
+<obj>go</obj>'s with tags at compile time and issues a compiler warning if no
+tag is found.  Example:
+
+<lisp>(block nil
+  (tagbody
+    (setq x <arg>some frob</arg>)
+  loop
+    <arg>do something</arg>
+    (if <arg>some predicate</arg> (go endtag))
+    <arg>do something more</arg>
+    (if (minusp x) (go loop))
+  endtag
+    (return z)))
+</lisp>is a kind of iteration made out of go-to's.  This
+<obj>tagbody</obj> can never exit normally because the <obj>return</obj> in the last
+statement takes control away from it.  This use of a <obj>return</obj> and <obj>block</obj>
+is how one encapsulates a <obj>tagbody</obj> to produce a non-<obj>nil</obj> value.
+</p>
+
+<p>It works to <obj>go</obj> from an internal <obj>lambda</obj> function to a tag
+in a lexically containing function, as in
+</p>
+
+<lisp>(defun foo (a)
+  (tagbody
+   t1
+    (bar #'(lambda () (go t1)))))
+</lisp><nopara></nopara>
+<p>If <obj>bar</obj> ever invokes its argument, control goes to <obj>t1</obj> and
+<obj>bar</obj> is invoked anew.  Not very useful, but it illustrates the technique.
+</p>
+<definition><define key="tagbody-fun" name="tagbody" type="spec"><args>statements-and-tags...</args>
+</define>
+
+<description>Executes all the elements of <arg>statements-and-tags</arg> which are lists (the statements),
+and then returns <obj>nil</obj>.  But meanwhile, all elements of <arg>statements-and-tags</arg>
+which are symbols (the tags) are available for use with <obj>go</obj> in any of the
+statements.  Atoms other than symbols are meaningless in a <obj>tagbody</obj>.
+
+The reason that <obj>tagbody</obj> returns <obj>nil</obj> rather than the value of the last
+statement is that the designers of Common Lisp decided that one could not
+reliably return a value from the <obj>tagbody</obj> by writing it as the last statement
+since some of the time the expression for the desired value would be a symbol
+rather than a list, and then it would be taken as a tag rather than the last statement
+and it would not work.
+</description></definition><definition><define key="go-fun" name="go" type="spec"><args>tag</args>
+</define>
+
+<description>The <obj>go</obj> special form is used to ``go-to'' a tag defined
+in a lexically containing <obj>tagbody</obj> form (or other form which
+implicitly expands into a <obj>tagbody</obj>, such as <obj>prog</obj>, <obj>do</obj> or <obj>loop</obj>).
+<arg>tag</arg> must be a symbol.  It is not evaluated.
+</description></definition><definition>
+<define key="prog-fun" name="prog" type="spec"></define>
+
+<description><obj>prog</obj> is an archaic special form which provides temporary variables,
+static non-local exits, and tags for <obj>go</obj>.  These aspects of <obj>prog</obj>
+were individually abstracted out to inspire <obj>let</obj>, <obj>block</obj> and
+<obj>tagbody</obj>.  Now <obj>prog</obj> is obsolete, as it is much cleaner to use
+<obj>let</obj>, <obj>block</obj>, <obj>tagbody</obj> or all three of them, or <obj>do</obj> or
+<obj>loop</obj>.  But <obj>prog</obj> appears in so many programs that it cannot be
+eliminated.
+
+A typical <obj>prog</obj> looks like <obj>(prog (<arg>variables</arg>...) <arg>body</arg>...)</obj>,
+which is equivalent to
+
+<lisp>(block nil
+  (let (<arg>variables</arg>...)
+    (tagbody <arg>body</arg>...)))
+</lisp>
+If the first subform of a <obj>prog</obj> is a non-<obj>nil</obj> symbol (rather than
+a list of variables), it is the name of the <obj>prog</obj>, and <obj>return-from</obj>
+(see <ref definition-in-file="fd-flo" key="return-from-fun" title="Special Form return-from" type="spec"></ref>) can be used to return from it.  A <arg>named prog</arg>
+looks like
+
+<lisp>(prog <arg>name</arg> (<arg>variables</arg>...) <arg>body</arg>...)
+<exdent amount="96"><caption>and is equivalent to </caption>(block <arg>name</arg>
+  (block nil
+    (let (<arg>variables</arg>...)
+      (tagbody <arg>body</arg>...))))
+</exdent></lisp></description></definition><definition>
+<define key="prog*-fun" name="prog*" type="spec"></define>
+
+<description>The <obj>prog*</obj> special form is almost the same as <obj>prog</obj>.  The only
+difference is that the binding and initialization of the temporary
+variables is done <arg>sequentially</arg>, so each one can depend on the
+previous ones.  Thus, the equivalent code would use <obj>let*</obj> rather
+than <obj>let</obj>.
+</description></definition></section><a name="Dynamic Non-Local Exits"></a>
+
+
+<section chapter-number="4" name="Dynamic Non-Local Exits" number="6" title="Dynamic Non-Local Exits"><index-entry index="concepts" title="dynamic non-local exit"></index-entry>
+
+<index-entry index="concepts" title="non-local exit"></index-entry>
+
+<index-entry index="concepts" title="catch"></index-entry>
+
+<index-entry index="concepts" title="throw"></index-entry>
+
+<index-entry index="concepts" title="tag"></index-entry>
+<definition><define key="catch-fun" name="catch" type="spec"><args>tag body...</args>
+</define>
+
+<description><obj>catch</obj> is a special form used with the <obj>throw</obj> function to do
+non-local exits.  First <arg>tag</arg> is evaluated; the result is called the <arg>tag</arg>
+of the <obj>catch</obj>.  Then the <arg>body</arg> forms are evaluated sequentially,
+and the values of the last form are returned.  However, if,
+during the evaluation of the body, the
+function <obj>throw</obj> is called with the same tag as the tag of the
+<obj>catch</obj>, then the evaluation of the body is aborted, and the
+<obj>catch</obj> form immediately returns the values of the second
+argument to <obj>throw</obj> without further evaluating the current <arg>body</arg> form or
+the rest of the body.
+
+The <arg>tag</arg>'s are used to match up <obj>throw</obj>'s with <obj>catch</obj>'s. 
+<obj>(catch 'foo <arg>form</arg>)</obj> catches a <obj>(throw 'foo <arg>form</arg>)</obj> but
+not a <obj>(throw 'bar <arg>form</arg>)</obj>.  It is an error if <obj>throw</obj> is done
+when there is no suitable <obj>catch</obj> (or <obj>catch-all</obj>; see below).
+
+Any Lisp object may be used as a <obj>catch</obj> tag.
+The values <obj>t</obj> and <obj>nil</obj> for <arg>tag</arg> are special: a <obj>catch</obj> whose
+tag is one of these values catches throws regardless of tag.  These are only
+for internal use by <obj>unwind-protect</obj> and <obj>catch-all</obj> respectively.
+The only difference between <obj>t</obj> and <obj>nil</obj> is in the error checking;
+<obj>t</obj> implies that after a ``cleanup handler'' is executed control will be
+thrown again to the same tag, therefore it is an error if a specific
+catch for this tag does not exist higher up in the stack.  With <obj>nil</obj>,
+the error check isn't done.  Example:
+
+<lisp>(catch 'negative
+   (values
+     (mapcar #'(lambda (x) 
+                 (cond ((minusp x)
+                        (throw 'negative 
+                          (values x :negative)))
+                       (t (f x)) )))
+             y)
+     :positive))
+</lisp>returns a list of <obj>f</obj> of each element of <obj>y</obj>, and <obj>:positive</obj>, if they are all
+positive, otherwise the first negative member of <obj>y</obj>, and <obj>:negative</obj>.
+</description></definition><definition><define key="catch-continuation-fun" name="catch-continuation" type="mac"><args>tag throw-cont non-throw-cont body...</args>
+</define><define key="catch-continuation-if-fun" name="catch-continuation-if" type="mac"><args>cond-form tag throw-cont non-throw-cont body...</args>
+</define>
+
+<description>The <obj>catch-continuation</obj> special form makes it convenient to
+discriminate whether exit is normal or due to a throw.
+
+The <arg>body</arg> is executed inside a <obj>catch</obj> on <arg>tag</arg> (which is
+evaluated).  If <arg>body</arg> returns normally, the function
+<arg>non-throw-cont</arg> is called, passing all the values returned by the
+last form in <arg>body</arg> as arguments.  This function's values are returned
+from the <obj>catch-continuation</obj>.
+
+If on the other hand a throw to <arg>tag</arg> occurs, the values thrown
+are passed to the function <arg>throw-cont</arg>, and its values are
+returned.
+
+If a continuation is explicitly written as <obj>nil</obj>, it is
+not called at all.  The arguments that would have been passed to it are
+returned instead.  This is equivalent to using <obj>values</obj> as the
+function; but explicit <obj>nil</obj> is optimized, so use that.
+
+<obj>catch-continuation-if</obj> differs only in that the catch is not done if
+the value of the <arg>cond-form</arg> is <obj>nil</obj>.  In this case, the non-throw
+continuation if any is always called.
+
+In the general case, consing is necessary to record the multiple values,
+but if a continuation is an explicit <obj>#'(lambda ...)</obj> with a
+fixed number of arguments, or if a continuation is <obj>nil</obj>, it is open
+coded and the consing is avoided.
+</description></definition><definition><define key="throw-fun" name="throw" type="spec"><args>tag values-form</args>
+</define>
+
+<description><obj>throw</obj> is the primitive for exiting from a surrounding <obj>catch</obj>.
+<arg>tag</arg> is evaluated, and the result is matched (with <obj>eq</obj>) against
+the tags of all active <obj>catch</obj>'es; the innermost matching one is exited.
+If no matching <obj>catch</obj> is dynamically active, an error is signaled.
+
+All the values of <arg>values-form</arg> are returned from the exited <obj>catch</obj>.
+
+<obj>catch</obj>'es with tag <obj>nil</obj> always match any <obj>throw</obj>.  They are
+really <obj>catch-all</obj>'s.  So do <obj>catch</obj>'es with tag <obj>t</obj>, which are
+<obj>unwind-protect</obj>'s, but if the only matching <obj>catch</obj>'es are these
+then an error is signaled anyway.  This is because an <obj>unwind-protect</obj>
+always throws again after its cleanup forms are finished; if there
+is nothing to catch after the last <obj>unwind-protect</obj>, an error will
+happen then, and it is better to detect the error sooner.
+
+The values <obj>t</obj>, <obj>nil</obj>, and <obj>0</obj> for <arg>tag</arg> are reserved and used
+for internal purposes.  <obj>nil</obj> may not be used, because it would cause
+confusion in handling of <obj>unwind-protect</obj>'s.  <obj>t</obj> may only be
+used with <obj>*unwind-stack</obj>.  <obj>0</obj> and <obj>nil</obj> are used internally when
+returning out of an <obj>unwind-protect</obj>.
+</description></definition><definition><define key="*catch-fun" name="*catch" type="mac"><args>form tag</args>
+</define><define key="*throw-fun" name="*throw" type="mac"><args>form tag</args>
+</define>
+
+<description>Old, obsolete names for <obj>catch</obj> and <obj>throw</obj>.
+</description></definition><definition><define key="sys:throw-tag-not-seen-condition" name="sys:throw-tag-not-seen" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This is signaled when <obj>throw</obj> (or <obj>*unwind-stack</obj>) is used and
+there is no <obj>catch</obj> for the specified tag.  The condition instance
+supports these extra operations:
+
+<table><tbody><tr><td><obj>:tag</obj></td><td>The tag being thrown to.
+</td></tr><tr><td><obj>:value</obj></td><td>The value being thrown (the second argument to <obj>throw</obj>).
+</td></tr><tr><td><obj>:count</obj></td><td></td></tr><tr><td><obj>:action</obj></td><td>The additional two arguments given to <obj>*unwind-stack</obj>, if that was used.
+</td></tr></tbody></table>
+The error occurs in the environment of the <obj>throw</obj>; no unwinding has yet taken place.
+
+The proceed type <obj>:new-tag</obj> expects one argument, a tag to throw to instead.
+</description></definition>
+<index-entry index="concepts" title="unwinding a stack"></index-entry>
+<definition><define key="*unwind-stack-fun" name="*unwind-stack" type="fun"><args>tag value active-frame-count action</args>
+</define>
+
+<description>This is a generalization of <obj>throw</obj> provided for program-manipulating
+programs such as the debugger.
+
+<arg>tag</arg> and <arg>value</arg> are the same as the corresponding arguments to
+<obj>throw</obj>.
+
+A <arg>tag</arg> of <obj>t</obj> invokes a special feature whereby the entire stack is
+unwound, and then the function <arg>action</arg> is called (see below).  During
+this process <obj>unwind-protect</obj>'s receive control, but <obj>catch-all</obj>'s do
+not.  This feature is provided for the benefit of system programs which
+want to unwind a stack completely.
+
+<arg>active-frame-count</arg>, if non-<obj>nil</obj>, is the number of frames
+to be unwound.  The definition of a frame is implementation-dependent.
+If this counts down to zero before a suitable <obj>catch</obj>
+is found, the <obj>*unwind-stack</obj> terminates and
+<arg>that frame</arg> returns <arg>value</arg> to whoever called it.
+This is similar to Maclisp's <obj>freturn</obj> function.
+
+<index-entry index="functions" title="freturn"></index-entry>
+
+If <arg>action</arg> is non-<obj>nil</obj>, whenever the <obj>*unwind-stack</obj> would be
+ready to terminate (either due to <arg>active-frame-count</arg> or due to
+<arg>tag</arg> being caught as in <obj>throw</obj>), instead <arg>action</arg> is called
+with one argument, <arg>value</arg>.  If <arg>tag</arg> is <obj>t</obj>, meaning throw out
+the whole way, then the function <arg>action</arg> is not allowed to return.
+Otherwise the function <arg>action</arg> may return and its value will be
+returned instead of <arg>value</arg> from the <obj>catch</obj>--or from an arbitrary
+function if <arg>active-frame-count</arg> is in use.  In this case the
+<obj>catch</obj> does not return multiple values as it normally does when
+thrown to.  Note that it is often useful for <arg>action</arg> to be a
+stack-group.
+
+Note that if both <arg>active-frame-count</arg> and <arg>action</arg> are <obj>nil</obj>,
+<obj>*unwind-stack</obj> is identical to <obj>throw</obj>.
+</description></definition>
+<index-entry index="concepts" title="unwind protection"></index-entry>
+
+<index-entry index="concepts" title="cleanup handler"></index-entry>
+<definition><define key="unwind-protect-fun" name="unwind-protect" type="spec"><args>protected-form cleanup-form...</args>
+</define>
+
+<description>Sometimes it is necessary to evaluate a form and make sure that
+certain side-effects take place after the form is evaluated;
+a typical example is:
+
+<lisp>(progn
+   (turn-on-water-faucet)
+   (hairy-function 3 nil 'foo)
+   (turn-off-water-faucet))
+</lisp>
+The non-local exit facilities of Lisp create situations in which the
+above code won't work, however: if <obj>hairy-function</obj> should use
+<obj>throw</obj>, <obj>return</obj> or <obj>go</obj> to transfer control outside of the
+<obj>progn</obj> form, then <obj>(turn-off-water-faucet)</obj> will never be evaluated
+(and the faucet will presumably be left running).  This is particularly
+likely if <obj>hairy-function</obj> gets an error and the user tells the
+debugger to give up and flush the computation.
+
+In order to allow the above program to work, it can
+be rewritten using <obj>unwind-protect</obj> as follows:
+
+<lisp>(unwind-protect
+    (progn (turn-on-water-faucet)
+           (hairy-function 3 nil 'foo))
+  (turn-off-water-faucet))
+</lisp>If <obj>hairy-function</obj> transfers control out of the
+evaluation of the <obj>unwind-protect</obj>, the
+<obj>(turn-off-water-faucet)</obj> form is evaluated during the
+transfer of control, before control arrives at the
+<obj>catch</obj>, <obj>block</obj> or <obj>go</obj> tag to which it is being transferred.
+
+If the <obj>progn</obj> returns normally, then the <obj>(turn-off-water-faucet)</obj>
+is evaluated, and the <obj>unwind-protect</obj> returns the result of the <obj>progn</obj>.
+
+
+The general form of <obj>unwind-protect</obj> looks like
+
+<lisp>(unwind-protect
+    <arg>protected-form</arg>
+  <arg>cleanup-form1</arg>
+  <arg>cleanup-form2</arg>
+  ...)
+</lisp><arg>protected-form</arg> is evaluated, and when it returns or when it attempts
+to transfer control out of the <obj>unwind-protect</obj>, the <arg>cleanup-forms</arg>
+are evaluated.  The value of the <obj>unwind-protect</obj> is the value of
+<arg>protected-form</arg>.  Multiple values returned by the <arg>protected-form</arg>
+are propagated back through the <obj>unwind-protect</obj>.
+
+The cleanup forms are run in the variable-binding environment that you
+would expect: that is, variables bound outside the scope of the
+<obj>unwind-protect</obj> special form can be accessed, but variables bound
+inside the <arg>protected-form</arg> can't be.  In other words, the stack is
+unwound to the point just outside the <arg>protected-form</arg>, then the
+cleanup handler is run, and then the stack is unwound some more.
+</description></definition><definition><define key="catch-all-fun" name="catch-all" type="mac"><args>body...</args>
+</define>
+
+<description><obj>(catch-all <arg>form</arg>)</obj> is like <obj>(catch <arg>some-tag form</arg>)</obj>
+except that it catches a
+<obj>throw</obj> to any tag at all.  Since the tag thrown to
+is one of the returned values, the caller of <obj>catch-all</obj> may continue 
+throwing to that tag if he wants.  The one thing that <obj>catch-all</obj>
+does not catch is a <obj>*unwind-stack</obj> with a tag of <obj>t</obj>.
+<obj>catch-all</obj> is a macro which expands into <obj>catch</obj> with a <arg>tag</arg> of <obj>nil</obj>.
+
+<obj>catch-all</obj> returns all the values thrown to it, or returned by the
+body, plus three additional values: the tag thrown to, the
+active-frame-count, and the action.  The tag value is <obj>nil</obj> if the
+body returned normally.  The last two values are the third and fourth
+arguments to <obj>*unwind-stack</obj> (see <ref definition-in-file="fd-flo" key="*unwind-stack-fun" title="Function *unwind-stack" type="fun"></ref>) if that was
+used, or <obj>nil</obj> if an ordinary <obj>throw</obj> was done or if the body
+returned normally.
+
+If you think you want this, most likely you are mistaken and you really
+want <obj>unwind-protect</obj>.
+</description></definition></section><a name="list-and-tree"></a>
+
+
+<section chapter-number="4" name="list-and-tree" number="7" title="Mapping"><index-entry index="concepts" title="mapping"></index-entry>
+<definition><define key="map-fun" name="map" type="fun"><args>fcn <standard>&amp;rest</standard> lists</args>
+</define><define key="mapl-fun" name="mapl" type="fun"><args>fcn <standard>&amp;rest</standard> lists</args>
+</define><define key="mapc-fun" name="mapc" type="fun"><args>fcn <standard>&amp;rest</standard> lists</args>
+</define><define key="maplist-fun" name="maplist" type="fun"><args>fcn <standard>&amp;rest</standard> lists</args>
+</define><define key="mapcar-fun" name="mapcar" type="fun"><args>fcn <standard>&amp;rest</standard> lists</args>
+</define><define key="mapcon-fun" name="mapcon" type="fun"><args>fcn <standard>&amp;rest</standard> lists</args>
+</define><define key="mapcan-fun" name="mapcan" type="fun"><args>fcn <standard>&amp;rest</standard> lists</args>
+</define>
+
+<description>
+Mapping is a type of iteration in which a function is successively
+applied to pieces of a list.  There are several options for the way in
+which the pieces of the list are chosen and for what is done with the
+results returned by the applications of the function.
+
+For example, <obj>mapcar</obj> operates on successive <arg>elements</arg> of the list. 
+As it goes down the list, it calls the function giving it an element
+of the list as its one argument:  first the car, then the
+cadr, then the caddr, etc., continuing until the end of the
+list is reached.  The value returned by <obj>mapcar</obj> is a list of the
+results of the successive calls to the function.  An example of the
+use of <obj>mapcar</obj> would be <obj>mapcar</obj>'ing the function <obj>abs</obj> over
+the list <obj>(1 -2 -4.5 6.0e15 -4.2)</obj>, which would be written as
+<obj>(mapcar (function abs) '(1 -2 -4.5 6.0e15 -4.2))</obj>.
+The result is <obj>(1 2 4.5 6.0e15
+4.2)</obj>.  
+
+In general, the mapping functions take any number of arguments.  For example,
+
+<lisp>(mapcar <arg>f</arg> <arg>x1</arg> <arg>x2</arg> ... <arg>xn</arg>)
+</lisp>In this case <arg>f</arg> must be a function of <arg>n</arg> arguments.
+<obj>mapcar</obj> proceeds
+down the lists <arg>x1, x2, ..., xn</arg> in parallel.
+The first argument to <arg>f</arg>
+comes from <arg>x1</arg>, the second from <arg>x2</arg>, etc.
+The iteration stops as soon as any of the lists is exhausted.
+(If there are no lists at all, then there are no lists to be exhausted,
+so <arg>f</arg> is called repeatedly without end.  This is an
+obscure way to write an infinite loop.  It is supported for
+consistency.)  If you want to call a function of many arguments
+where one of the arguments successively takes on the values of the elements
+of a list and the other arguments are constant, you can use a circular
+list for the other arguments to <obj>mapcar</obj>.  The function <obj>circular-list</obj>
+is useful for creating such lists; see <ref definition-in-file="fd-con" key="circular-list-fun" title="Function circular-list" type="fun"></ref>.
+
+There are five other mapping functions besides <obj>mapcar</obj>.  <obj>maplist</obj>
+is like <obj>mapcar</obj> except that the function is applied to the list and
+successive cdrs of that list rather than to successive elements of the
+list.  <obj>map</obj> (or <obj>mapl</obj>) and <obj>mapc</obj> are like <obj>maplist</obj> and <obj>mapcar</obj>
+respectively, except that they don't return any useful value.  These
+functions are used when the function is being called merely for its
+side-effects, rather than its returned values.  <obj>mapcan</obj> and
+<obj>mapcon</obj> are like <obj>mapcar</obj> and <obj>maplist</obj> respectively, except
+that they combine the results of the function using <obj>nconc</obj> instead
+of <obj>list</obj>.  That is, <obj>mapcon</obj> could have been defined by
+
+<lisp>(defun mapcon (f x y)
+    (apply 'nconc (maplist f x y)))
+</lisp>Of course, this definition is less general than the real one.
+
+Sometimes a <obj>do</obj> or a straightforward recursion is preferable to a
+map;  however, the mapping functions should be used wherever they
+naturally apply because this increases the clarity of the code. 
+
+Often <arg>f</arg> is a lambda-expression, rather than a symbol;
+for example,
+
+<lisp>(mapcar (function (lambda (x) (cons x something)))
+        some-list)
+</lisp>
+The functional argument to a mapping function must be a function, acceptable
+to <obj>apply</obj>--it cannot be a macro or the name of a special form.
+
+
+<group>Here is a table showing the relations between
+the six map functions.
+<pre><example>
+                              applies function to
+
+                         |  successive  |   successive  |
+                         |   sublists   |    elements   |
+          ---------------+--------------+---------------+
+              its own    |              |               | 
+              second     |     map(l)   |     mapc      |
+             argument    |              |               |
+          ---------------+--------------+---------------+
+            list of the  |              |               |
+returns      function    |    maplist   |    mapcar     |
+              results    |              |               |
+          ---------------+--------------+---------------+
+            nconc of the |              |               |
+              function   |    mapcon    |    mapcan     |
+              results    |              |               |
+          ---------------+--------------+---------------+</example>
+</pre>
+Note that <obj>map</obj> and <obj>mapl</obj> are synonymous.  <obj>map</obj> is the
+traditional name of this function.  <obj>mapl</obj> is the Common Lisp name.
+In Common Lisp, the function <obj>map</obj> does something different and
+incompatible; see <obj>cli:map</obj>, <ref definition-in-file="generic" key="cli:map-fun" title="Function cli:map" type="fun"></ref>.  <obj>mapl</obj> works the same
+in traditional Zetalisp and Common Lisp.
+
+        There are also functions (<obj>mapatoms</obj> and <obj>mapatoms-all</obj>)
+for mapping over all symbols in certain
+packages.  See the explanation of packages (<ref chapter="28" definition-in-file="packd" key="package" section="0" title="Packages" type="section"></ref>).
+
+You can also do what the mapping functions do in a different way by using
+<obj>loop</obj>.  See <ref definition-in-file="looptm" key="loop-fun" type="page"></ref>.
+</group></description></definition></section></chapter>
+</document-part>

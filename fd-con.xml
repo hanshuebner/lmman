@@ -1,0 +1,2357 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="cons-chapter"></a>
+<chapter name="cons-chapter" number="5" title="Manipulating List Structure"><index-entry index="concepts" title="cons"></index-entry>
+
+<index-entry index="concepts" title="car"></index-entry>
+
+<index-entry index="concepts" title="cdr"></index-entry>
+
+<index-entry index="concepts" title="list"></index-entry>
+
+<index-entry index="concepts" title="tree"></index-entry>
+
+<index-entry index="concepts" title="circular list"></index-entry>
+
+<index-entry index="concepts" title="elements (of a list)"></index-entry>
+
+<index-entry index="concepts" title="dotted list"></index-entry>
+
+<p>This chapter discusses functions that manipulate conses, and
+higher-level structures made up of conses such as lists and trees.
+It also discusses hash tables and resources, which are related
+facilities.
+</p>
+
+<p>A <arg>cons</arg> is a primitive Lisp data object that is extremely simple: it
+knows about two other objects, called its <arg>car</arg> and its <arg>cdr</arg>.
+</p>
+
+<p>A list is recursively defined to be the symbol <obj>nil</obj>, or a cons whose
+cdr is a list.  A typical list is a chain of conses: the cdr of each is
+the next cons in the chain, and the cdr of the last one is the symbol
+<obj>nil</obj>.  The cars of each of these conses are called the <arg>elements</arg>
+of the list.  A list has one element for each cons; the empty list,
+<obj>nil</obj>, has no elements at all.  Here are the printed representations
+of some typical lists:
+
+<lisp>(foo bar)                 ;This list has two elements.
+(a (b c d) e)             ;This list has three elements.
+</lisp>Note that the second list has three elements: <obj>a</obj>, <obj>(b c d)</obj>, and <obj>e</obj>.
+The symbols <obj>b</obj>, <obj>c</obj>, and <obj>d</obj> are <arg>not</arg> elements of the list itself.
+(They are elements of the list which is the second element of the original
+list.)
+</p>
+
+<p>A <arg>dotted list</arg> is like a list except that the cdr of the last cons does
+not have to be <obj>nil</obj>.  This name comes from the printed
+representation, which includes a ``dot'' character (period).  Here is an example:
+
+<lisp>(a b . c)
+</lisp>This dotted list is made of two conses.  The car of the first cons is the
+symbol <obj>a</obj>, and the cdr of the first cons is the second cons.  The car of
+the second cons is the symbol <obj>b</obj>, and the cdr of the second cons is
+the symbol <obj>c</obj>.
+</p>
+
+<p>A tree is any data structure made up of conses whose cars and cdrs are
+other conses.  The following are all printed representations of trees:
+
+<lisp>(foo . bar)
+((a . b) (c . d))
+((a . b) (c d e f (g . 5) s) (7 . 4))
+</lisp></p>
+
+<p>These definitions are not mutually exclusive.  Consider a cons whose
+car is <obj>a</obj> and whose cdr is <obj>(b (c d) e)</obj>.  Its printed
+representation is
+
+<lisp>(a b (c d) e)
+</lisp>It can be thought of and treated as a cons, or as a list of four
+elements, or as a tree containing six conses.  You can even think of it
+as a dotted list whose last cons just happens to have <obj>nil</obj> as a
+cdr.  Thus, lists and dotted lists and trees are not fundamental data
+types; they are just ways of thinking about structures of conses.
+</p>
+
+<p>A circular list is like a list except that the cdr of the last cons,
+instead of being <obj>nil</obj>, is the first cons of the list.  This means that
+the conses are all hooked together in a ring, with the cdr of each cons
+being the next cons in the ring.  These are legitimate Lisp objects,
+but dealing with them requires special techniques; straightforward
+tree-walking recursive functions often loop infinitely when given a
+circular list.  The printer is is an example of both aspects of the
+handling of circular lists: if <obj>*print-circle*</obj> is non-<obj>nil</obj> the
+printer uses special techniques to detect circular structure and print
+it with a special encoding, but if <obj>*print-circle*</obj> is <obj>nil</obj> the
+printer does not check for circularity and loops infinitely unless
+<obj>*print-level*</obj> or <obj>*print-length*</obj> imposes a ``time limit''.
+See <ref definition-in-file="rdprt" key="*print-circle*-var" title="Variable *print-circle*" type="var"></ref> for more information on <obj>*print-circle*</obj>
+and related matters.
+</p>
+
+<p>The Lisp Machine internally uses a storage scheme called <arg>cdr-coding</arg> to
+represent conses.  This scheme is intended to reduce the amount of storage
+used in lists.  The use of cdr-coding is invisible to programs except in
+terms of storage efficiency; programs work the same way whether or not
+lists are cdr-coded or not.  Several of the functions below mention how
+they deal with cdr-coding.  You can completely ignore all this if you want.
+However, if you are writing a program that allocates a lot of conses and
+you are concerned with storage efficiency, you may want to learn about the
+cdr-coded representation and how to control it.  The cdr-coding scheme is
+discussed in <ref chapter="5" definition-in-file="fd-con" key="cdr-code" section="4" title="Cdr-Coding" type="section"></ref>.
+</p>
+<a name="Conses"></a>
+
+<section chapter-number="5" name="Conses" number="1" title="Conses"><definition><define key="car-fun" name="car" type="fun"><args>x</args>
+</define>
+
+<description>Returns the car of <arg>x</arg>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(car '(a b c)) =&gt; a
+</exdent></lisp></description></definition><definition><define key="cdr-fun" name="cdr" type="fun"><args>x</args>
+</define>
+
+<description>Returns the cdr of <arg>x</arg>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(cdr '(a b c)) =&gt; (b c)
+</exdent></lisp></description></definition>
+<p indent="1">        Officially <obj>car</obj> and <obj>cdr</obj> are only applicable to conses and locatives.
+However, as a matter of convenience, <obj>car</obj> and <obj>cdr</obj> of <obj>nil</obj> return <obj>nil</obj>.
+<obj>car</obj> or <obj>cdr</obj> of anything else is an error.
+</p>
+<definition><define key="c...r-fun" name="c...r" type="fun"><args>x</args>
+</define>
+
+
+<description><index-entry index="functions" title="caaaar"></index-entry>
+
+<index-entry index="functions" title="caaadr"></index-entry>
+
+<index-entry index="functions" title="caaar"></index-entry>
+
+<index-entry index="functions" title="caadar"></index-entry>
+
+<index-entry index="functions" title="caaddr"></index-entry>
+
+<index-entry index="functions" title="caadr"></index-entry>
+
+<index-entry index="functions" title="caar"></index-entry>
+
+<index-entry index="functions" title="cadaar"></index-entry>
+
+<index-entry index="functions" title="cadadr"></index-entry>
+
+<index-entry index="functions" title="cadar"></index-entry>
+
+<index-entry index="functions" title="caddar"></index-entry>
+
+<index-entry index="functions" title="cadddr"></index-entry>
+
+<index-entry index="functions" title="caddr"></index-entry>
+
+<index-entry index="functions" title="cadr"></index-entry>
+
+<index-entry index="functions" title="cdaaar"></index-entry>
+
+<index-entry index="functions" title="cdaadr"></index-entry>
+
+<index-entry index="functions" title="cdaar"></index-entry>
+
+<index-entry index="functions" title="cdadar"></index-entry>
+
+<index-entry index="functions" title="cdaddr"></index-entry>
+
+<index-entry index="functions" title="cdadr"></index-entry>
+
+<index-entry index="functions" title="cdar"></index-entry>
+
+<index-entry index="functions" title="cddaar"></index-entry>
+
+<index-entry index="functions" title="cddadr"></index-entry>
+
+<index-entry index="functions" title="cddar"></index-entry>
+
+<index-entry index="functions" title="cdddar"></index-entry>
+
+<index-entry index="functions" title="cddddr"></index-entry>
+
+<index-entry index="functions" title="cdddr"></index-entry>
+
+<index-entry index="functions" title="cddr"></index-entry>
+All of the compositions of up to four <obj>car</obj>'s and <obj>cdr</obj>'s are
+defined as functions in their own right.  The names of these functions
+begin with <obj>c</obj> and end with <obj>r</obj>, and in between is a sequence of
+<obj>a</obj>'s and <obj>d</obj>'s corresponding to the composition performed by the
+function.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(cddadr x) <standard>is the same as</standard> (cdr (cdr (car (cdr x))))
+</exdent></lisp>The error checking for these functions is exactly the same as for <obj>car</obj> and <obj>cdr</obj>
+above.
+</description></definition><definition><define key="cons-fun" name="cons" type="fun"><args>x y</args>
+</define>
+
+<description><obj>cons</obj> is the primitive function to create a new cons, whose
+car is <arg>x</arg> and whose cdr is <arg>y</arg>.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(cons 'a 'b) =&gt; (a . b)
+(cons 'a (cons 'b (cons 'c nil))) =&gt; (a b c)
+(cons 'a '(b c d)) =&gt; (a b c d)
+</exdent></lisp></description></definition><definition><define key="ncons-fun" name="ncons" type="fun"><args>x</args>
+</define>
+
+<description><obj>(ncons <arg>x</arg>)</obj> is the same as <obj>(cons <arg>x</arg> nil)</obj>.
+The name of the function is from ``nil-cons''.
+</description></definition><definition><define key="xcons-fun" name="xcons" type="fun"><args>x y</args>
+</define>
+
+<description><obj>xcons</obj> (``exchanged cons'') is like <obj>cons</obj> except that the order of
+the arguments is reversed.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(xcons 'a 'b) =&gt; (b . a)
+</exdent></lisp></description></definition><definition><define key="cons-in-area-fun" name="cons-in-area" type="fun"><args>x y area-number</args>
+</define>
+
+
+<description><index-entry index="concepts" title="area"></index-entry>
+Creates a cons in a specific <arg>area</arg>.  (Areas are
+an advanced feature of storage management, explained in chapter
+<ref chapter="17" definition-in-file="areas" key="area-chapter" title="Areas" type="chapter"></ref>; if you aren't interested in them, you can safely skip
+all this stuff).  The first two arguments are the same as the two
+arguments to <obj>cons</obj>,  and the third is the number of the area in which
+to create the cons.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(cons-in-area 'a 'b my-area) =&gt; (a . b)
+</exdent></lisp></description></definition><definition><define key="ncons-in-area-fun" name="ncons-in-area" type="fun"><args>x area-number</args>
+</define>
+
+<description><obj>(ncons-in-area <arg>x area-number</arg>)</obj> = <obj>(cons-in-area <arg>x</arg> nil <arg>area-number</arg>)</obj>
+</description></definition><definition><define key="xcons-in-area-fun" name="xcons-in-area" type="fun"><args>x y area-number</args>
+</define>
+
+<description><obj>(xcons-in-area <arg>x y area-number</arg>) = (cons-in-area <arg>y x area-number</arg>)</obj>
+</description></definition><definition><define key="push-fun" name="push" type="mac"><args>item place</args>
+</define>
+
+<description>Adds an element <arg>item</arg> to the front of a list that is stored in
+<arg>place</arg>.  A new cons is allocated whose car is <arg>item</arg> and
+whose cdr is the old contents of <arg>place</arg>.  This cons is stored
+into <arg>place</arg>.
+
+The form
+
+<lisp>(push (hairy-function x y z) variable)
+</lisp>replaces the commonly-used construct
+
+<lisp>(setq variable (cons (hairy-function x y z) variable))
+</lisp>and is intended to be more explicit and esthetic.
+
+<arg>place</arg> can be any form that <obj>setf</obj> can store into.
+For example,
+
+<lisp>(push x (get y z))
+ ==&gt; (putprop y (cons x (get y z)) z)
+</lisp>
+The returned value of <obj>push</obj> is not defined.
+</description></definition><definition><define key="pop-fun" name="pop" type="mac"><args>place</args>
+</define>
+
+<description>Removes an element from the front of the list that is stored in
+<arg>place</arg>.  It finds the cons in <arg>place</arg>, stores the cdr of the cons
+back into <arg>place</arg>, and returns the car of that cons.  <arg>place</arg>
+can be any form that <obj>setf</obj> can store into.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(setq x '(a b c))
+(pop x) =&gt; a
+x =&gt; (b c)
+</exdent></lisp></description></definition>
+<p indent="1">        The backquote reader macro facility is also generally useful
+for creating list structure, especially mostly-constant list structure,
+or forms constructed by plugging variables into a template.
+It is documented in the chapter on macros; see <ref chapter="19" definition-in-file="macros" key="macro" section="0" title="Macros" type="section"></ref>.
+</p>
+<definition><define key="car-location-fun" name="car-location" type="fun"><args>cons</args>
+</define>
+
+<description><obj>car-location</obj> returns a locative pointer to the cell containing
+the car of <arg>cons</arg>.
+</description></definition>
+<p>Note: there is no <obj>cdr-location</obj> function; it is difficult because of
+the cdr-coding scheme (see <ref chapter="5" definition-in-file="fd-con" key="cdr-code" section="4" title="Cdr-Coding" type="section"></ref>).  Instead, the cons itself
+serves as a kind of locative to its cdr (see <ref definition-in-file="fd-loc" key="contents-fun" title="Function contents" type="fun"></ref>).
+</p>
+
+<p>The functions <obj>rplaca</obj> and <obj>rplacd</obj> are used to make alterations
+in already-existing list structure; that is, to change the cars and
+cdrs of existing conses.  The structure is altered rather than copied.
+Exercise caution when using these functions, as strange side-effects
+can occur if they are used to modify portions of list structure which
+have become shared unbeknownst to the programmer.  The <obj>nconc</obj>,
+<obj>nreverse</obj>, <obj>nreconc</obj>, <obj>nbutlast</obj> and <obj>delq</obj> functions and
+others, described below, have the same property, because they call
+<obj>rplaca</obj> or <obj>rplacd</obj>.
+</p>
+<definition><define key="rplaca-fun" name="rplaca" type="fun"><args>x y</args>
+</define>
+
+<description>Changes the car of <arg>x</arg> to <arg>y</arg> and returns
+(the modified) <arg>x</arg>.  <arg>x</arg> must be a cons or a locative.  <arg>y</arg> may be any Lisp object.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(setq g '(a b c))
+(rplaca (cdr g) 'd) =&gt; (d c)
+<standard>Now</standard> g =&gt; (a d c)
+</exdent></lisp></description></definition><definition><define key="rplacd-fun" name="rplacd" type="fun"><args>x y</args>
+</define>
+
+<description>Changes the cdr of <arg>x</arg> to <arg>y</arg> and returns
+(the modified) <arg>x</arg>.  <arg>x</arg> must be a cons or a locative.  <arg>y</arg> may be any Lisp object.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(setq x '(a b c))
+(rplacd x 'd) =&gt; (a . d)
+<standard>Now</standard> x =&gt; (a . d)
+</exdent></lisp></description></definition>
+<p><obj>(setf (car <arg>x</arg>) <arg>y</arg>)</obj>
+and <obj>(setf (car <arg>x</arg>) <arg>y</arg>)</obj> are much like <obj>rplaca</obj> and <obj>rplacd</obj>,
+but they return <arg>y</arg> rather than <arg>x</arg>.
+</p>
+</section><a name="Lists"></a>
+
+<section chapter-number="5" name="Lists" number="2" title="Lists"><definition><define key="list-fun" name="list" type="fun"><args><standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Constructs and returns a list of its arguments.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(list 3 4 'a (car '(b . c)) (+ 6 -2)) =&gt; (3 4 a b 4)
+</exdent></lisp>
+
+<lisp><exdent amount="96"><caption><obj>list</obj> could have been defined by: </caption>(defun list (&amp;rest args)
+    (let ((list (make-list (length args))))
+      (do ((l list (cdr l))
+           (a args (cdr a)))
+          ((null a) list)
+        (rplaca l (car a)))))
+</exdent></lisp></description></definition><definition><define key="list*-fun" name="list*" type="fun"><args><standard>&amp;rest</standard> args</args>
+</define>
+
+<description><obj>list*</obj> is like <obj>list</obj> except that the last cons
+of the constructed list is dotted.  It must be given at least
+one argument.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(list* 'a 'b 'c 'd) =&gt; (a b c . d)
+</exdent></lisp>This is like
+
+<lisp>(cons 'a (cons 'b (cons 'c 'd)))
+</lisp>
+
+<lisp><exdent amount="96"><caption>More examples: </caption>(list* 'a 'b) =&gt; (a . b)
+(list* 'a) =&gt; a
+</exdent></lisp></description></definition><definition><define key="length-fun" name="length" type="fun"><args>list-or-array</args>
+</define>
+
+<description>Returns the length of <arg>list-or-array</arg>.  The length of a
+list is the number of elements in it; the number of times you can cdr it
+before you get a non-cons.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(length nil) =&gt; 0
+(length '(a b c d)) =&gt; 4
+(length '(a (b c) d)) =&gt; 3
+(length &quot;foobar&quot;) =&gt; 6
+</exdent></lisp><obj>length</obj> could have been defined by:
+
+<lisp>(defun length (x)
+  (if (arrayp x) (array-active-length x)
+    (do ((n 0 (1+ n))
+         (y x (cdr y)))
+        ((null y) n))))
+</lisp></description></definition><definition><define key="list-length-fun" name="list-length" type="fun"><args>list</args>
+</define>
+
+<description>Returns the length of <arg>list</arg>, or <obj>nil</obj> if <arg>list</arg> is circular.
+(The function <obj>length</obj> would loop forever if given a circular list.)
+</description></definition><definition><define key="first-fun" name="first" type="fun"><args>list</args>
+</define><define key="second-fun" name="second" type="fun"><args>list</args>
+</define><define key="third-fun" name="third" type="fun"><args>list</args>
+</define><define key="fourth-fun" name="fourth" type="fun"><args>list</args>
+</define><define key="fifth-fun" name="fifth" type="fun"><args>list</args>
+</define><define key="sixth-fun" name="sixth" type="fun"><args>list</args>
+</define><define key="seventh-fun" name="seventh" type="fun"><args>list</args>
+</define>
+
+<description>These functions take a list as an argument, and return the first,
+second, etc. element of the list.  <obj>first</obj> is identical to <obj>car</obj>,
+<obj>second</obj> is identical to <obj>cadr</obj>, and so on.  The reason these names
+are provided is that they make more sense when you are thinking of the
+argument as a list rather than just as a cons.
+</description></definition><definition><define key="rest-fun" name="rest" type="fun"><args>list</args>
+</define><define key="rest1-fun" name="rest1" type="fun"><args>list</args>
+</define><define key="rest2-fun" name="rest2" type="fun"><args>list</args>
+</define><define key="rest3-fun" name="rest3" type="fun"><args>list</args>
+</define><define key="rest4-fun" name="rest4" type="fun"><args>list</args>
+</define>
+
+<description><obj>rest<arg>n</arg></obj> returns the rest of the elements of a list, starting with
+element <arg>n</arg> (counting the first element as the zeroth).  Thus
+<obj>rest</obj> or <obj>rest1</obj> is identical to <obj>cdr</obj>, <obj>rest2</obj> is identical to <obj>cddr</obj>,
+and so on.  The reason these names are provided is that they make more
+sense when you are thinking of the argument as a list rather than just
+as a cons.
+</description></definition><definition><define key="endp-fun" name="endp" type="fun"><args>list</args>
+</define>
+
+<description>Returns <obj>t</obj> if <arg>list</arg> is <obj>nil</obj>, <obj>nil</obj> if <arg>list</arg> is a cons
+cell.  Signals an error if <arg>list</arg> is not a list.  This is the way
+Common Lisp recommends for terminating a loop which <obj>cdr</obj>'s down a list.
+However, Lisp Machine system functions generally prefer to test for the
+end of the list with <obj>atom</obj>; it is regarded as a feature that these
+functions do something useful for dotted lists.
+</description></definition><definition><define key="nth-fun" name="nth" type="fun"><args>n list</args>
+</define>
+
+<description><obj>(nth <arg>n</arg> <arg>list</arg>)</obj> returns the <arg>n</arg>'th element of <arg>list</arg>, where
+the zeroth element is the car of the list.
+If <arg>n</arg> is greater than the length of the list, <obj>nil</obj> is returned.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(nth 1 '(foo bar gack)) =&gt; bar
+(nth 3 '(foo bar gack)) =&gt; nil
+</exdent></lisp>
+Note: this is not the same as the InterLisp function called <obj>nth</obj>,
+which is similar to but not exactly the same as the Lisp Machine function
+<obj>nthcdr</obj>.
+Also, some people have used macros and functions called <obj>nth</obj> of their own in
+their Maclisp programs, which may not work the same way; be careful.
+
+
+<lisp><exdent amount="96"><caption><obj>nth</obj> could have been defined by: </caption>(defun nth (n list)
+  (do ((i n (1- i))
+       (l list (cdr l)))
+      ((zerop i) (car l))))
+</exdent></lisp></description></definition><definition><define key="nthcdr-fun" name="nthcdr" type="fun"><args>n list</args>
+</define>
+
+<description><obj>(nthcdr <arg>n</arg> <arg>list</arg>)</obj> cdrs <arg>list</arg> <arg>n</arg> times,
+and returns the result.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(nthcdr 0 '(a b c)) =&gt; (a b c)
+(nthcdr 2 '(a b c)) =&gt; (c)
+</exdent></lisp>In other words, it returns the <arg>n</arg>'th cdr of the list.
+If <arg>n</arg> is greater than the length of the list, <obj>nil</obj> is returned.
+
+This is similar to InterLisp's function <obj>nth</obj>, except that the
+InterLisp function is one-based instead of zero-based; see the
+InterLisp manual for details.
+<obj>nthcdr</obj> could have been defined by:
+
+<lisp>(defun nthcdr (n list)
+    (do ((i 0 (1+ i))
+         (list list (cdr list)))
+        ((= i n) list)))
+</lisp></description></definition><definition><define key="last-fun" name="last" type="fun"><args>list</args>
+</define>
+
+<description><obj>last</obj> returns the last cons of <arg>list</arg>.  If <arg>list</arg> is <obj>nil</obj>, it
+returns <obj>nil</obj>.  Note that <obj>last</obj> is unfortunately <arg>not</arg> analogous
+to <obj>first</obj> (<obj>first</obj> returns the first element of a list, but
+<obj>last</obj> doesn't return the last element of a list); this is a
+historical artifact.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(setq x '(a b c d))
+(last x) =&gt; (d)
+(rplacd (last x) '(e f))
+x =&gt; '(a b c d e f)
+</exdent></lisp><obj>last</obj> could have been defined by:
+
+<lisp>(defun last (x)
+    (cond ((atom x) x)
+          ((atom (cdr x)) x)
+          ((last (cdr x)))))
+</lisp></description></definition><definition><define key="list-match-p-fun" name="list-match-p" type="mac"><args>object pattern</args>
+</define>
+
+<description><arg>object</arg> is evaluated and matched against <arg>pattern</arg>;
+the value is <obj>t</obj> if it matches, <obj>nil</obj> otherwise.
+<arg>pattern</arg> is made with backquotes (<ref chapter="19" definition-in-file="macros" key="backquote" section="2" title="Aids for Defining Macros" type="section"></ref>); whereas
+normally a backquote expression says how to construct list structure out
+of constant and variable parts, in this context it says how to match
+list structure against constants and variables.  Constant parts of the
+backquote expression must match exactly; variables preceded by commas
+can match anything but set the variable to what was matched.  (Some of
+the variables may be set even if there is no match.)  If a variable
+appears more than once, it must match the same thing (<obj>equal</obj> list
+structures) each time.  <obj>,ignore</obj> can be used to match anything and
+ignore it.
+
+For example, <obj>`(x (,y) . ,z)</obj> is a pattern that matches a list of
+length at least two whose first element is <obj>x</obj> and whose second
+element is a list of length one; if a list matches, the <obj>caadr</obj> of the
+list is stored into the value of <arg>y</arg> and the <obj>cddr</obj> of the list is
+stored into <arg>z</arg>.
+
+Variables set during the matching remain set after the <obj>list-match-p</obj>
+returns; in effect, <obj>list-match-p</obj> expands into code which can
+<obj>setq</obj> the variables.  If the match fails, some or all of the
+variables may already have been set.
+
+Example:
+
+<lisp>(list-match-p foo
+              `((a ,x) ,ignore . ,c))
+</lisp>is <obj>t</obj> if <obj>foo</obj>'s value is a list of two or more elements,
+the first of which is a list of two elements;
+and in that case it sets <obj>x</obj> to <obj>(cadar foo)</obj> and
+<obj>c</obj> to <obj>(cddr foo)</obj>.  An equivalent expression would be
+
+<lisp>(let ((tem foo))
+  (and (consp tem)
+       (consp (car tem))
+       (eq (caar tem) 'a)
+       (consp (cdar tem))
+       (progn (setq x (cadar tem)) t)
+       (null (cddar tem))
+       (consp (cdr tem))
+       (setq c (cddr tem))))
+<exdent amount="96"><caption>but <obj>list-match-p</obj> is faster. </caption></exdent></lisp>
+<obj>list-match-p</obj> generates highly optimized code using special
+instructions.
+</description></definition><definition><define key="list-in-area-fun" name="list-in-area" type="fun"><args>area-number <standard>&amp;rest</standard> args</args>
+</define>
+
+<description><obj>list-in-area</obj> is exactly the same as <obj>list</obj> except that it takes
+an extra argument, an area number, and creates the list in that area.
+</description></definition><definition><define key="list*-in-area-fun" name="list*-in-area" type="fun"><args>area-number <standard>&amp;rest</standard> args</args>
+</define>
+
+<description><obj>list*-in-area</obj> is exactly the same as <obj>list*</obj> except that it takes
+an extra argument, an area number, and creates the list in that area.
+</description></definition><definition><define key="make-list-fun" name="make-list" type="fun"><args>length <standard>&amp;key</standard> area initial-element</args>
+</define>
+
+<description>Creates and returns a list containing <arg>length</arg> elements.
+<arg>length</arg> should be a fixnum.  <arg>area</arg>, if specified, is the area in
+which to create the list (see <ref chapter="17" definition-in-file="areas" key="area" section="0" title="Areas" type="section"></ref>).  If it is <obj>nil</obj>, the area used
+is the value of <obj>working-storage-area</obj>.
+
+<arg>initial-element</arg> is stored in each element of the new list.
+
+<obj>make-list</obj> always creates a cdr-coded list (see <ref chapter="5" definition-in-file="fd-con" key="cdr-code" section="4" title="Cdr-Coding" type="section"></ref>).
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(make-list 3) =&gt; (nil nil nil)
+(make-list 4 :initial-element 7) =&gt; (7 7 7 7)
+</exdent></lisp>
+The keyword <obj>:initial-value</obj> may be used in place of
+<obj>:initial-element</obj>.
+
+When <obj>make-list</obj> was originally implemented, it took exactly two
+arguments: the area and the length.  This obsolete form is still
+supported so that old programs can continue to work, but the new
+keyword-argument form is preferred.
+</description></definition><definition><define key="circular-list-fun" name="circular-list" type="fun"><args><standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Constructs a circular list whose elements are <obj>args</obj>, repeated
+infinitely.  <obj>circular-list</obj> is the same as <obj>list</obj> except that the list itself
+is used as the last cdr, instead of <obj>nil</obj>.
+<obj>circular-list</obj> is especially useful with <obj>mapcar</obj>, as in the expression
+
+<lisp>(mapcar (function +) foo (circular-list 5))
+</lisp>which adds each element of <obj>foo</obj> to 5.
+
+
+<lisp><exdent amount="96"><caption><obj>circular-list</obj> could have been defined by: </caption>(defun circular-list (&amp;rest elements)
+  (setq elements (copylist* elements))
+  (rplacd (last elements) elements)
+  elements)
+</exdent></lisp></description></definition><definition><define key="copylist-fun" name="copylist" type="fun"><args>list <standard>&amp;optional</standard> area</args>
+</define><define key="copy-list-fun" name="copy-list" type="fun"><args>list <standard>&amp;optional</standard> area</args>
+</define>
+
+<description>Returns a list which is <obj>equal</obj> to <arg>list</arg>, but not <obj>eq</obj>.
+<obj>copylist</obj> does not copy any elements of the list, only the conses of the list itself.
+The returned list is fully cdr-coded (see <ref chapter="5" definition-in-file="fd-con" key="cdr-code" section="4" title="Cdr-Coding" type="section"></ref>) to minimize storage.
+If <arg>list</arg> is dotted, that is, if <obj>(cdr (last <arg>list</arg>))</obj>
+is a non-<obj>nil</obj> atom, then the copy also has this property.
+You may optionally specify the area in which to create the new copy.
+</description></definition><definition><define key="copylist*-fun" name="copylist*" type="fun"><args>list <standard>&amp;optional</standard> area</args>
+</define>
+
+<description>This is the same as <obj>copylist</obj> except that the last cons of the
+resulting list is never cdr-coded (see <ref chapter="5" definition-in-file="fd-con" key="cdr-code" section="4" title="Cdr-Coding" type="section"></ref>).  This makes for
+increased efficiency if you <obj>nconc</obj> something onto the list later.
+</description></definition><definition><define key="copyalist-fun" name="copyalist" type="fun"><args>list <standard>&amp;optional</standard> area</args>
+</define><define key="copy-alist-fun" name="copy-alist" type="fun"><args>list <standard>&amp;optional</standard> area</args>
+</define>
+
+<description><obj>copyalist</obj> is for copying association lists (see
+<ref chapter="5" definition-in-file="fd-con" key="assoc-lists-section" section="5" title="Tables" type="section"></ref>).  The <arg>list</arg> is copied, as in <obj>copylist</obj>.
+In addition, each element of <arg>list</arg> which is a cons is replaced in the
+copy by a new cons with the same car and cdr.  You may optionally
+specify the area in which to create the new copy.
+</description></definition><definition><define key="append-fun" name="append" type="fun"><args><standard>&amp;rest</standard> lists</args>
+</define>
+
+<description>The arguments to <obj>append</obj> are lists.  The result is a list which is the
+concatenation of the arguments.
+The arguments are not changed (cf. <obj>nconc</obj>).
+
+<lisp><exdent amount="96"><caption>Example: </caption>(append '(a b c) '(d e f) nil '(g)) =&gt; (a b c d e f g)
+</exdent></lisp><obj>append</obj> makes copies of the conses of all the lists it is given,
+except for the last one.  So the new list shares the conses
+of the last argument to append, but all of the other conses are newly
+created.  Only the lists are copied, not the elements of the lists.
+
+A version of <obj>append</obj> which only accepts two arguments could have been defined by:
+
+<lisp>(defun append2 (x y)
+    (cond ((null x) y)
+          ((cons (car x) (append2 (cdr x) y)) )))
+</lisp>
+The generalization to any number of arguments could then be made (relying on
+car of <obj>nil</obj> being <obj>nil</obj>):
+
+<lisp>(defun append (&amp;rest args)
+  (if (&lt; (length args) 2) (car args)
+      (append2 (car args)
+               (apply (function append) (cdr args)))))
+</lisp>
+These definitions do not express the full functionality of <obj>append</obj>;
+the real definition minimizes storage utilization by turning all the
+arguments that are copied into one cdr-coded list.
+
+To copy a list, use <obj>copylist</obj> (see <ref definition-in-file="fd-con" key="copylist-fun" title="Function copylist" type="fun"></ref>); the old practice
+of using <obj>append</obj> to copy lists is unclear and obsolete.
+</description></definition><definition><define key="nconc-fun" name="nconc" type="fun"><args><standard>&amp;rest</standard> lists</args>
+</define>
+
+<description><obj>nconc</obj> takes lists as arguments.  It returns a list which is the arguments
+concatenated together.  The arguments are changed, rather than copied
+(cf. <obj>append</obj>, <ref definition-in-file="fd-con" key="append-fun" title="Function append" type="fun"></ref>).
+
+<lisp><exdent amount="96"><caption>Example: </caption>(setq x '(a b c))
+(setq y '(d e f))
+(nconc x y) =&gt; (a b c d e f)
+x =&gt; (a b c d e f)
+</exdent></lisp>Note that the value of <obj>x</obj> is now different, since its last cons has
+been <obj>rplacd</obj>'d to the value of <obj>y</obj>.  If the <obj>nconc</obj> form were
+evaluated again, it would yield a piece of circular list structure,
+whose printed representation would be <obj>(a b c d e f d e f d e f ...)</obj>, repeating forever.
+
+<obj>nconc</obj> could have been defined by:
+
+<lisp>(defun nconc (x y)               ;<standard>for simplicity, this definition</standard>
+    (cond ((null x) y)           ;<standard>only works for 2 arguments.</standard>
+          (t (rplacd (last x) y) ;<standard>hook <obj>y</obj> onto </standard>x
+             x)))                ;<standard>and return the modified <obj>x</obj>.</standard>
+</lisp></description></definition><definition><define key="revappend-fun" name="revappend" type="fun"><args>x y</args>
+</define>
+
+<description><obj>(revappend <arg>x y</arg>)</obj> is exactly the same as 
+<obj>(nconc (reverse <arg>x</arg>) <arg>y</arg>)</obj> except that it is more 
+efficient.  Both <arg>x</arg> and <arg>y</arg> should be lists.
+
+<obj>revappend</obj> could have been defined by:
+
+<lisp>(defun revappend (x y)
+    (cond ((null x) y)
+          (t (revappend (cdr x) (cons (car x) y)))))
+</lisp></description></definition><definition><define key="nreconc-fun" name="nreconc" type="fun"><args>x y</args>
+</define>
+
+<description><obj>(nreconc <arg>x y</arg>)</obj> is exactly the same as 
+<obj>(nconc (nreverse <arg>x</arg>) <arg>y</arg>)</obj> except that it is more 
+efficient.  Both <arg>x</arg> and <arg>y</arg> should be lists.
+
+<obj>nreconc</obj> could have been defined by:
+
+<lisp>(defun nreconc (x y)
+    (cond ((null x) y)
+          ((nreverse1 x y)) ))
+</lisp>using the same <obj>nreverse1</obj> as above.
+</description></definition><definition><define key="butlast-fun" name="butlast" type="fun"><args>list <standard>&amp;optional</standard> (n <obj>1</obj>)</args>
+</define>
+
+<description>This creates and returns a list with the same elements as <arg>list</arg>,
+excepting the last <arg>n</arg> elements.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(butlast '(a b c d)) =&gt; (a b c)
+(butlast '(a b c d) 3) =&gt; (a)
+(butlast '(a b c d) 4) =&gt; nil
+(butlast nil) =&gt; nil
+</exdent></lisp>The name is from the phrase ``all elements but the last''.
+</description></definition><definition><define key="nbutlast-fun" name="nbutlast" type="fun"><args>list <standard>&amp;optional</standard> (n <obj>1</obj>)</args>
+</define>
+
+<description>This is the destructive version of <obj>butlast</obj>; it changes the cdr of
+the last cons but <arg>n</arg> of the list to <obj>nil</obj>.  The value is <arg>list</arg>,
+as modified.  If <arg>list</arg> does not have more than <arg>n</arg> elements then it
+is not really changed and the value is <obj>nil</obj>. 
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(setq foo '(a b c d))
+(nbutlast foo) =&gt; (a b c)
+foo =&gt; (a b c)
+(nbutlast foo 2) =&gt; (a)
+foo =&gt; (a)
+(nbutlast foo) =&gt; nil
+foo =&gt; (a)
+</exdent></lisp></description></definition><definition><define key="firstn-fun" name="firstn" type="fun"><args>n list</args>
+</define>
+
+<description>Returns a list of length <arg>n</arg>, whose elements are the
+first <arg>n</arg> elements of <obj>list</obj>.  If <arg>list</arg> is fewer than
+<arg>n</arg> elements long, the remaining elements of the returned list
+are <obj>nil</obj>.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(firstn 2 '(a b c d)) =&gt; (a b)
+(firstn 0 '(a b c d)) =&gt; nil
+(firstn 6 '(a b c d)) =&gt; (a b c d nil nil)
+</exdent></lisp></description></definition><definition><define key="nleft-fun" name="nleft" type="fun"><args>n list <standard>&amp;optional</standard> tail</args>
+</define>
+
+<description>Returns a ``tail'' of <arg>list</arg>, i.e. one of the conses that makes up <arg>list</arg>, or <obj>nil</obj>.
+<obj>(nleft <arg>n</arg> <arg>list</arg>)</obj> returns the last <arg>n</arg> elements of <arg>list</arg>.
+If <arg>n</arg> is too large, <obj>nleft</obj> returns <arg>list</arg>.
+
+<obj>(nleft <arg>n</arg> <arg>list</arg> <arg>tail</arg>)</obj> takes cdr of <arg>list</arg> enough times
+that taking <arg>n</arg> more cdrs would yield <arg>tail</arg>, and returns that.
+You can see that when <arg>tail</arg> is <obj>nil</obj> this is the same as the two-argument case.
+If <arg>tail</arg> is not <obj>eq</obj> to any tail of <arg>list</arg>, <obj>nleft</obj> returns <obj>nil</obj>.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(setq x '(a b c d e f))
+(nleft 2 x) =&gt; (e f)
+(nleft 2 x (cddddr x)) =&gt; (c d e f)
+</exdent></lisp></description></definition><definition><define key="ldiff-fun" name="ldiff" type="fun"><args>list tail</args>
+</define>
+
+<description><arg>list</arg> should be a list, and <arg>tail</arg> should be one of the conses
+that make up <arg>list</arg>.  <obj>ldiff</obj> (meaning `list difference') returns
+a new list, whose elements are those elements of <arg>list</arg> that appear
+before <arg>tail</arg>.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(setq x '(a b c d e))
+(setq y (cdddr x)) =&gt; (d e)
+(ldiff x y) =&gt; (a b c)
+(ldiff x nil) =&gt; (a b c d e)
+(ldiff x x) =&gt; nil
+</exdent><exdent amount="96"><caption>but </caption>(ldiff '(a b c d) '(c d)) =&gt; (a b c d)
+</exdent><exdent amount="96"><caption>since the <arg>tail</arg> was not <obj>eq</obj> to any part of the <arg>list</arg>. </caption></exdent></lisp></description></definition><definition><define key="car-safe-fun" name="car-safe" type="fun"><args>object</args>
+</define><define key="cdr-safe-fun" name="cdr-safe" type="fun"><args>object</args>
+</define><define key="caar-safe-fun" name="caar-safe" type="fun"><args>object</args>
+</define><define key="cadr-safe-fun" name="cadr-safe" type="fun"><args>object</args>
+</define><define key="cdar-safe-fun" name="cdar-safe" type="fun"><args>object</args>
+</define><define key="cddr-safe-fun" name="cddr-safe" type="fun"><args>object</args>
+</define><define key="caddr-safe-fun" name="caddr-safe" type="fun"><args>object</args>
+</define><define key="cdddr-safe-fun" name="cdddr-safe" type="fun"><args>object</args>
+</define><define key="cadddr-safe-fun" name="cadddr-safe" type="fun"><args>object</args>
+</define><define key="cddddr-safe-fun" name="cddddr-safe" type="fun"><args>object</args>
+</define><define key="nth-safe-fun" name="nth-safe" type="fun"><args>n object</args>
+</define><define key="nthcdr-safe-fun" name="nthcdr-safe" type="fun"><args>n object</args>
+</define>
+
+<description>Return the same things as the corresponding non-<obj>safe</obj> functions,
+except <obj>nil</obj> if the non-<obj>safe</obj> function would get an error.
+These functions are about as fast as the non-<obj>safe</obj> functions.
+The same effect could be had by handling the <obj>sys:wrong-type-argument</obj>
+error, but that would be slower.
+Examples:
+
+<lisp>(car-safe '(a . b)) =&gt; a
+(car-safe nil) =&gt; nil
+(car-safe 'a) =&gt; nil
+(car-safe &quot;foo&quot;) =&gt; nil
+(cadr-safe '(a . b)) =&gt; nil
+(cadr-safe 3) =&gt; nil
+</lisp></description></definition></section><a name="Cons Cells as Trees"></a>
+
+<section chapter-number="5" name="Cons Cells as Trees" number="3" title="Cons Cells as Trees"><definition><define key="copytree-fun" name="copytree" type="fun"><args>tree <standard>&amp;optional</standard> area</args>
+</define><define key="copy-tree-fun" name="copy-tree" type="fun"><args>tree <standard>&amp;optional</standard> area</args>
+</define>
+
+<description><obj>copytree</obj> copies all the conses of a tree and makes a new maximally
+cdr-coded tree with the same fringe.  If <arg>area</arg> is specified, the new
+tree is constructed in that area.
+</description></definition><definition><define key="tree-equal-fun" name="tree-equal" type="fun"><args>x y <standard>&amp;key</standard> test test-not</args>
+</define>
+
+<description>Compares two trees recursively to all levels.  Atoms must match under the
+function <arg>test</arg> (which defaults to <obj>eql</obj>).  Conses must match recursively in
+both the car and the cdr.
+
+If <arg>test-not</arg> is specified instead of <arg>test</arg>, two atoms match if
+<arg>test-not</arg> returns <obj>nil</obj>.
+</description></definition>
+<index-entry index="concepts" title="substitution"></index-entry>
+<definition><define key="subst-fun" name="subst" type="fun"><args>new old tree</args>
+</define>
+
+<description><obj>(subst <arg>new old tree</arg>)</obj> substitutes <arg>new</arg> for all occurrences of <arg>old</arg>
+in <arg>tree</arg>, and returns the modified copy of <arg>tree</arg>.  The original <arg>tree</arg>
+is unchanged, as <obj>subst</obj> recursively copies all of <arg>tree</arg> replacing
+elements <obj>equal</obj> to <arg>old</arg> as it goes.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(subst 'Tempest 'Hurricane
+       '(Shakespeare wrote (The Hurricane)))
+    =&gt; (Shakespeare wrote (The Tempest))
+</exdent></lisp>
+<obj>subst</obj> could have been defined by:
+
+<lisp>(defun subst (new old tree)
+    (cond ((equal tree old) new) ;<standard>if item equal to old, replace.</standard>
+          ((atom tree) tree)     ;<standard>if no substructure, return arg.</standard>
+          ((cons (subst new old (car tree))  ;<standard>otherwise recurse.</standard>
+                 (subst new old (cdr tree))))))
+</lisp>
+Note that this function is not destructive; that is, it does not change
+the car or cdr of any already-existing list structure.
+
+To copy a tree, use <obj>copytree</obj> (see <ref definition-in-file="fd-con" key="copytree-fun" title="Function copytree" type="fun"></ref>); the old practice
+of using <obj>subst</obj> to copy trees is unclear and obsolete.
+</description></definition><definition><define key="cli:subst-fun" name="cli:subst" type="fun"><args>new old tree <standard>&amp;key</standard> test test-not key</args>
+</define>
+
+<description>The Common Lisp version of <obj>subst</obj> replaces with <arg>new</arg> every atom or
+subtree in <arg>tree</arg> which matches <arg>old</arg>, returning a new tree.  List
+structure is copied as necessary to avoid clobbering parts of tree.
+This differs from the traditional <obj>subst</obj> function, which always
+copies the entire tree.
+
+<arg>test</arg> or <arg>test-not</arg> is used to do the matching.  If <arg>test</arg> is
+specified, a match happens when <arg>test</arg> returns non-<obj>nil</obj>; otherwise,
+if <arg>test-not</arg> is specified, a match happens when it returns <obj>nil</obj>.
+If neither is specified, then <obj>eql</obj> is used for <arg>test</arg>.
+
+The first argument to the <arg>test</arg> or <arg>test-not</arg> function is always
+<arg>old</arg>.  The second argument is normally a leaf or subtree of
+<arg>tree</arg>.  However, if <arg>key</arg> is non-<obj>nil</obj>, then it is called with
+the subtree as argument, and the result of this becomes the second
+argument to the <arg>test</arg> or <arg>test-not</arg> function.
+
+Because <obj>(subst nil nil <arg>tree</arg>)</obj> is a widely used idiom for copying
+a tree, even though it is obsolete, there is no practical possibility of
+installing this function as the standard <obj>subst</obj> for a long time.
+</description></definition><definition><define key="nsubst-fun" name="nsubst" type="fun"><args>new old tree <standard>&amp;key</standard> test test-not key</args>
+</define>
+
+<description><obj>nsubst</obj> is a destructive version of <obj>subst</obj>.  The list structure of
+<arg>tree</arg> is altered by replacing each occurrence of <arg>old</arg> with
+<arg>new</arg>.  No new list structure is created.  The keyword arguments are
+as in <obj>cli:subst</obj>.
+
+A simplified version of <obj>nsubst</obj>, handling only the three required
+arguments, could be defined as
+
+<lisp>(defun nsubst (new old tree)
+    (cond ((eql tree old) new)    ;<standard>If item matches old, replace.</standard>
+          ((atom tree) tree)      ;<standard>If no substructure, return arg.</standard>
+          (t                      ;<standard>Otherwise, recurse.</standard>
+             (rplaca tree (nsubst new old (car tree)))
+             (rplacd tree (nsubst new old (cdr tree)))
+             tree)))
+</lisp></description></definition><definition><define key="subst-if-fun" name="subst-if" type="fun"><args>new predicate tree <standard>&amp;key</standard> key</args>
+</define>
+
+<description>Replaces with <arg>new</arg> every atom or subtree in <arg>tree</arg> which satisfies
+<arg>predicate</arg>.  List structure is copied as necessary so that the
+original tree is not modified.  <arg>key</arg>, if non-<obj>nil</obj>, is a function
+applied to each tree node to get the object to match against.  If <arg>key</arg>
+is <obj>nil</obj> or omitted, the tree node itself is used.
+</description></definition><definition><define key="subst-if-not-fun" name="subst-if-not" type="fun"><args>new predicate tree <standard>&amp;key</standard> key</args>
+</define>
+
+<description>Similar, but replaces tree nodes which <arg>do not</arg> satisfy <arg>predicate</arg>.
+</description></definition><definition><define key="nsubst-if-fun" name="nsubst-if" type="fun"><args>new predicate tree <standard>&amp;key</standard> key</args>
+</define><define key="nsubst-if-not-fun" name="nsubst-if-not" type="fun"><args>new predicate tree <standard>&amp;key</standard> key</args>
+</define>
+
+<description>Like <obj>subst-if</obj> and <obj>subst-if-not</obj> except that they destructively
+modify <arg>tree</arg> itself and return it, creating no new list structure.
+</description></definition><definition><define key="sublis-fun" name="sublis" type="fun"><args>alist tree <standard>&amp;key</standard> test test-not key</args>
+</define>
+
+<description>Performs multiple parallel replacements on <arg>tree</arg>, returning a new
+tree.  <arg>tree</arg> itself is not modified because list structure is copied
+as necessary.  If no substitutions are made, the result is <arg>tree</arg>.
+<arg>alist</arg> is an association list (see <ref chapter="5" definition-in-file="fd-con" key="assoc-lists-section" section="5" title="Tables" type="section"></ref>).  Each
+element of <arg>alist</arg> specifies one replacement; the car is what to look
+for, and the cdr is what to replace it with.
+
+<arg>test</arg>, <arg>test-not</arg> and <arg>key</arg> control how matching is done between
+nodes of the tree (cons cells or atoms) and objects to be replaced.  See
+<obj>cli:subst</obj>, above, for the details of how they work.  The first
+argument to <arg>test</arg> or <arg>test-not</arg> is the car of an element of
+<arg>alist</arg>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(sublis '((x . 100) (z . zprime))
+        '(plus x (minus g z x p) 4))
+   =&gt; (plus 100 (minus g zprime 100 p) 4)
+</exdent></lisp>
+
+<lisp><exdent amount="96"><caption>A simplified <obj>sublis</obj> could be defined by: </caption>(defun sublis (alist tree)
+  (let ((tem (assq tree alist)))
+    (cond (tem (cdr tem))
+          ((atom tree) tree)
+          (t
+           (let ((car (sublis alist (car tree)))
+                 (cdr (sublis alist (cdr tree))))
+             (if (and (eq (car tree) car) (eq (cdr tree) cdr))
+                 tree
+               (cons car cdr)))))))
+</exdent></lisp></description></definition><definition><define key="nsublis-fun" name="nsublis" type="fun"><args>alist tree <standard>&amp;key</standard> test test-not key</args>
+</define>
+
+<description><obj>nsublis</obj> is like <obj>sublis</obj> but changes the original tree
+instead of allocating new structure.
+
+
+<lisp><exdent amount="96"><caption>A simplified <obj>nsublis</obj> could be defined by: </caption>(defun nsublis (alist tree)
+  (let ((tem (assq tree alist)))
+    (cond (tem (cdr tem))
+          ((atom tree) tree)
+          (t (rplaca tree (nsublis alist (car tree)))
+             (rplacd tree (nsublis alist (cdr tree)))
+             tree))))
+</exdent></lisp></description></definition></section><a name="cdr-code"></a>
+
+
+<section chapter-number="5" name="cdr-code" number="4" title="Cdr-Coding"><p>This section explains the internal data format used to store conses
+inside the Lisp Machine.  Casual users don't have to worry about this;
+you can skip this section if you want.  It is only important to read
+this section if you require extra storage efficiency in your program.
+</p>
+
+<p>The usual and obvious internal representation of conses in any
+implementation of Lisp is as a pair of pointers, contiguous in memory.
+If we call the amount of storage that it takes to store a Lisp pointer a
+`word', then conses normally occupy two words.  One word (say it's the
+first) holds the car, and the other word (say it's the second) holds the
+cdr.  To get the car or cdr of a list, you just reference this memory
+location, and to change the car or cdr, you just store into this memory
+location.
+</p>
+
+<p>Very often, conses are used to store lists.  If the above representation
+is used, a list of <arg>n</arg> elements requires two times <arg>n</arg> words of
+memory: <arg>n</arg> to hold the pointers to the elements of the list, and
+<arg>n</arg> to point to the next cons or to <obj>nil</obj>.  To optimize this
+particular case of using conses, the Lisp Machine uses a storage
+representation called <arg>cdr-coding</arg> to store lists.  The basic goal is to
+allow a list of <arg>n</arg> elements to be stored in only <arg>n</arg> locations,
+while allowing conses that are not parts of lists to be stored in the
+usual way.
+</p>
+
+<p>The way it works is that there is an extra two-bit field in every word
+of memory, called the <arg>cdr-code</arg> field.  There are three meaningful
+values that this field can have, which are called <obj>cdr-normal</obj>, <obj>cdr-next</obj>,
+and <obj>cdr-nil</obj>.  The regular, non-compact way to store a cons is by two
+contiguous words, the first of which holds the car and the second of
+which holds the cdr.  In this case, the cdr-code of the first word is
+<obj>cdr-normal</obj>.  (The cdr-code of the second word doesn't matter; as we will
+see, it is never looked at.)  The cons is represented by a pointer to
+the first of the two words.  When a list of <arg>n</arg> elements is stored in
+the most compact way, pointers to the <arg>n</arg> elements occupy <arg>n</arg>
+contiguous memory locations.  The cdr-codes of all these locations are
+<obj>cdr-next</obj>, except the last location whose cdr-code is <obj>cdr-nil</obj>.  The
+list is represented as a pointer to the first of the <arg>n</arg> words.
+</p>
+
+<p>Now, how are the basic operations on conses defined to work based on
+this data structure?  Finding the car is easy: you just read the
+contents of the location addressed by the pointer.  Finding the cdr is
+more complex.  First you must read the contents of the location
+addressed by the pointer, and inspect the cdr-code you find there.  If
+the code is <obj>cdr-normal</obj>, then you add one to the pointer, read the
+location it addresses, and return the contents of that location; that
+is, you read the second of the two words.  If the code is <obj>cdr-next</obj>, you
+add one to the pointer, and simply return that pointer without doing any
+more reading; that is, you return a pointer to the next word in the
+<arg>n</arg>-word block.  If the code is <obj>cdr-nil</obj>, you simply return <obj>nil</obj>.
+</p>
+
+<p>If you examine these rules, you will find that they work fine even if
+you mix the two kinds of storage representation within the same list.
+</p>
+
+<p>How about changing the structure?  Like <obj>car</obj>, <obj>rplaca</obj> is very easy; you
+just store into the location addressed by the pointer.  To do <obj>rplacd</obj>
+you must read the location addressed by the pointer and examine the cdr-code.  If the code is <obj>cdr-normal</obj>, you just store into the location one
+greater than that addressed by the pointer; that is, you store into the
+second word of the two words.  But if the cdr-code is <obj>cdr-next</obj> or
+<obj>cdr-nil</obj>, there is a problem: there is no memory cell that is storing the
+cdr of the cons.  That is the cell that has been optimized out; it just
+doesn't exist.
+</p>
+
+<p>This problem is dealt with by the use of <arg>invisible pointers</arg>.  An
+invisible pointer is a special kind of pointer, recognized by its data
+type (Lisp Machine pointers include a data type field as well as an
+address field).  The way they work is that when the Lisp Machine reads a
+word from memory, if that word is an invisible pointer then it proceeds
+to read the word pointed to by the invisible pointer and use that word
+instead of the invisible pointer itself.  Similarly, when it writes to a
+location, it first reads the location, and if it contains an invisible
+pointer then it writes to the location addressed by the invisible
+pointer instead.  (This is a somewhat simplified explanation; actually
+there are several kinds of invisible pointer that are interpreted in
+different ways at different times, used for things other than the cdr-coding
+scheme.)
+</p>
+
+<p>Here's how to do <obj>rplacd</obj> when the cdr-code is <obj>cdr-next</obj> or <obj>cdr-nil</obj>.  Call
+the location addressed by the first argument to <obj>rplacd</obj> <arg>l</arg>.  First,
+you allocate two contiguous words in the same area that <arg>l</arg> points to.
+Then you store the old contents of <arg>l</arg> (the car of the cons) and
+the second argument to <obj>rplacd</obj> (the new cdr of the cons) into these two
+words.  You set the cdr-code of the first of the two words to <obj>cdr-normal</obj>.
+Then you write an invisible pointer, pointing at the first of the two
+words, into location <arg>l</arg>.  (It doesn't matter what the cdr-code of
+this word is, since the invisible pointer data type is checked first,
+as we will see.)
+</p>
+
+<p>Now, whenever any operation is done to the cons (<obj>car</obj>, <obj>cdr</obj>, <obj>rplaca</obj>, or
+<obj>rplacd</obj>), the initial reading of the word pointed to by the Lisp pointer
+that represents the cons finds an invisible pointer in the addressed
+cell.  When the invisible pointer is seen, the address it contains is
+used in place of the original address.  So the newly-allocated two-word
+cons is used for any operation done on the original object.
+</p>
+
+<p>Why is any of this important to users?  In fact, it is all invisible to
+you; everything works the same way whether or not compact representation
+is used, from the point of view of the semantics of the language.  That
+is, the only difference that any of this makes is a difference in
+efficiency.  The compact representation is more efficient in most cases.
+However, if the conses are going to get <obj>rplacd</obj>'ed, then invisible
+pointers will be created, extra memory will be allocated, and the
+compact representation will degrade storage efficiency rather
+than improve it.  Also, accesses that go through invisible pointers are
+somewhat slower, since more memory references are needed.  So if you
+care a lot about storage efficiency, you should be careful about which
+lists get stored in which representations.
+</p>
+
+<p>You should try to use the normal representation for those data
+structures that will be subject to <obj>rplacd</obj> operations, including
+<obj>nconc</obj> and <obj>nreverse</obj>, and the compact representation for other
+structures.  The functions <obj>cons</obj>, <obj>xcons</obj>, <obj>ncons</obj>, and their
+area variants make conses in the normal representation.  The functions
+<obj>list</obj>, <obj>list*</obj>, <obj>list-in-area</obj>, <obj>make-list</obj>, and <obj>append</obj> use
+the compact representation.  The other list-creating functions,
+including <obj>read</obj>, currently make normal lists, although this might get
+changed.  Some functions, such as <obj>sort</obj>, take special care to operate
+efficiently on compact lists (<obj>sort</obj> effectively treats them as
+arrays).  <obj>nreverse</obj> is rather slow on compact lists, currently, since
+it simple-mindedly uses <obj>rplacd</obj>, but this may be changed.
+</p>
+
+<p><obj>(copylist <arg>x</arg>)</obj> is a suitable way to copy a
+list, converting it into compact form (see <ref definition-in-file="fd-con" key="copylist-fun" title="Function copylist" type="fun"></ref>).
+</p>
+</section><a name="assoc-lists-section"></a>
+
+
+<section chapter-number="5" name="assoc-lists-section" number="5" title="Tables"><p>Zetalisp includes functions which simplify the maintenance
+of tabular data structures of several varieties.  The simplest is
+a plain list of items
+There are functions to add (<obj>cons</obj>), remove (<obj>delete</obj>, <obj>delq</obj>,
+<obj>del</obj>, <obj>del-if</obj>, <obj>del-if-not</obj>, <obj>remove</obj>, <obj>remq</obj>, <obj>rem</obj>,
+<obj>rem-if</obj>, <obj>rem-if-not</obj>),
+and search for (<obj>member</obj>, <obj>memq</obj>, <obj>mem</obj>) items in a list.
+</p>
+
+<index-entry index="concepts" title="association list"></index-entry>
+
+<index-entry index="concepts" title="alist"></index-entry>
+
+<p><arg>Association lists</arg> are very commonly used.  An association list
+is a list of conses.  The car of each cons is a ``key'' and the cdr
+is a ``datum'', or a list of associated data.  The functions
+<obj>assoc</obj>, <obj>assq</obj>, <obj>ass</obj>, <obj>memass</obj>, and <obj>rassoc</obj>
+may be used to retrieve the data, given the key.  For example,
+
+<lisp>((tweety . bird) (sylvester . cat))
+</lisp>is an association list with two elements.  Given a symbol representing
+the name of an animal, it can retrieve what kind of animal this is.
+</p>
+
+<p><arg>Structured records</arg> can be stored as association lists or as
+stereotyped cons-structures where each element of the structure has a certain
+car-cdr path associated with it.  However, these are better implemented
+using structure macros (see <ref chapter="21" definition-in-file="defstr" key="defstruct" section="0" title="Defstruct" type="section"></ref>) or as flavors (<ref chapter="22" definition-in-file="flavor" key="flavor" section="0" title="Objects, Message Passing, and Flavors" type="section"></ref>).
+</p>
+
+<p>Simple list-structure is very convenient, but may not be efficient enough
+for large data bases because it takes a long time to search a long list.
+Zetalisp includes hash table facilities for more efficient
+but more complex tables (see <ref chapter="5" definition-in-file="fd-con" key="hash-table" section="11" title="Hash Tables" type="section"></ref>), and
+a hashing function (<obj>sxhash</obj>) to aid users in constructing their own facilities.
+</p>
+</section><a name="Lists as Tables"></a>
+
+<section chapter-number="5" name="Lists as Tables" number="6" title="Lists as Tables"><definition><define key="memq-fun" name="memq" type="fun"><args>item list</args>
+</define>
+
+<description>Returns <obj>nil</obj> if <arg>item</arg> is not one of the
+elements of <arg>list</arg>.  Otherwise, it returns the sublist of <arg>list</arg>
+beginning with the first occurrence of <arg>item</arg>; that is, it returns the
+first cons of the list whose car is <arg>item</arg>.  The comparison is made by
+<obj>eq</obj>.  Because <obj>memq</obj> returns <obj>nil</obj> if it doesn't find anything,
+and something non-<obj>nil</obj> if it finds something, it is often used as a
+predicate.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(memq 'a '(1 2 3 4)) =&gt; nil
+(memq 'a '(g (x a y) c a d e a f)) =&gt; (a d e a f)
+</exdent></lisp>Note that the value returned by <obj>memq</obj> is <obj>eq</obj> to the portion of the list
+beginning with <obj>a</obj>.
+Thus <obj>rplaca</obj> on the result of <obj>memq</obj> may be used,
+if you first check to make sure <obj>memq</obj> did not return <obj>nil</obj>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(let ((sublist (memq x z)))     ;<standard>Search for <obj>x</obj> in the list <obj>z</obj>.</standard>
+  (if (not (null sublist))      ;<standard>If it is found,</standard>
+      (rplaca sublist y)))      ;<standard>Replace it with <obj>y</obj>.</standard>
+</exdent></lisp>
+
+<lisp><exdent amount="96"><caption><obj>memq</obj> could have been defined by: </caption>(defun memq (item list)
+    (cond ((null list) nil)
+          ((eq item (car list)) list)
+          (t (memq item (cdr list)))))
+</exdent></lisp>
+<obj>memq</obj> is hand-coded in microcode and therefore especially fast.
+It is equivalent to <obj>cli:member</obj> with <obj>eq</obj> specified as
+the <arg>test</arg> argument.
+</description></definition><definition><define key="member-fun" name="member" type="fun"><args>item list</args>
+</define>
+
+<description><obj>member</obj> is like <obj>memq</obj>, except <obj>equal</obj> is used for the comparison,
+instead of <obj>eq</obj>.  Note that the <obj>member</obj> function of Common Lisp,
+which is <obj>cli:member</obj>, is similar but thoroughly incompatible (see below).
+
+<obj>member</obj> could have been defined by:
+
+<lisp>(defun member (item list)
+    (cond ((null list) nil)
+          ((equal item (car list)) list)
+          (t (member item (cdr list)))))
+</lisp></description></definition><definition><define key="cli:member-fun" name="cli:member" type="fun"><args>item list <standard>&amp;key</standard> test test-not key</args>
+</define>
+
+<description>The Common Lisp <obj>member</obj> function.  It is
+like <obj>memq</obj> or <obj>member</obj> except that there is more generality
+in how elements of <arg>list</arg> are matched against <arg>item</arg>--and
+the default is incompatible.
+
+<arg>test</arg>, <arg>test-not</arg> and <arg>key</arg> are used in matching the elements,
+just as described under <obj>cli:subst</obj> (see <ref definition-in-file="fd-con" key="cli:subst-fun" title="Function cli:subst" type="fun"></ref>).  If
+neither <arg>test</arg> nor <arg>test-not</arg> is specified, the default is to
+compare with <obj>eql</obj>, whereas <obj>member</obj> compares with <obj>equal</obj>.
+
+Usually <arg>test</arg> is a commutative predicate such as
+<obj>eq</obj>, <obj>equal</obj>, <obj>=</obj>, <obj>char-equal</obj> or <obj>string-equal</obj>.
+It can also be a non-commutative predicate.  The predicate
+is called with <arg>item</arg> as its first argument and the element of <arg>list</arg>
+as its second argument.  Example:
+
+<lisp>(cli:member 4 '(1.5 2.5 2 3.5 4.5 8) :test '&lt;) =&gt; (4.5 8)
+</lisp></description></definition><definition><define key="member-if-fun" name="member-if" type="fun"><args>predicate list <standard>&amp;key</standard> key</args>
+</define>
+
+<description>Searches the elements of <arg>list</arg> for one which satisfies <arg>predicate</arg>.
+If one is found, the value is the tail of <arg>list</arg> whose car is that element.
+Otherwise the value is <obj>nil</obj>.
+
+If <arg>key</arg> is non-<obj>nil</obj>, then <arg>predicate</arg> is applied to <obj>(funcall
+<arg>key</arg> <arg>element</arg>)</obj> rather than to the element itself.
+</description></definition><definition><define key="member-if-not-fun" name="member-if-not" type="fun"><args>predicate list <standard>&amp;key</standard> key</args>
+</define>
+
+<description>Searches for an element which does not satisfy <arg>predicate</arg>.
+Otherwise like <obj>member-if</obj>.
+</description></definition><definition><define key="mem-fun" name="mem" type="fun"><args>predicate item list</args>
+</define>
+
+<description>Is equivalent to
+
+<lisp>(cli:member <arg>item</arg> <arg>list</arg> :test <arg>predicate</arg>)
+</lisp>
+The function <obj>mem</obj> antedates <obj>cli:member</obj>.
+</description></definition><definition><define key="find-position-in-list-fun" name="find-position-in-list" type="fun"><args>item list</args>
+</define>
+
+<description>Searches <arg>list</arg> for an element which
+is <obj>eq</obj> to <arg>item</arg>, like <obj>memq.</obj>  However, it returns the numeric index
+in the list at which it found the first occurence of <arg>item</arg>, or
+<obj>nil</obj> if it did not find it at all.  This function is sort of
+the complement of <obj>nth</obj> (see <ref definition-in-file="fd-con" key="nth-fun" title="Function nth" type="fun"></ref>); like <obj>nth</obj>, it is zero-based.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(find-position-in-list 'a '(a b c)) =&gt; 0
+(find-position-in-list 'c '(a b c)) =&gt; 2
+(find-position-in-list 'e '(a b c)) =&gt; nil
+</exdent></lisp>
+See also the generic sequence function <obj>position</obj> (<ref definition-in-file="generic" key="position-fun" title="Function position" type="fun"></ref>).
+</description></definition><definition><define key="find-position-in-list-equal-fun" name="find-position-in-list-equal" type="fun"><args>item list</args>
+</define>
+
+<description>Is like <obj>find-position-in-list</obj>, except that the comparison is done
+with <obj>equal</obj> instead of <obj>eq</obj>.
+</description></definition><definition><define key="tailp-fun" name="tailp" type="fun"><args>sublist list</args>
+</define>
+
+<description>Returns <obj>t</obj> if <arg>sublist</arg> is a sublist of <arg>list</arg> (i.e.
+one of the conses that makes up <arg>list</arg>).  Otherwise returns <obj>nil</obj>.
+Another way to look at this is that <obj>tailp</obj> returns <obj>t</obj> if
+<obj>(nthcdr <arg>n</arg> <arg>list</arg>)</obj> is <arg>sublist</arg>, for some value of <arg>n</arg>.
+<obj>tailp</obj> could have been defined by:
+
+<lisp>(defun tailp (sublist list)
+    (do list list (cdr list) (null list)
+      (if (eq sublist list)
+          (return t))))
+</lisp></description></definition><definition><define key="delq-fun" name="delq" type="fun"><args>item list <standard>&amp;optional</standard> n</args>
+</define>
+
+<description><obj>(delq <arg>item list</arg>)</obj> returns the <arg>list</arg> with all
+occurrences of <arg>item</arg> removed.  <obj>eq</obj> is used for the comparison. 
+The argument <arg>list</arg> is actually modified (<obj>rplacd</obj>'ed) when instances
+of <arg>item</arg> are spliced out.  <obj>delq</obj> should be used for value, not
+for effect.  That is, use
+
+<lisp>(setq a (delq 'b a))
+</lisp>rather than
+
+<lisp>(delq 'b a)
+</lisp>These two are <arg>not</arg> equivalent when the first element
+of the value of <obj>a</obj> is <obj>b</obj>.
+
+<obj>(delq <arg>item list n</arg>)</obj> is like <obj>(delq <arg>item list</arg>)</obj> except only the first
+<arg>n</arg> instances of <arg>item</arg> are deleted.  <arg>n</arg> is allowed to be zero. 
+If <arg>n</arg> is greater than or equal to the number of occurrences of <arg>item</arg> in the
+list, all occurrences of <arg>item</arg> in the list are deleted. 
+
+<lisp><exdent amount="96"><caption>Example: </caption>(delq 'a '(b a c (a b) d a e)) =&gt; (b c (a b) d e)
+</exdent></lisp>
+<obj>delq</obj> could have been defined by:
+
+<lisp>(defun delq (item list &amp;optional (n -1))
+    (cond ((or (atom list) (zerop n)) list)
+          ((eq item (car list))
+           (delq item (cdr list) (1- n)))
+          (t (rplacd list (delq item (cdr list) n)))))
+</lisp>If the third argument (<arg>n</arg>) is not supplied, it defaults to <obj>-1</obj> which
+is effectively infinity since it can be decremented any number of times without
+reaching zero.
+</description></definition><definition><define key="delete-fun" name="delete" type="fun"><args>item list <standard>&amp;optional</standard> n</args>
+</define>
+
+<description><obj>delete</obj> is the same as <obj>delq</obj> except that <obj>equal</obj> is used for the comparison
+instead of <obj>eq</obj>.
+
+Common Lisp programs have a different, incompatible function called
+<obj>delete</obj>; see <ref definition-in-file="generic" key="cli:delete-fun" title="Function cli:delete" type="fun"></ref>.  This function may be useful in
+non-Common-Lisp programs as well, where it can be referred to as
+<obj>cli:delete</obj>.
+</description></definition><definition><define key="del-fun" name="del" type="fun"><args>predicate item list <standard>&amp;optional</standard> n</args>
+</define>
+
+<description><obj>del</obj> is the same as <obj>delq</obj> except that it takes an extra argument
+which should be a predicate of two arguments, which is used for the
+comparison instead of <obj>eq</obj>.  <obj>(del 'eq a b)</obj> is the same as
+<obj>(delq a b)</obj>.  See also <obj>mem</obj>, <ref definition-in-file="fd-con" key="mem-fun" title="Function mem" type="fun"></ref>.
+
+Use of <obj>del</obj> is equivalent to
+
+<lisp>(cli:delete <arg>item</arg> <arg>list</arg> :test <arg>predicate</arg>)
+</lisp></description></definition><definition><define key="remq-fun" name="remq" type="fun"><args>item list <standard>&amp;optional</standard> n</args>
+</define>
+
+<description><obj>remq</obj> is similar to <obj>delq</obj>, except that the list is not altered;
+rather, a new list is returned.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(setq x '(a b c d e f))
+(remq 'b x) =&gt; (a c d e f)
+x =&gt; (a b c d e f)
+(remq 'b '(a b c b a b) 2) =&gt; (a c a b)
+</exdent></lisp></description></definition><definition><define key="remove-fun" name="remove" type="fun"><args>item list <standard>&amp;optional</standard> n</args>
+</define>
+
+<description><obj>remove</obj> is the same as <obj>remq</obj> except that <obj>equal</obj> is used for the
+comparison instead of <obj>eq</obj>.  Common Lisp programs have a different,
+incompatible function called <obj>remove</obj>; see <ref definition-in-file="generic" key="cli:remove-fun" title="Function cli:remove" type="fun"></ref>.  This function
+may be useful in non-Common-Lisp programs as well, where it can be
+referred to as <obj>cli:remove</obj>.
+</description></definition><definition><define key="rem-fun" name="rem" type="fun"><args>predicate item list <standard>&amp;optional</standard> n</args>
+</define>
+
+<description><obj>rem</obj> is the same as <obj>remq</obj> except that it takes an extra argument
+which should be a predicate of two arguments, which is used for the
+comparison instead of <obj>eq</obj>.  <obj>(rem 'eq a b)</obj> is the same as
+<obj>(remq a b)</obj>.  See also <obj>mem</obj>, <ref definition-in-file="fd-con" key="mem-fun" title="Function mem" type="fun"></ref>.
+
+The function <obj>rem</obj> in Common Lisp programs is actually <obj>cli:rem</obj>,
+a remainder function.  See <ref definition-in-file="fd-num" key="cli:rem-fun" title="Function cli:rem" type="fun"></ref>.
+</description></definition><definition><define key="subset-fun" name="subset" type="fun"><args>predicate list</args>
+</define><define key="rem-if-not-fun" name="rem-if-not" type="fun"><args>predicate list</args>
+</define>
+
+<description><arg>predicate</arg> should be a function of one argument.
+A new list is made by applying <arg>predicate</arg> to
+all of the elements of <arg>list</arg> and removing the ones for which the predicate 
+returns <obj>nil</obj>.  One of this function's names (<obj>rem-if-not</obj>)
+means ``remove if this condition is not true''; i.e. it keeps the elements
+for which <arg>predicate</arg> is true.  The other name (<obj>subset</obj>) refers to
+the function's action if <arg>list</arg> is considered to represent a mathematical set.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(subset #'minusp '(1 2 -4 2 -3)) =&gt; (-4 -3)
+</exdent></lisp></description></definition><definition><define key="subset-not-fun" name="subset-not" type="fun"><args>predicate list</args>
+</define><define key="rem-if-fun" name="rem-if" type="fun"><args>predicate list</args>
+</define>
+
+<description><arg>predicate</arg> should be a function of one argument.
+A new list is made by applying <arg>predicate</arg> to
+all of the elements of <arg>list</arg> and removing the ones for which the predicate 
+returns non-<obj>nil</obj>.  One of this function's names (<obj>rem-if</obj>)
+means ``remove if this condition is true''.  The other name (<obj>subset-not</obj>)
+refers to the function's action if <arg>list</arg> is considered to represent
+a mathematical set.
+</description></definition><definition><define key="del-if-fun" name="del-if" type="fun"><args>predicate list</args>
+</define>
+
+<description><obj>del-if</obj> is just like <obj>rem-if</obj> except that it modifies <arg>list</arg>
+rather than creating a new list.
+</description></definition><definition><define key="del-if-not-fun" name="del-if-not" type="fun"><args>predicate list</args>
+</define>
+
+<description><obj>del-if-not</obj> is just like <obj>rem-if-not</obj> except that it modifies <arg>list</arg>
+rather than creating a new list.
+</description></definition>
+<p>See also the generic sequence functions <obj>delete-if</obj>, <obj>delete-if-not</obj>,
+<obj>remove-if</obj> and <obj>remove-if-not</obj> (<ref definition-in-file="generic" key="remove-if-fun" title="Function remove-if" type="fun"></ref>).
+</p>
+<definition><define key="every-fun" name="every" type="fun"><args>list predicate <standard>&amp;optional</standard> step-function</args>
+</define>
+
+<description>Returns <obj>t</obj> if <arg>predicate</arg> returns
+non-<obj>nil</obj> when applied to every element of <arg>list</arg>,
+or <obj>nil</obj> if <arg>predicate</arg> returns <obj>nil</obj> for some element.
+If <arg>step-function</arg> is present, it replaces <obj>cdr</obj>
+as the function used to get to the next element of the list;
+<obj>cddr</obj> is a typical function to use here.
+
+In Common Lisp programs, the name <obj>every</obj> refers to a different,
+incompatible function which serves a similar purpose.  It is documented
+in the manual under the name <obj>cli:every</obj>.  See <ref definition-in-file="generic" key="cli:every-fun" title="Function cli:every" type="fun"></ref>.
+</description></definition><definition><define key="some-fun" name="some" type="fun"><args>list predicate <standard>&amp;optional</standard> step-function</args>
+</define>
+
+<description>Returns a tail of <arg>list</arg> such that the car
+of the tail is the first element that the <arg>predicate</arg> returns
+non-<obj>nil</obj> when applied to,
+or <obj>nil</obj> if <arg>predicate</arg> returns <obj>nil</obj> for every element.
+If <arg>step-function</arg> is present, it replaces <obj>cdr</obj>
+as the function used to get to the next element of the list;
+<obj>cddr</obj> is a typical function to use here.
+
+In Common Lisp programs, the name <obj>some</obj> refers to a different,
+incompatible function which serves a similar purpose.  It is documented
+in the manual under the name <obj>cli:some</obj>.  See <ref definition-in-file="generic" key="cli:some-fun" title="Function cli:some" type="fun"></ref>.
+</description></definition></section><a name="sets"></a>
+
+
+<section chapter-number="5" name="sets" number="7" title="Lists as Sets"><index-entry index="concepts" title="sets"></index-entry>
+
+<p>A list can be used to represent an unordered set of objects, simply by
+using it in a way that ignores the order of the elements.  Membership in
+the set can be tested with <obj>memq</obj> or <obj>member</obj>, and some other
+functions in the previous section also make sense on lists representing
+sets.  This section describes several functions specifically intended
+for lists that represent sets.
+</p>
+
+<p>It is often desirable to avoid adding duplicate elements in the list.
+The set functions attempt to introduce no duplications, but do not
+attempt to eliminate duplications present in their arguments.  If you
+need to make absolutely certain that a list contains no duplicates, use
+<obj>remove-duplicates</obj> or <obj>delete-duplicates</obj> (see
+<ref definition-in-file="generic" key="remove-duplicates-fun" title="Function remove-duplicates" type="fun"></ref>).
+</p>
+<definition><define key="subsetp-fun" name="subsetp" type="fun"><args>list1 list2 <standard>&amp;key</standard> test test-not key</args>
+</define>
+
+<description><obj>t</obj> if every element of <arg>list1</arg> matches some element of <arg>list2</arg>.
+
+The keyword arguments control how matching is done.
+Either <arg>test</arg> or <arg>test-not</arg> should be a function of two arguments.
+Normally it is called with an element of <arg>list1</arg> as the first argument
+and an element of <arg>list2</arg> as the second argument.
+If <arg>test</arg> is
+specified, a match happens when <arg>test</arg> returns non-<obj>nil</obj>; otherwise,
+if <arg>test-not</arg> is specified, a match happens when it returns <obj>nil</obj>.
+If neither is specified, then <obj>eql</obj> is used for <arg>test</arg>.
+
+If <arg>key</arg> is non-<obj>nil</obj>, it should be a function of one argument.
+<arg>key</arg> is applied to each list element to get a key to be passed
+to <arg>test</arg> or <arg>test-not</arg> instead of the element.
+</description></definition><definition><define key="adjoin-fun" name="adjoin" type="fun"><args>item list <standard>&amp;key</standard> test test-not key</args>
+</define>
+
+<description>Returns a list like <arg>list</arg> but with <arg>item</arg> as an additional element
+if no existing element matches item.  It is done like this:
+
+<lisp>(if (cli:member (if <arg>key</arg> (funcall <arg>key</arg> <arg>item</arg>) <arg>item</arg>)
+                <arg>list</arg> <arg>other-args</arg>...)
+    <arg>list</arg>
+  (cons <arg>item</arg> <arg>list</arg>))
+</lisp>The keyword arguments work as in <obj>subsetp</obj>.
+</description></definition><definition><define key="pushnew-fun" name="pushnew" type="mac"><args>item list-place <standard>&amp;key</standard> test test-not key</args>
+</define>
+
+<description>Pushes <arg>item</arg> onto <arg>list-place</arg> unless <arg>item</arg> matches an
+existing element of the value stored in that place.  Equivalent to
+
+<lisp>(setf <arg>list-place</arg>
+      (adjoin <arg>item</arg> <arg>list-place</arg> <arg>keyword-args</arg>...))
+</lisp>except for order of evaluation.  Compare with <obj>push</obj>, <ref definition-in-file="fd-con" key="push-fun" title="Macro push" type="mac"></ref>.
+</description></definition><definition><define key="union-fun" name="union" type="fun"><args>list <standard>&amp;rest</standard> more-lists</args>
+</define>
+
+<description>Returns a list representing the set which is the union of the
+sets represented by the arguments.  Anything which is an element of at
+least one of the arguments is also an element of the result.
+
+Each element of each list is compared, using <obj>eq</obj>, with all elements
+of the other lists, to make sure that no duplications are introduced
+into the result.  As long as no individual argument list contains
+duplications, the result does not either.
+
+It is best to use <obj>union</obj> with only two arguments so that
+your code will not be sensitive to the difference between the
+traditional version of <obj>union</obj> and the Common Lisp version
+<obj>cli:union</obj>, below.
+</description></definition><definition><define key="intersection-fun" name="intersection" type="fun"><args>list <standard>&amp;rest</standard> more-lists</args>
+</define>
+
+<description>If lists are regarded as sets of their elements, <obj>intersection</obj>
+returns a list which is the intersection of the lists which are
+supplied as arguments.  If <arg>list</arg> contains no duplicate elements,
+neither does the value returned by <obj>intersection</obj>.  Elements are
+compared using <obj>eq</obj>.
+
+It is best to use <obj>intersection</obj> with only two arguments so that
+your code will not be sensitive to the difference between the
+traditional version of <obj>intersection</obj> and the Common Lisp version
+<obj>cli:intersection</obj>, below.
+</description></definition><definition><define key="nunion-fun" name="nunion" type="fun"><args>list <standard>&amp;rest</standard> more-lists</args>
+</define>
+
+<description>If lists are regarded as sets of their elements, <obj>nunion</obj> modifies
+<arg>list</arg> to become the union of the lists which are supplied as
+arguments.  This is done by adding on, at the end, any elements of the
+other lists that were not already in <arg>list</arg>.  If none of the arguments
+contains any duplicate elements, neither does the value returned by
+<obj>nunion</obj>.  Elements are compared using <obj>eq</obj>.
+
+It is not safe to assume that <arg>list</arg> has been modified properly in place,
+as this will not be so if <arg>list</arg> is <obj>nil</obj>.  Rather, you
+must store the value returned by <obj>nunion</obj> in place of <arg>list</arg>.
+
+It is best to use <obj>nunion</obj> with only two arguments so that
+your code will not be sensitive to the difference between the
+traditional version of <obj>nunion</obj> and the Common Lisp version
+<obj>cli:nunion</obj>, below.
+</description></definition><definition><define key="nintersection-fun" name="nintersection" type="fun"><args>list <standard>&amp;rest</standard> more-lists</args>
+</define>
+
+<description>Like <obj>intersection</obj> but produces the value by deleting elements from <arg>list</arg>
+until the desired result is reached, and then returning <arg>list</arg> as modified.
+
+It is not safe to assume that <arg>list</arg> has been modified properly in place,
+as this will not be so if the first element was deleted.  Rather, you
+must store the value returned by <obj>nintersection</obj> in place of <arg>list</arg>.
+
+It is best to use <obj>nintersection</obj> with only two arguments so that
+your code will not be sensitive to the difference between the
+traditional version of <obj>nintersection</obj> and the Common Lisp version
+<obj>cli:nintersection</obj>, below.
+</description></definition><definition><define key="cli:union-fun" name="cli:union" type="fun"><args>list1 list2 <standard>&amp;key</standard> test test-not key</args>
+</define><define key="cli:intersection-fun" name="cli:intersection" type="fun"><args>list1 list2 <standard>&amp;key</standard> test test-not key</args>
+</define><define key="cli:nunion-fun" name="cli:nunion" type="fun"><args>list1 list2 <standard>&amp;key</standard> test test-not key</args>
+</define><define key="cli:nintersection-fun" name="cli:nintersection" type="fun"><args>list1 list2 <standard>&amp;key</standard> test test-not key</args>
+</define>
+
+<description>The Common Lisp versions of the above functions, which accept only two sets to
+operate on, but permit additional arguments to control how elements are
+matched.  These keyword arguments work the same as in <obj>subsetp</obj>.
+</description></definition><definition><define key="set-difference-fun" name="set-difference" type="fun"><args>list1 list2 <standard>&amp;key</standard> test test-not key</args>
+</define>
+
+<description>Returns a list which has all the elements of <arg>list1</arg> which do not match any
+element of <arg>list2</arg>.  The keyword arguments control comparison of elements
+just as in <obj>subsetp</obj>.
+
+The result contains no duplicate elements as long as <arg>list1</arg> contains
+none.
+</description></definition><definition><define key="set-exclusive-or-fun" name="set-exclusive-or" type="fun"><args>list1 list2 <standard>&amp;key</standard> test test-not key</args>
+</define>
+
+<description>Returns a list which has all the elements of <arg>list1</arg> which do not match any
+element of <arg>list2</arg>, and also all the elements of <arg>list2</arg> which do not match
+any element of <arg>list1</arg>.  The keyword arguments control comparison of elements
+just as in <obj>subsetp</obj>.
+
+The result contains no duplicate elements as long as neither <arg>list1</arg> nor <arg>list2</arg>
+contains any.
+</description></definition><definition><define key="nset-difference-fun" name="nset-difference" type="fun"><args>list1 list2 <standard>&amp;key</standard> test test-not key</args>
+</define>
+
+<description>Like <obj>set-difference</obj> but destructively modifies <arg>list1</arg> to produce the value.
+See the caveat in <obj>nintersection</obj>, above.
+</description></definition><definition><define key="nset-exclusive-or-fun" name="nset-exclusive-or" type="fun"><args>list1 list2 <standard>&amp;key</standard> test test-not key</args>
+</define>
+
+<description>Like <obj>set-exclusive-or</obj> but may destructively modify both <arg>list1</arg> and <arg>list2</arg>
+to produce the value.  See the caveat in <obj>nintersection</obj>, above.
+</description></definition></section><a name="Association Lists"></a>
+
+
+<section chapter-number="5" name="Association Lists" number="8" title="Association Lists"><p>In all the alist-searching functions, alist elements which are <obj>nil</obj>
+are ignored; they do not count as equivalent to <obj>(nil . nil)</obj>.  Elements
+which are not lists cause errors.
+</p>
+<definition><define key="pairlis-fun" name="pairlis" type="fun"><args>cars cdrs <standard>&amp;optional</standard> tail</args>
+</define>
+
+<description><obj>pairlis</obj> takes two lists and makes an association list which associates
+elements of the first list with corresponding elements of the second
+list.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(pairlis '(beef clams kitty) '(roast fried yu-shiang))
+   =&gt; ((beef . roast) (clams . fried) (kitty . yu-shiang))
+</exdent></lisp>
+<index-entry index="concepts" title="kitty, yu-shiang"></index-entry>
+
+If <arg>tail</arg> is non-<obj>nil</obj>, it should be another alist.  The new
+alist continues with <arg>tail</arg> following the newly constructed mappings.
+
+<obj>pairlis</obj> is defined as:
+
+<lisp>(defun pairlis (cars cdrs &amp;optional tail)
+  (nconc (mapcar 'cons cars cdrs) tail))
+</lisp></description></definition><definition><define key="acons-fun" name="acons" type="fun"><args>acar acdr tail</args>
+</define>
+
+<description>Returns <obj>(cons (cons <arg>acar</arg> <arg>acdr</arg>) <arg>tail</arg>)</obj>.
+This adds one additional mapping from <arg>acar</arg> to <arg>acdr</arg> onto
+the alist <arg>tail</arg>.
+</description></definition><definition><define key="assq-fun" name="assq" type="fun"><args>item alist</args>
+</define>
+
+
+<description><index-entry index="concepts" title="association list"></index-entry>
+<obj>(assq <arg>item alist</arg>)</obj> looks up <arg>item</arg> in the association list
+(list of conses) <arg>alist</arg>.  The value is the first cons whose car
+is <obj>eq</obj> to <arg>x</arg>, or <obj>nil</obj> if there is none such. 
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(assq 'r '((a . b) (c . d) (r . x) (s . y) (r . z)))
+        =&gt;  (r . x)
+
+(assq 'fooo '((foo . bar) (zoo . goo))) =&gt; nil
+
+(assq 'b '((a b c) (b c d) (x y z))) =&gt; (b c d)
+</exdent></lisp>
+It is okay to <obj>rplacd</obj> the result of <obj>assq</obj> as long as it is not <obj>nil</obj>,
+if your intention is to ``update'' the ``table'' that was <obj>assq</obj>'s second argument.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(setq values '((x . 100) (y . 200) (z . 50)))
+(assq 'y values) =&gt; (y . 200)
+(rplacd (assq 'y values) 201)
+(assq 'y values) =&gt; (y . 201)
+</exdent></lisp>
+A common trick is to say
+<obj>(cdr (assq x y))</obj>.
+Since the cdr of <obj>nil</obj> is guaranteed to be <obj>nil</obj>,
+this yields <obj>nil</obj> if no pair is found (or if a pair is
+found whose cdr is <obj>nil</obj>.)
+
+
+<lisp><exdent amount="96"><caption><obj>assq</obj> could have been defined by: </caption>(defun assq (item list)
+    (cond ((null list) nil)
+          ((eq item (caar list)) (car list))
+          ((assq item (cdr list))) ))
+</exdent></lisp></description></definition><definition><define key="assoc-fun" name="assoc" type="fun"><args>item alist</args>
+</define>
+
+<description><obj>assoc</obj> is like <obj>assq</obj> except that the comparison uses <obj>equal</obj> instead of <obj>eq</obj>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(assoc '(a b) '((x . y) ((a b) . 7) ((c . d) .e)))
+        =&gt; ((a b) . 7)
+</exdent></lisp><obj>assoc</obj> could have been defined by:
+
+<lisp>(defun assoc (item list)
+    (cond ((null list) nil)
+          ((equal item (caar list)) (car list))
+          ((assoc item (cdr list))) ))
+</lisp></description></definition><definition><define key="cli:assoc-fun" name="cli:assoc" type="fun"><args>item alist <standard>&amp;key</standard> test test-not</args>
+</define>
+
+<description>The Common Lisp version of <obj>assoc</obj>, this function returns the first
+element of <arg>alist</arg> which is a cons whose car matches <arg>item</arg>, or
+<obj>nil</obj> if there is no such element.
+
+<arg>test</arg> and <arg>test-not</arg> are used in comparing elements, as in
+<obj>cli:subst</obj> (<ref definition-in-file="fd-con" key="cli:subst-fun" title="Function cli:subst" type="fun"></ref>), but note that there is no
+<arg>key</arg> argument in <obj>cli:assoc</obj>.
+
+<obj>cli:assoc</obj> is incompatible with the traditional function <obj>assoc</obj>
+in that, like most Common Lisp functions, it uses <obj>eql</obj> by default
+rather than <obj>equal</obj> for the comparison.
+</description></definition><definition><define key="ass-fun" name="ass" type="fun"><args>predicate item alist</args>
+</define>
+
+<description><obj>ass</obj> is the same as <obj>assq</obj> except that it takes an extra argument
+which should be a predicate of two arguments, which is used for the
+comparison instead of <obj>eq</obj>.  <obj>(ass 'eq a b)</obj> is the same as
+<obj>(assq a b)</obj>.  See also <obj>mem</obj>, <ref definition-in-file="fd-con" key="mem-fun" title="Function mem" type="fun"></ref>.
+
+This function is part of The <obj>mem</obj>, <obj>rem</obj>, <obj>del</obj> series, whose
+names were chosed partly because they created a situation in which
+this function simply had to be called <obj>ass</obj>.  It's too bad that
+<obj>cli:assoc</obj> is so general and subsumes <obj>ass</obj>, which is equivalent
+to
+
+<lisp>(cli:assoc <arg>item</arg> <arg>alist</arg> :test <arg>predicate</arg>)
+</lisp></description></definition><definition><define key="assoc-if-fun" name="assoc-if" type="fun"><args>predicate alist</args>
+</define>
+
+<description>Returns the first element of <arg>alist</arg> which is a cons whose car
+satisfies <arg>predicate</arg>, or <obj>nil</obj> if there is no such element.
+</description></definition><definition><define key="assoc-if-not-fun" name="assoc-if-not" type="fun"><args>predicate alist</args>
+</define>
+
+<description>Returns the first element of <arg>alist</arg> which is a cons whose car does
+not satisfy <arg>predicate</arg>, or <obj>nil</obj> if there is no such element.
+</description></definition><definition><define key="memass-fun" name="memass" type="fun"><args>predicate item alist</args>
+</define>
+
+<description><obj>memass</obj> searches <arg>alist</arg> just like <obj>ass</obj>, but returns the
+portion of the list beginning with the pair containing <arg>item</arg>,
+rather than the pair itself.  <obj>(car (memass <arg>x y z</arg>)) = (ass <arg>x y
+z</arg>)</obj>.  See also <obj>mem</obj>, <ref definition-in-file="fd-con" key="mem-fun" title="Function mem" type="fun"></ref>.
+</description></definition><definition><define key="rassq-fun" name="rassq" type="fun"><args>item alist</args>
+</define><define key="rassoc-fun" name="rassoc" type="fun"><args>item alist</args>
+</define><define key="rass-fun" name="rass" type="fun"><args>predicate item alist</args>
+</define><define key="cli:rassoc-fun" name="cli:rassoc" type="fun"><args>item alist <standard>&amp;key</standard> test test-not</args>
+</define><define key="rassoc-if-fun" name="rassoc-if" type="fun"><args>predicate alist</args>
+</define><define key="rassoc-if-not-fun" name="rassoc-if-not" type="fun"><args>predicate alist</args>
+</define>
+
+<description>The reverse-association functions are like <obj>assq</obj>, <obj>assoc</obj>, etc.
+but match or test the cdrs of the alist elements instead of the cars.
+For example, <obj>rassq</obj> could have been defined by:
+
+<lisp>(defun rassq (item in-list) 
+    (do l in-list (cdr l) (null l) 
+      (and (eq item (cdar l)) 
+           (return (car l)))))
+</lisp></description></definition><definition><define key="sassq-fun" name="sassq" type="fun"><args>item alist fcn</args>
+</define>
+
+<description><obj>(sassq <arg>item alist fcn</arg>)</obj> is like <obj>(assq <arg>item alist</arg>)</obj> except
+that if <arg>item</arg> is not found in <arg>alist</arg>, instead of returning <obj>nil</obj>,
+<obj>sassq</obj> calls the function <arg>fcn</arg> with no arguments.  <obj>sassq</obj> could
+have been defined by: 
+
+<lisp>(defun sassq (item alist fcn)
+    (or (assq item alist)
+        (apply fcn nil)))
+</lisp>
+<obj>sassq</obj> and <obj>sassoc</obj> (see below) are of limited use.
+These are primarily leftovers from Lisp 1.5.
+</description></definition><definition><define key="sassoc-fun" name="sassoc" type="fun"><args>item alist fcn</args>
+</define>
+
+<description><obj>(sassoc <arg>item alist fcn</arg>)</obj> is like <obj>(assoc <arg>item alist</arg>)</obj> except that if
+<arg>item</arg> is not found in <arg>alist</arg>, instead of returning <obj>nil</obj>, <obj>sassoc</obj> calls
+the function <arg>fcn</arg> with no arguments.  <obj>sassoc</obj> could have been
+defined by: 
+
+<lisp>(defun sassoc (item alist fcn)
+    (or (assoc item alist)
+        (apply fcn nil)))
+</lisp></description></definition></section><a name="stack-list"></a>
+
+
+<section chapter-number="5" name="stack-list" number="9" title="Stack Lists"><index-entry index="concepts" title="stack lists"></index-entry>
+
+<p>When you are creating a list that will not be needed any more once the function
+that creates it is finished, it is possible to create the list on the
+stack instead of by consing it.  This avoids any permanent storage
+allocation, as the space is reclaimed as part of exiting the function.
+By the same token, it is a little risky; if any pointers to the list
+remain after the function exits, they will become meaningless.
+</p>
+
+<p>These lists are called <arg>temporary lists</arg> or <arg>stack lists</arg>.
+You can create them explicitly using the special forms
+<obj>with-stack-list</obj> and <obj>with-stack-list*</obj>.  <obj>&amp;rest</obj> arguments also
+sometimes create stack lists.
+</p>
+
+<p>If a stack list, or a list which might be a stack list, is to be
+returned or made part of permanent list-structure, it must first be
+copied (see <obj>copylist</obj>, <ref definition-in-file="fd-con" key="copylist-fun" title="Function copylist" type="fun"></ref>).  The system cannot
+detect the error of omitting to copy a stack list; you will simply find
+that you have a value that seems to change behind your back.
+</p>
+<definition><define key="with-stack-list-fun" name="with-stack-list" type="spec"><args>(variable element...) body...</args>
+</define><define key="with-stack-list*-fun" name="with-stack-list*" type="spec"><args>(variable element... tail) body...</args>
+</define>
+
+<description>These special forms create stack lists that live
+inside the stack frame of the function that they are used in.
+You should assume that the stack lists are only valid until the special
+form is exited.
+
+
+<lisp>(with-stack-list (foo x y)
+  (mumblify foo))
+<exdent amount="96"><caption>is equivalent to </caption>(let ((foo (list x y)))
+  (mumblify foo))
+</exdent></lisp>except for the fact that <obj>foo</obj>'s value in the first example is a stack
+list.
+
+The list created by <obj>with-stack-list*</obj> looks like the one created by
+<obj>list*</obj>.  <arg>tail</arg>'s value becomes the ultimate cdr rather than an
+element of the list.
+
+Here is a practical example.  <obj>condition-resume</obj> (see
+<ref definition-in-file="errors" key="condition-resume-fun" title="Macro condition-resume" type="mac"></ref>) might have been defined as follows:
+
+<lisp>(defmacro condition-resume (handler &amp;body body)
+  `(with-stack-list* (eh:condition-resume-handlers
+                       ,handler eh:condition-resume-handlers)
+     . ,body))
+</lisp></description></definition>
+<p>It is an error to do <obj>rplacd</obj> on a stack list (except for the
+tail of one made using <obj>with-stack-list*</obj>).  <obj>rplaca</obj> works
+normally.
+</p>
+<definition><define key="sys:rplacd-wrong-representation-type-condition" name="sys:rplacd-wrong-representation-type" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This is signaled if you <obj>rplacd</obj> a stack list (or a list overlayed
+with an array or other structure).
+</description></definition></section><a name="plist"></a>
+
+
+<section chapter-number="5" name="plist" number="10" title="Property Lists"><index-entry index="concepts" title="property list"></index-entry>
+
+<index-entry index="concepts" title="plist"></index-entry>
+
+<index-entry index="concepts" title="indicator"></index-entry>
+
+<index-entry index="concepts" title="attribute"></index-entry>
+
+<p>From time immemorial, Lisp has had a kind of tabular data structure
+called a <arg>property list</arg> (plist for short).  A property list contains
+zero or more entries; each entry associates from a keyword symbol
+(called the <arg>property name</arg>, or sometimes the <arg>indicator</arg>) to a Lisp
+object (called the <arg>value</arg> or, sometimes, the <arg>property</arg>).  There
+are no duplications among the property names; a property-list can have only
+one property at a time with a given name.
+</p>
+
+<p>This is very similar to an association list.  The important difference is that a
+property list is an object with a unique identity; the operations for
+adding and removing property-list entries are side-effecting operations
+which alter the property-list rather than making a new one.  An
+association list with no entries would be the empty list <obj>()</obj>, i.e.
+the symbol <obj>nil</obj>.  There is only one empty list, so all empty
+association lists are the same object.  Each empty property-list is a
+separate and distinct object.
+</p>
+
+<p>The implementation of a property list is a memory cell containing a list
+with an even number (possibly zero) of elements.  Each pair of elements
+constitutes a <arg>property</arg>; the first of the pair is the name and the
+second is the value.  (It would have been possible to use an alist to
+hold the pairs; this format was chosen when Lisp was young.)  The memory cell
+is there to give the property list a unique identity and to provide for
+side-effecting operations.
+</p>
+
+<p>The term `property list' is sometimes incorrectly used to refer to the
+list of entries inside the property list, rather than the property list
+itself.  This is regrettable and confusing.
+</p>
+
+<p>How do we deal with ``memory cells'' in Lisp?  That is, what kind of Lisp object
+is a property list?  Rather than being a distinct primitive data type,
+a property list can exist in one of three forms:
+</p>
+
+<p>1. Any cons can be used as a property list.  The cdr of the cons holds
+the list of entries (property names and values).  Using the cons as a
+property list does not use the car of the cons; you can use that for
+anything else.
+</p>
+
+<p>2. The system associates a property list with every symbol (see <ref chapter="7" definition-in-file="fd-sym" key="symbol-plist-section" section="3" title="The Property List" type="section"></ref>).
+A symbol can be used where a property list is expected; the property-list
+primitives automatically find the symbol's property list and use it.
+</p>
+
+<p>3. A flavor instance may have a property list.  The property list
+functions operate on instances by sending messages to them, so the
+flavor can store the property list any way it likes.
+See <ref definition-in-file="flavor" key="si:property-list-mixin-flavor" title="Flavor si:property-list-mixin" type="flavor"></ref>.
+</p>
+
+<p>4. A named structure may have a property list.  The property list
+functions automatically call <obj>named-structure-invoke</obj> when
+a named structure is supplied as the property list.  See <ref definition-in-file="defstr" key="named-structure" type="page"></ref>.
+</p>
+
+<p>5. A property list can be a memory cell in the middle of some data structure,
+such as a list, an array, an instance, or a defstruct.  An arbitrary memory
+cell of this kind is named by a locative (see <ref chapter="15" definition-in-file="fd-loc" key="locative" section="0" title="Locatives" type="section"></ref>).  Such locatives
+are typically created with the <obj>locf</obj> special form (see <ref definition-in-file="fd-eva" key="locf-fun" title="Macro locf" type="mac"></ref>).
+</p>
+
+<index-entry index="concepts" title="disembodied property list"></index-entry>
+
+<p>Property lists of the first kind
+are called <arg>disembodied</arg> property lists because they are not associated with
+a symbol or other data structure.
+The way to create a disembodied property list is <obj>(ncons nil)</obj>,
+or <obj>(ncons <arg>data</arg>)</obj> to store <arg>data</arg> in the car of the property list.
+</p>
+
+<p>Suppose that, inside a program which deals with blocks, the property
+list of the symbol <obj>b1</obj> contains this list (which would be the
+value of <obj>(symbol-plist 'b1)</obj>):
+
+<index-entry index="concepts" title="blocks"></index-entry>
+
+<lisp>        (color blue on b6 associated-with (b2 b3 b4))
+</lisp>The list has six elements, so there are three properties.
+The first property's name is the symbol <obj>color</obj>, and its value
+is the symbol <obj>blue</obj>.  One says that ``the value of <obj>b1</obj>'s <obj>color</obj>
+property is <obj>blue</obj>'', or, informally, that ``<obj>b1</obj>'s <obj>color</obj> property
+is <obj>blue</obj>.''  The program is probably representing the information that
+the block represented by <obj>b1</obj> is painted blue.  Similarly, it is probably
+representing in the rest of the property list that block <obj>b1</obj> is on
+top of block <obj>b6</obj>, and that <obj>b1</obj> is associated with blocks
+<obj>b2</obj>, <obj>b3</obj>, and <obj>b4</obj>.
+</p>
+<definition><define key="get-fun" name="get" type="fun"><args>plist property-name <standard>&amp;optional</standard> default-value</args>
+</define>
+
+<description><obj>get</obj> looks up <arg>plist</arg>'s <arg>property-name</arg> property.  If it finds such a property,
+it returns the value; otherwise, it returns <arg>default-value</arg>.  If <arg>plist</arg> is a symbol,
+the symbol's associated property list is used.  For example, if the property
+list of <obj>foo</obj> is <obj>(baz 3)</obj>, then
+
+<lisp>(get 'foo 'baz) =&gt; 3
+(get 'foo 'zoo) =&gt; nil
+(get 'foo 'baz t) =&gt; 3
+(get 'foo 'zoo t) =&gt; t
+</lisp></description></definition><definition><define key="getl-fun" name="getl" type="fun"><args>plist property-name-list</args>
+</define>
+
+<description><obj>getl</obj> is like <obj>get</obj>, except that the second argument is a list
+of property names.  <obj>getl</obj> searches down <arg>plist</arg> for any
+of the names in <arg>property-name-list</arg>, until it finds a property whose
+name is one of them.
+If <arg>plist</arg> is a symbol, the symbol's associated property list is used.
+        <obj>getl</obj> returns the portion of the list inside <arg>plist</arg> beginning
+with the first such property that it found.  So the car of the returned
+list is a property name, and the <obj>cadr</obj> is the property value.  If none
+of the property names on <arg>property-name-list</arg> are on the property list, <obj>getl</obj>
+returns <obj>nil</obj>.  For example, if the property list of <obj>foo</obj> were
+
+<lisp>(bar (1 2 3) baz (3 2 1) color blue height six-two)
+</lisp>then
+
+<lisp>(getl 'foo '(baz height))
+  =&gt; (baz (3 2 1) color blue height six-two)
+</lisp>
+When more than one of the names in <arg>property-name-list</arg> is present in
+<arg>plist</arg>, which one <obj>getl</obj> returns depends on the order of the properties.
+This is the only thing that depends on that order.  The order maintained
+by <obj>putprop</obj> and <obj>defprop</obj> is not defined (their behavior with respect
+to order is not guaranteed and may be changed without notice).
+</description></definition><definition><define key="putprop-fun" name="putprop" type="fun"><args>plist x property-name</args>
+</define>
+
+<description>This gives <arg>plist</arg> an <arg>property-name</arg>-property of <arg>x</arg>.
+After this is done, <obj>(get <arg>plist property-name</arg>)</obj> returns <arg>x</arg>.
+If <arg>plist</arg> is a symbol, the symbol's associated property list is used.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(putprop 'nixon t 'crook)
+</exdent></lisp>
+It is more modern to write
+
+<lisp>(setf (get <arg>plist</arg> <arg>property-name</arg>) <arg>x</arg>)
+</lisp>which avoids the counterintuitive order in which <obj>putprop</obj> takes its arguments.
+</description></definition><definition><define key="defprop-fun" name="defprop" type="spec"><args>symbol x property-name</args>
+</define>
+
+<description><obj>defprop</obj> is a form of <obj>putprop</obj> with unevaluated arguments,
+which is sometimes more convenient for typing.  Normally only a symbol
+makes sense as the first argument.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(defprop foo bar next-to)
+</exdent></lisp>is the same as
+
+<lisp>(putprop 'foo 'bar 'next-to)
+</lisp></description></definition><definition><define key="remprop-fun" name="remprop" type="fun"><args>plist property-name</args>
+</define>
+
+<description>This removes <arg>plist</arg>'s <arg>property-name</arg> property, by splicing it out of the property
+list.  It returns that portion of the list inside <arg>plist</arg> of which the
+former <arg>property-name</arg>-property was the car.  <obj>car</obj> of what <obj>remprop</obj>
+returns is what <obj>get</obj> would have returned with the same arguments.
+If <arg>plist</arg> is a symbol, the symbol's associated property list is used.
+For example, if the property list of <obj>foo</obj> was
+
+<lisp>(color blue height six-three near-to bar)
+</lisp>then
+
+<lisp>(remprop 'foo 'height) =&gt; (six-three near-to bar)
+</lisp>and <obj>foo</obj>'s property list would be
+
+<lisp>(color blue near-to bar)
+</lisp>If <arg>plist</arg> has no <arg>property-name</arg>-property, then <obj>remprop</obj> has no side-effect
+and returns <obj>nil</obj>.
+</description></definition><definition><define key="getf-fun" name="getf" type="mac"><args>place property <standard>&amp;optional</standard> default</args>
+</define>
+
+<description>Equivalent to <obj>(get (locf <arg>place</arg>) <arg>property</arg> <arg>default</arg>)</obj>, except that <obj>getf</obj> is
+defined in Common Lisp, which does not have <obj>locf</obj> or locatives of any kind.
+
+<obj>(setf (getf <arg>place</arg> <arg>property</arg>) <arg>value</arg>)</obj> can be used to store
+properties into the property list at <arg>place</arg>.
+</description></definition><definition><define key="remf-fun" name="remf" type="mac"><args>place property</args>
+</define>
+
+<description>Equivalent to <obj>(remprop (locf <arg>place</arg>) <arg>property</arg>)</obj>, except that <obj>remf</obj> is
+defined in Common Lisp.
+</description></definition><definition><define key="get-properties-fun" name="get-properties" type="mac"><args>place list-of-properties</args>
+</define>
+
+<description>Like
+<obj>(getl (locf <arg>place</arg>) <arg>list-of-properties</arg>)</obj> but returns
+slightly different values.  Specifically, it searches the property list for a property
+name which is <obj>memq</obj> in <arg>list-of-properties</arg>, then returns three values:
+
+<table><tbody><tr><td><arg>propname</arg></td><td>the property name found
+</td></tr><tr><td><arg>value</arg></td><td>the value of that property
+</td></tr><tr><td><arg>cell</arg></td><td>the property list cell found, whose car is <arg>propname</arg>
+and whose cadr is <arg>value</arg>.
+</td></tr></tbody></table>If nothing is found, all three values are <obj>nil</obj>.
+
+It is possible to continue searching down the property list by using
+<obj>cddr</obj> of the third value as the argument to another call to
+<obj>get-properties</obj>.
+</description></definition></section><a name="symbol"></a>
+
+
+<section chapter-number="5" name="symbol" number="11" title="Hash Tables"><index-entry index="concepts" title="hash table"></index-entry>
+
+<p>A hash table is a Lisp object that works something like a property
+list.  Each hash table has a set of <arg>entries</arg>, each of which
+associates a particular <arg>key</arg> with a particular <arg>value</arg> (or
+sequence of values).  The basic functions that deal with hash tables
+can create entries, delete entries, and find the value that is
+associated with a given key.  Finding the value is very fast even if
+there are many entries, because hashing is used; this is an important
+advantage of hash tables over property lists.  Hashing is explained in
+<ref chapter="5" definition-in-file="fd-con" key="hash-section" section="11" title="Hash Tables" type="section"></ref>.
+</p>
+
+<p>A given hash table stores a fixed number of values for each key;
+by default, there is only one value.  Each time you specify a new
+value or sequence of values, the old one(s) are lost.
+</p>
+
+<p>There are three standard kinds of hash tables, which differ in how
+they compare keys: with <obj>eq</obj>, with <obj>eql</obj> or with <obj>equal</obj>.  In
+other words, there are hash tables which hash on Lisp <arg>objects</arg>
+(using <obj>eq</obj> or <obj>eql</obj>) and there are hash tables which hash on
+trees (using <obj>equal</obj>).
+</p>
+
+<p>You can also create a nonstandard hash table with any comparison
+function you like, as long as you also provide a suitable hash
+function.  Any two objects which would be regarded as the same by the
+comparison function should produce the same hash code under the hash
+function.  See the <obj>:compare-function</obj> and <obj>:hash-function</obj>
+keywords under <obj>make-hash-table</obj>, below.
+</p>
+
+<p>The following discussion refers to the <obj>eq</obj> kind of hash table; the
+other kinds are described later, and work analogously.
+</p>
+
+<p><obj>eq</obj> hash tables are created with the function <obj>make-hash-table</obj>, which
+takes various options.  New entries are added to hash tables with the
+<obj>puthash</obj> function.  To look up a key and find the associated value(s),
+the <obj>gethash</obj> function is used.  To remove an entry, use <obj>remhash</obj>.
+Here is a simple example.
+</p>
+
+<lisp>(setq a (make-hash-table))
+
+(puthash 'color 'brown a)
+(puthash 'name 'fred a)
+
+(gethash 'color a) =&gt; brown
+(gethash 'name a) =&gt; fred
+</lisp>
+<p>In this example, the symbols <obj>color</obj> and <obj>name</obj> are being used as
+keys, and the symbols <obj>brown</obj> and <obj>fred</obj> are being used as the
+associated values.  The hash table remembers one value for each key,
+since we did not specify otherwise, and has two items in it, one of
+which associates from <obj>color</obj> to <obj>brown</obj>, and the other of which
+associates from <obj>name</obj> to <obj>fred</obj>.
+</p>
+
+<p>Keys do not have to be symbols; they can be any Lisp object.  Likewise
+values can be any Lisp object.  Since <obj>eq</obj> does not work reliably on
+numbers (except for fixnums), they should not be used as keys in an
+<obj>eq</obj> hash table.  Use an <obj>eql</obj> hash table if you want to hash on
+numeric values.
+</p>
+
+<p>When a hash table is first created, it has a <arg>size</arg>, which is the
+number of entries it has room for.  But hash tables which are nearly
+full become slow to search, so if more than a certain fraction of the
+entries become in use, the hash table is automatically made larger,
+and the entries are <arg>rehashed</arg> (new hash values are recomputed, and
+everything is rearranged so that the fast hash lookup still works).
+This is transparent to the caller; it all happens automatically.
+</p>
+
+<p>The <obj>describe</obj> function (see <ref definition-in-file="fd-hac" key="describe-fun" title="Function describe" type="fun"></ref>) prints a variety of
+useful information when applied to a hash table.
+</p>
+
+<p>This hash table facility is similar to the hasharray facility of Interlisp,
+and some of the function names are the same.  However, it is <arg>not</arg> compatible.
+The exact details and the order of arguments are designed to be consistent
+with the rest of Zetalisp rather than with Interlisp.  For instance,
+the order of arguments to <obj>maphash</obj> is different, we do not have the Interlisp
+``system hash table'', and we do not have the
+Interlisp restriction that keys and values may not be <obj>nil</obj>.  
+Note, however, that the order of arguments to <obj>gethash</obj>, <obj>puthash</obj>, and <obj>remhash</obj>
+is not consistent with the Zetalisp's <obj>get</obj>, <obj>putprop</obj>, and <obj>remprop</obj>,
+either.  This is an unfortunate result of the haphazard historical development of Lisp.
+</p>
+
+<p>Hash tables are implemented as instances of the flavor <obj>hash-table</obj>.
+The internals of a hash table are subject to change without notice.
+Hash tables should be manipulated only with the functions and operations described below.
+</p>
+
+
+<subsection name="NIL" title="Hash Table Functions"><definition><define key="make-hash-table-fun" name="make-hash-table" type="fun"><args><standard>&amp;rest</standard> options</args>
+</define><define key="make-equal-hash-table-fun" name="make-equal-hash-table" type="fun"><args><standard>&amp;rest</standard> options</args>
+</define>
+
+<description>These functions create new hash tables.  <obj>make-equal-hash-table</obj>
+creates an <obj>equal</obj> hash table.  <obj>make-hash-table</obj> normally creates
+an <obj>eq</obj> hash table, but this can be overridden by keywords as
+described below.  Valid option keywords are:
+
+<table><tbody><tr><td><obj>:size</obj></td><td>Sets the initial size of the hash table, in entries, as a fixnum.  The
+default is 64.  The actual size is rounded up from the size you
+specify to the next size that is good for the hashing algorithm.  The
+number of entries you can actually store in the hash table before it is
+rehashed is at least the actual size times the rehash threshold (see below).
+
+</td></tr><tr><td><obj>:test</obj></td><td>This keyword is the Common Lisp way to specify the kind of hashing
+desired.  The value must be <obj>eq</obj>, <obj>eql</obj> or <obj>equal</obj>.  The one
+specified is used as the compare function and an appropriate hash
+function is chosen automatically to go with it.
+
+</td></tr><tr><td><obj>:compare-function</obj></td><td>Specifies a function of two arguments which compares two keys to see if
+they count as the same for retrieval from this table.  For reasonable
+results, this function should be an equivalence relation.  The default is
+<obj>eq</obj>.  For <obj>make-equal-hash-table</obj> the default is <obj>equal</obj>; that is
+the only difference between that function and <obj>make-hash-table</obj>.
+
+</td></tr><tr><td><obj>:hash-function</obj></td><td>Specifies a function of one argument which, given a key, computes its hash code.
+The hash code may be any Lisp object.  The purpose of the hash function
+is to map equivalent keys into identical objects: if two keys would
+cause the compare function to return non-<obj>nil</obj>, the hash function must
+produce identical (<obj>eq</obj>) hash codes for them.
+
+For an <obj>eq</obj> hash table, the key itself is a suitable hash code, so
+no hash function is needed.  Then this option's value should be
+<obj>nil</obj> (<obj>identity</obj> would also work, but slower).  <obj>nil</obj> is the
+default in <obj>make-hash-table</obj>.  <obj>make-equal-hash-table</obj>
+specifies an appropriate function which uses <obj>sxhash</obj>.
+
+</td></tr><tr><td><obj>:number-of-values</obj></td><td>A positive integer which specifies how many values to associate with
+each key.  The default is one.
+
+</td></tr><tr><td><obj>:area</obj></td><td>Specifies the area in which the hash table should be created.  This is
+just like the <obj>:area</obj> option to <obj>make-array</obj> (see <ref definition-in-file="fd-arr" key="make-array-fun" title="Function make-array" type="fun"></ref>).
+Defaults to <obj>nil</obj> (i.e. <obj>default-cons-area</obj>).
+
+</td></tr><tr><td><obj>:rehash-function</obj></td><td>Specifies the function to be used for rehashing when the table becomes
+full.  Defaults to the internal rehashing function that does the usual
+thing.  If you want to write your own rehashing function, you must
+know all the internals of how hash tables work.  These
+internals are not documented here, as the best way to learn them is
+to read the source code.
+
+</td></tr><tr><td><obj>:rehash-size</obj></td><td>Specifies how much to increase the size of the hash table when it becomes
+full.  This can be a fixnum which is the number of entries to add, or
+it can be a float which is the ratio of the new size to the old size.
+The default is <obj>1.3</obj>, which causes the table to be made 30% bigger
+each time it has to grow.
+
+</td></tr><tr><td><obj>:rehash-threshold</obj></td><td>Sets a maximum fraction of the entries which can be in use before the
+hash table is made larger and rehashed.  The default is <obj>0.7s0</obj>.
+Alternately, an integer may be specified.  It is the exact number of
+filled entries at which a rehash should be done.  When the rehash
+happens, if the threshold is an integer it is increased in the same
+proportion as the table has grown.
+
+</td></tr><tr><td><obj>:rehash-before-cold</obj></td><td>If non-<obj>nil</obj>, this hash table should be rehashed (if that is necessary
+due to garbage collection) by <obj>disk-save</obj>.  This avoids a delay
+for rehashing the hash table the first time it is referenced after
+booting the saved band.
+
+</td></tr><tr><td><obj>:actual-size</obj></td><td>Specifies exactly the size for the hash table.  Hash tables used by
+the microcode for flavor method lookup must be a power of two in size.
+This differs from <obj>:size</obj> in that <obj>:size</obj> is rounded up to a
+nearly prime number, but <obj>:actual-size</obj> is used exactly as
+specified.  <obj>:actual-size</obj> overrides <obj>:size.</obj>
+</td></tr></tbody></table></description></definition><definition><define key="hash-table-p-fun" name="hash-table-p" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is a hash table.
+
+<lisp>(hash-table-p <arg>object</arg>)
+<exdent amount="96"><caption>is equivalent to </caption>(typep <arg>object</arg> 'hash-table)
+</exdent></lisp></description></definition><need amount="1800"></need><nopara></nopara>
+<p>The following functions are equivalent to sending appropriate
+messages to the hash table.
+</p>
+<definition><define key="gethash-fun" name="gethash" type="fun"><args>key hash-table <standard>&amp;optional</standard> default-value</args>
+</define>
+
+<description>Finds the entry in <arg>hash-table</arg> whose key is <arg>key</arg>, and return the
+associated value.  If there is no such entry, returns <arg>default-value</arg>.
+Returns also a second value, which is <obj>t</obj> if an entry was found or
+<obj>nil</obj> if there is no entry for <arg>key</arg> in this table.
+
+Returns also a third value, a list which overlays the hash table
+entry.  Its car is the key; the remaining elements are the values in
+the entry.  This is how you can access values other than the first, if
+the hash table contains more than one value per entry.
+</description></definition><definition><define key="puthash-fun" name="puthash" type="fun"><args>key value hash-table <standard>&amp;rest</standard> extra-values</args>
+</define>
+
+<description>Creates an entry associating <arg>key</arg> to <arg>value</arg>; if there is already an
+entry for <arg>key</arg>, then replace the value of that entry with <arg>value</arg>.
+Returns <arg>value</arg>.  The hash table automatically grows if necessary.
+
+If the hash table associates more than one value with each key, the
+remaining values in the entry are taken from <arg>extra-values</arg>.
+</description></definition><definition><define key="remhash-fun" name="remhash" type="fun"><args>key hash-table</args>
+</define>
+
+<description>Removes any entry for <arg>key</arg> in <arg>hash-table</arg>.  Returns <obj>t</obj> if there was an
+entry or <obj>nil</obj> if there was not.
+</description></definition><definition><define key="swaphash-fun" name="swaphash" type="fun"><args>key value hash-table <standard>&amp;rest</standard> extra-values</args>
+</define>
+
+<description>This specifies new value(s) for <arg>key</arg> like <obj>puthash</obj>, but returns
+values describing the previous state of the entry, just like
+<obj>gethash</obj>.  It returns the previous (replaced)
+associated value as the first value, and returns <obj>t</obj> as the second value
+if the entry existed previously.
+</description></definition><definition><define key="maphash-fun" name="maphash" type="fun"><args>function hash-table <standard>&amp;rest</standard> extra-args</args>
+</define>
+
+<description>For each occupied entry in <arg>hash-table</arg>, call <arg>function</arg>.  The
+arguments passed to <arg>function</arg> are the key of the entry, the value(s)
+of the entry (however many there are), and the <arg>extra-args</arg> (however
+many there are).
+
+If the hash table has more than one value per key, all the values, in
+order, are supplied as successive arguments.
+</description></definition><definition><define key="maphash-return-fun" name="maphash-return" type="fun"><args>function hash-table</args>
+</define>
+
+<description>Like <obj>maphash</obj>, but accumulates and returns a list of all the
+values returned by <arg>function</arg> when it is applied to the items in
+the hash table.
+</description></definition><definition><define key="clrhash-fun" name="clrhash" type="fun"><args>hash-table</args>
+</define>
+
+<description>Removes all the entries from <arg>hash-table</arg>.  Returns the hash table itself.
+</description></definition><definition><define key="hash-table-count-fun" name="hash-table-count" type="fun"><args>hash-table</args>
+</define>
+
+<description>Returns the number of filled entries in hash-table.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Hash Table Operations"><p>Hash tables are instances, and support the following operations:
+</p>
+<definition>
+<define key="hash-table-size-method" name="hash-table" type="method"></define>
+
+<description>Returns the number of entries in the hash table.
+Note that the hash table is rehashed when only a fraction of this many
+(the rehash threshold) are full.
+</description></definition><definition>
+<define key="hash-table-filled-entries-method" name="hash-table" type="method"></define>
+
+<description>Returns the number of entries that are currently occupied.
+</description></definition><definition><define key="hash-table-get-hash-method" name="hash-table" type="method"><args>key</args>
+</define><define key="hash-table-put-hash-method" name="hash-table" type="method"><args>key <standard>&amp;rest</standard> values</args>
+</define><define key="hash-table-swap-hash-method" name="hash-table" type="method"><args>key <standard>&amp;rest</standard> values</args>
+</define><define key="hash-table-rem-hash-method" name="hash-table" type="method"><args>key</args>
+</define><define key="hash-table-map-hash-method" name="hash-table" type="method"><args>function <standard>&amp;rest</standard> extra-args</args>
+</define><define key="hash-table-map-hash-return-method" name="hash-table" type="method"><args>function</args>
+</define>
+<define key="hash-table-clear-hash-method" name="hash-table" type="method"></define>
+<define key="hash-table-filled-entries-method" name="hash-table" type="method"></define>
+
+<description>Are equivalent to the functions <obj>gethash</obj>, <obj>puthash</obj>, <obj>swaphash</obj>,
+<obj>remhash</obj>, <obj>maphash</obj>, <obj>maphash-return</obj>, <obj>clrhash</obj> and
+<obj>hash-table-count</obj> except that the hash table need not be specified as
+an argument because it is the object that receives the message.  Those
+functions (documented in the previous section) actually work by invoking
+these operations.
+</description></definition><definition><define key="hash-table-modify-hash-method" name="hash-table" type="method"><args>key function <standard>&amp;rest</standard> additional-args</args>
+</define>
+
+<description>Passes the value associated with <arg>key</arg> in the table to <arg>function</arg>;
+whatever <arg>function</arg> returns is stored in the table as the new value for <arg>key</arg>.
+Thus, the hash association for
+<arg>key</arg> is both examined and updated according to <arg>function</arg>.
+
+The arguments passed to <arg>function</arg> are <arg>key</arg>, the value associated with <arg>key</arg>,
+a flag (<obj>t</obj> if <arg>key</arg> is actually found in the hash table), and the
+<arg>additional-args</arg> that you specify.
+
+If the hash table stores more than one value per key, only the first
+value is examined and updated.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Hash Tables and the Garbage Collector"><p>The <obj>eq</obj> type hash tables actually hash on the address of the
+representation of the object.  <obj>equal</obj> hash tables do so too, if given
+keys containing unusual objects (other than symbols, numbers, strings
+and lists of the above).  When the copying garbage collector changes the
+addresses of objects, it lets the hash facility know so that the next <obj>gethash</obj>
+will rehash the table based on the new object addresses.
+</p>
+
+<p>There may eventually be an option to <obj>make-hash-table</obj> which tells it
+to make a ``non-GC-protecting'' hash table.  This is a special kind of hash table
+with the property that if one of its keys becomes garbage, i.e. is an object
+not known about by anything other than the hash table, then the entry for that
+key will be removed silently from the table.  When this option exists it will be
+documented in this section.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Hash Primitive"><p><arg>Hashing</arg> is a technique used in algorithms to provide fast retrieval
+of data in large tables.  A function, known as the <arg>hash function</arg>,
+takes an object that might be used as a key, and produces
+a number associated with that key.  This number, or some function of it,
+can be used to specify where in a table to look for the datum associated
+with the key.  It is always possible for two different objects to hash
+to the same value; that is, for the hash function to return the same
+number for two distinct objects.  Good hash functions are designed to minimize
+this by evenly distributing their results over the range of possible numbers.
+However, hash table algorithms must still deal with
+this problem by providing a secondary search, sometimes known as a
+<arg>rehash</arg>.  For more information, consult a
+textbook on computer algorithms.
+</p>
+<definition><define key="sxhash-fun" name="sxhash" type="fun"><args>tree <standard>&amp;optional</standard> ok-to-use-address</args>
+</define>
+
+
+<description><index-entry index="concepts" title="hash table"></index-entry>
+<obj>sxhash</obj> computes a hash code of a tree, and returns it as a fixnum.
+A property of <obj>sxhash</obj> is that <obj>(equal <arg>x y</arg>)</obj> always implies
+<obj>(= (sxhash <arg>x</arg>) (sxhash <arg>y</arg>))</obj>.  The number returned by <obj>sxhash</obj> is
+always a non-negative fixnu.  <obj>sxhash</obj> tries to
+compute its hash code in such a way that common permutations of an object,
+such as interchanging two elements of a list or changing one character in
+a string, always change the hash code.
+
+Here is an example of how to use <obj>sxhash</obj> in maintaining
+hash tables of trees:
+
+<lisp>(defun knownp (x &amp;aux i bkt)    ;<standard>look up <obj>x</obj> in the table</standard>
+    (setq i (abs (remainder (sxhash x) 176)))
+      ;The remainder should be reasonably randomized.
+    (setq bkt (aref table i))
+      ;bkt is thus a list of all those expressions that
+      ;hash into the same number as does x.
+    (memq x bkt))
+</lisp>
+For an ``intern'' for trees, one could write:
+
+<lisp>(defun sintern (x &amp;aux bkt i tem)
+    (setq i (abs (remainder (sxhash x) 2n-1)))
+        ;2n-1 stands for a power of 2 minus one.
+        ;This is a good choice to randomize the
+        ;result of the remainder operation.
+    (setq bkt (aref table i))
+    (cond ((setq tem (memq x bkt))
+           (car tem))
+          (t (aset (cons x bkt) table i)
+             x)))
+</lisp></description></definition>
+<p>If <obj>sxhash</obj> is given a named structure or a flavor instance, or if
+such an object
+is part of a tree that is <obj>sxhash</obj>'ed, it asks the object to supply
+its own hash code by performing the <obj>:sxhash</obj> operation if the object
+supports it.  This should return a suitable nonnegative hash code.  The
+easiest way to compute one is usually by applying <obj>sxhash</obj> to one or
+more of the components of the structure or the instance variables of the
+instance.
+</p>
+
+<p>For named structures and flavor instances that do not handle the
+<obj>:sxhash</obj> operation, and other unusual kinds of objects,
+<obj>sxhash</obj> can optionally use the object's address as its hash code,
+if you specify a non-<obj>nil</obj> second argument.  If you use this
+option, you must be prepared to deal with hash codes changing due to
+garbage collection.
+</p>
+
+<p><obj>sxhash</obj> provides what is called ``hashing on <obj>equal</obj>''; that is, two
+objects that are <obj>equal</obj> are considered to be ``the same'' by
+<obj>sxhash</obj>.  If two strings differ only in alphabetic case,
+<obj>sxhash</obj> returns the same thing for both of them, making it
+suitable for <obj>equalp</obj> hashing as well in some cases.
+</p>
+
+<p>Therefore, <obj>sxhash</obj> is useful for retrieving data when
+two keys that are not the same object but are <obj>equal</obj> are considered
+the same.  If you consider two such keys to be different, then you need
+``hashing on <obj>eq</obj>'', where two different objects are always considered
+different.  In some Lisp implementations, there is an easy way to create
+a hash function that hashes on <obj>eq</obj>, namely, by returning the virtual
+address of the storage associated with the object.  But in other
+implementations, of which Zetalisp is one, this doesn't work,
+because the address associated with an object can be changed by the
+relocating garbage collector.  The hash tables created by <obj>make-hash-table</obj>
+deal with this problem by using the appropriate subprimitives so that they
+interface correctly with the garbage collector.  If you need a hash table
+that hashes on <obj>eq</obj>, it is already provided; if you need an
+<obj>eq</obj> hash function for some other reason, you must build it yourself,
+either using the provided <obj>eq</obj> hash table facility or carefully using
+subprimitives.
+</p>
+</subsection></section></chapter>
+</document-part>

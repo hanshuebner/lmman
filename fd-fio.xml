@@ -1,0 +1,991 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="format"></a>
+
+
+<section chapter-number="23" name="format" number="4" title="Formatted Output"><index-entry index="concepts" title="formatted output"></index-entry>
+
+<p>There are two ways of doing general formatted output.  One is the
+function <obj>format</obj>.  The other is the <obj>output</obj> subsystem.
+<obj>format</obj> uses a control string written in a special format
+specifier language to control the output format.
+<obj>format:output</obj> provides Lisp functions to do
+output in particular formats.  
+</p>
+
+<p>For simple tasks in which only the most basic format specifiers are
+needed, <obj>format</obj> is easy to use and has the advantage of brevity.
+For more complicated tasks, the format specifier language becomes
+obscure and hard to read.  Then <obj>format:output</obj> becomes advantageous
+because it works with ordinary Lisp control constructs.
+</p>
+
+
+<subsection name="NIL" title="The Format Function"><definition><define key="format-fun" name="format" type="fun"><args>destination control-string <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Produces formatted output.
+<obj>format</obj> outputs the characters of <arg>control-string</arg>, except
+that a tilde (`<obj>~</obj>') introduces a directive.  The character after
+the tilde, possibly preceded by prefix parameters and modifiers, specifies
+what kind of formatting is desired.  Most directives use one or more
+elements of <arg>args</arg> to create their output; the typical directive
+puts the next element of <arg>args</arg> into the output, formatted in
+some special way.
+
+        The output is sent to <arg>destination</arg>.  If <arg>destination</arg> is
+<obj>nil</obj>, a string is created which contains the output; this string is
+returned as the value of the call to <obj>format</obj>.  In all other cases
+<obj>format</obj> returns no interesting value (generally it returns <obj>nil</obj>).
+If <arg>destination</arg> is a stream, the output is sent to it.  If
+<arg>destination</arg> is <obj>t</obj>, the output is sent to <obj>*standard-output*</obj>.  If
+<arg>destination</arg> is a string with an array-leader, such as would be
+acceptable to <obj>string-nconc</obj> (see <ref definition-in-file="fd-str" key="string-nconc-fun" title="Function string-nconc" type="fun"></ref>), the output is
+added to the end of that string.
+</description></definition>
+<p indent="1">        A directive consists of a tilde, optional prefix parameters
+separated by commas, optional colon (`<obj>:</obj>') and atsign (`<obj>@</obj>') modifiers,
+and a single character indicating what kind of directive this is.
+The alphabetic case of the character is ignored.
+The prefix parameters are generally decimal numbers.
+Examples of control strings:
+</p>
+
+<lisp>&quot;~S&quot;        ; <standard>This is an S directive with no parameters.</standard>
+&quot;~3,4:@s&quot;   ; <standard>This is an S directive with two parameters, 3 and 4,</standard>
+            ; <standard>   and both the colon and atsign flags.</standard>
+&quot;~,4S&quot;      ; <standard>The first prefix parameter is omitted and takes</standard>
+            ; <standard>   on its default value, while the second is 4.</standard>
+</lisp>
+<p><obj>format</obj> includes some extremely complicated and specialized
+features.  It is not necessary to understand all or even most of its
+features to use <obj>format</obj> efficiently.  The beginner should
+skip over anything in the following documentation that is not
+immediately useful or clear.  The more sophisticated features are
+there for the convenience of programs with complicated formatting
+requirements.
+</p>
+
+<p indent="1">        Sometimes a prefix parameter is used to specify a character,
+for instance the padding character in a right- or left-justifying
+operation.  In this case a single quote (&quot;<obj> ' </obj>&quot;) followed by the
+desired character may be used as a prefix parameter, so that you don't
+have to know the decimal numeric values of characters in the character
+set.  For example, you can use <obj>&quot;~5,'0d&quot;</obj> instead of <obj>&quot;~5,48d&quot;</obj> to
+print a decimal number in five columns with leading zeros.
+</p>
+
+<p>In place of a prefix parameter to a directive, you can put the letter
+<obj>V</obj>, which takes an argument from <arg>args</arg> as a parameter to the
+directive.  Normally this should be a number but it doesn't really have
+to be.  This feature allows variable column-widths and the like.  Also,
+you can use the character <obj>#</obj> in place of a parameter; it represents the
+number of arguments remaining to be processed.
+</p>
+<need amount="1800"></need>
+<p>Here are some relatively simple examples to give you the general
+flavor of how <obj>format</obj> is used.
+
+<lisp>(format nil &quot;foo&quot;) =&gt; &quot;foo&quot;
+(setq x 5)
+(format nil &quot;The answer is ~D.&quot; x) =&gt; &quot;The answer is 5.&quot;
+(format nil &quot;The answer is ~3D.&quot; x) =&gt; &quot;The answer is   5.&quot;
+</lisp>
+<lisp>(setq y &quot;elephant&quot;)
+(format nil &quot;Look at the ~A!&quot; y) =&gt; &quot;Look at the elephant!&quot;
+(format nil &quot;The character ~:@C is strange.&quot; #\meta-beta)
+      =&gt; &quot;The character Meta-β (Greek-b) is strange.&quot;
+</lisp>
+<lisp>(setq n 3)
+(format nil &quot;~D item~:P found.&quot; n) =&gt; &quot;3 items found.&quot;
+(format nil &quot;~R dog~:[s are~; is~] here.&quot; n (= n 1))
+      =&gt; &quot;three dogs are here.&quot;
+(format nil &quot;~R dog~:*~[~1; is~:;s are~] here.&quot; n)
+      =&gt; &quot;three dogs are here.&quot;
+(format nil &quot;Here ~[~1;is~:;are~] ~:*~R pupp~:@P.&quot; n)
+      =&gt; &quot;Here are three puppies.&quot;
+</lisp></p>
+
+<p>The directives will now be described.
+<arg>arg</arg> will be used to refer to the next argument from <arg>args</arg>.
+
+<table><tbody><tr><td><obj>~A</obj></td><td><arg>arg</arg>, any Lisp object, is printed without escaping (as by <obj>princ</obj>).
+<obj>~:A</obj> prints <obj>( )</obj> if <arg>arg</arg> is <obj>nil</obj>; this is useful when printing
+something that is always supposed to be a list.
+<obj>~<arg>n</arg>A</obj> inserts spaces on the right, if necessary, to make the
+column width at least <arg>n</arg>.  The <obj>@</obj> modifier causes the spaces
+to be inserted on the left rather than the right.
+<obj>~<arg>mincol,colinc,minpad,padchar</arg>A</obj> is the full form of <obj>~A</obj>,
+which allows elaborate control of the padding.
+The string is padded on the right with at least <arg>minpad</arg> copies
+of <arg>padchar</arg>; padding characters are then inserted <arg>colinc</arg> characters
+at a time until the total width is at least <arg>mincol</arg>.
+The defaults are 0 for <arg>mincol</arg> and <arg>minpad</arg>, 1 for <arg>colinc</arg>,
+and space for <arg>padchar</arg>.
+
+</td></tr><tr><td><obj>~S</obj></td><td>This is just like <obj>~A</obj>, but <arg>arg</arg> is printed <arg>with</arg> escaping
+(as by <obj>prin1</obj> rather than <obj>princ</obj>).
+
+</td></tr><tr><td><obj>~D</obj></td><td><arg>arg</arg>, a number, is printed in base ten.
+Unlike <obj>print</obj>, <obj>~D</obj> never puts a decimal point after the number.
+<obj>~<arg>n</arg>D</obj> uses a column width of <arg>n</arg>; spaces are inserted on
+the left if the number requires less than <arg>n</arg> columns for its digits
+and sign.  If the number doesn't fit in <arg>n</arg> columns, additional columns
+are used as needed. <obj>~<arg>n</arg>,<arg>m</arg>D</obj> uses <arg>m</arg> as the pad character
+instead of space.  If <arg>arg</arg> is not a number, it is printed
+in <obj>~A</obj> format and decimal base.
+The <obj>@</obj> modifier causes the number's sign to be printed always; the default
+is only to print it if the number is negative.
+The <obj>:</obj> modifier causes commas to be printed between groups of three digits;
+the third prefix parameter may be used to change the character used as the comma.
+Thus the most general form of <obj>~D</obj> is
+<obj>~<arg>mincol</arg>,<arg>padchar</arg>,<arg>commachar</arg>D</obj>.
+
+</td></tr><tr><td><obj>~O</obj></td><td>This is just like <obj>~D</obj> but prints in octal instead of decimal.
+
+</td></tr><tr><td><obj>~X</obj></td><td>This is just like <obj>~D</obj> but prints in hex instead of decimal.
+Note that <obj>~X</obj> used to have a different meaning: print one or more spaces.
+Uses of <obj>~X</obj> intended to have this meaning should be replaced with <obj>~@T</obj>.
+
+</td></tr><tr><td><obj>~B</obj></td><td>This is just like <obj>~D</obj> but prints in binary instead of decimal.
+
+</td></tr><tr><td><obj>~<arg>w</arg>,<arg>d</arg>,<arg>k</arg>,<arg>ovfl</arg>,<arg>pad</arg> F</obj></td><td><arg>arg</arg> is printed in nonexponential floating point format, as in
+`10.5'.  (If the magnitude of <arg>arg</arg> is very large or very small, it is
+printed in exponential notation.)  The parameters control the details of
+the formatting.
+
+<table><tbody><tr><td><arg>w</arg></td><td>is the total field width desired.  If omitted, this is not constrained.
+</td></tr><tr><td><arg>d</arg></td><td>is the number of digits to print after the decimal point.
+If <arg>d</arg> is omitted, it is chosen to do a good job based on <arg>w</arg>
+(if specified) and the value of <arg>arg</arg>.
+</td></tr><tr><td><arg>k</arg></td><td>is a scale factor.  <arg>arg</arg> is multiplied by <obj>(exp 10. <arg>k</arg>)</obj>
+before it is printed.
+</td></tr><tr><td><arg>ovfl</arg></td><td>is a character to use for overflow.  If <arg>arg</arg>
+is too big to print and fit the constraints of field width, etc.,
+and <arg>ovfl</arg> is specified then the whole field is filled with <arg>ovfl</arg>.
+If <arg>ovfl</arg> is not specified, <arg>arg</arg> is printed using extra width as needed.
+</td></tr><tr><td><arg>pad</arg></td><td>is a character to use for padding on the left, when the field
+width is specified and not that many characters are really needed.
+</td></tr></tbody></table>
+<nopara></nopara>If the <obj>@</obj> modifier is used, a sign is printed even if <arg>arg</arg> is positive.
+
+Rational numbers are converted to floats and then printed.
+Anything else is printed with <obj>~<arg>w</arg>D</obj> format.
+
+</td></tr><tr><td><obj>~<arg>w</arg>,<arg>d</arg>,<arg>e</arg>,<arg>k</arg>,<arg>ovfl</arg>,<arg>pad</arg>,<arg>expt</arg> E</obj></td><td><arg>arg</arg> is printed in exponential notation, as in `.105e+2'.  The parameters control
+the details of the formatting.
+
+<table><tbody><tr><td><arg>w</arg></td><td>is the total field width desired.  If omitted, this is not constrained.
+</td></tr><tr><td><arg>d <standard>and</standard> k</arg></td><td>control the number of mantissa digits and their arrangement around the
+decimal point.  <arg>d</arg>+1 digits are printed.  If <arg>k</arg> is positive, all
+of them are significant digits, and the decimal point is printed after
+the first <arg>k</arg> of them.  If <arg>k</arg> is zero or negative, the first
+|<arg>k</arg>|+1 of the <arg>d</arg>+1 digits are leading zeros, and the decimal
+point follows the first zero.  (This zero can be omitted if necessary
+to fit the number in <arg>w</arg> characters.)  So the number of significant
+figures is less than <arg>d</arg> if <arg>k</arg> is negative.
+
+The exponent printed always compensates for any powers of ten
+introduced according to <arg>k</arg>, so 10.5 might be printed as
+<obj>0.105e+2</obj> or as <obj>1050.0e-2</obj>.
+
+If <arg>d</arg> is omitted, the system chooses enough significant figures
+to represent the float accurately.  If <arg>k</arg> is omitted, the default is one.
+</td></tr><tr><td><arg>e</arg></td><td>is the number of digits to use for the exponent.  If it is not specified,
+however many digits are needed are used.
+</td></tr><tr><td><arg>ovfl</arg></td><td>is the overflow character.
+If the exponent doesn't fit in <arg>e</arg> digits or the entire number
+does not fit in <arg>w</arg> characters, then if <arg>ovfl</arg> is specified,
+the field of <arg>w</arg> characters is filled with <arg>ovfl</arg>.  Otherwise
+more characters are used as needed.
+</td></tr><tr><td><arg>pad</arg></td><td>is a character to use for padding on the left, when the field
+width is specified and not that many characters are really needed.
+</td></tr><tr><td><arg>expt</arg></td><td>is a character to use to separate the mantissa from the exponent.
+The default is <obj>e</obj> or <obj>s</obj> or <obj>f</obj>, whichever would be used
+in printing the number normally.
+</td></tr></tbody></table>
+<nopara></nopara>If the <obj>@</obj> modifier is used, a sign is printed even if <arg>arg</arg> is positive.
+
+</td></tr><tr><td><obj>~<arg>w</arg>,<arg>d</arg>,<arg>e</arg>,<arg>k</arg>,<arg>ovfl</arg>,<arg>pad</arg>,<arg>expt</arg> G</obj></td><td>Prints a floating point number <arg>arg</arg> in either <obj>~F</obj> or <obj>~E</obj>
+format.  Fixed format is used if the absolute value of <arg>arg</arg> is less
+than <obj>(expt 10. <arg>d</arg>)</obj>, and exponential format otherwise.  (If <arg>d</arg>
+is not specified, it defaults based on the value of <arg>arg</arg>.)  If fixed
+format is used, <arg>e</arg>+2 blanks are printed at the end (where the
+exponent and its separator and sign would go, in exponential format).
+These count against the width <arg>w</arg> if that is specified.  Four blanks
+are used if <arg>e</arg> is omitted.  The diminished width available, <arg>d</arg>,
+<arg>ovfl</arg> and <arg>pad</arg> are used as specified.  The scale factor used in
+fixed format is always zero, not <arg>k</arg>.
+
+If exponential format needs to be used, all the parameters are passed to
+the <obj>~E</obj> directive to print the number.
+
+Rational numbers are converted to floats and then printed.
+Anything else is printed with <obj>~<arg>w</arg>D</obj> format.
+
+</td></tr><tr><td><obj>~$</obj></td><td><obj>~<arg>rdig</arg>,<arg>ldig</arg>,<arg>field</arg>,<arg>padchar</arg>$</obj> prints
+<arg>arg</arg>, a float, with exactly <arg>rdig</arg> digits after the decimal
+point.  The default for <arg>rdig</arg> is 2, which is convenient for
+printing amounts of money.  At least <arg>ldig</arg> digits are printed
+preceding the decimal point; leading zeros are printed if there would
+be fewer than <arg>ldig</arg>.  The default for <arg>ldig</arg> is 1.  The number is
+right justified in a field <arg>field</arg>
+columns long, padded out with <arg>padchar</arg>.  The colon modifier means
+that the sign character is to be at the beginning of the field, before
+the padding, rather than just to the left of the number.  The atsign modifier
+says that the sign character should always be output.
+
+If <arg>arg</arg> is not a number, or is unreasonably large, it is printed
+in <obj>~<arg>field</arg>,,,<arg>padchar</arg>@A</obj> format; i.e. it is <obj>princ</obj>'ed
+right-justified in the specified field width.
+
+</td></tr><tr><td><obj>~C</obj></td><td><obj>(character <arg>arg</arg>)</obj> is put in the output.  <arg>arg</arg> is treated as a
+keyboard character (see <ref definition-in-file="fd-str" key="%%kbd" type="page"></ref>), thus it may contain extra
+control-bits.  These are printed first by representing them with
+abbreviated prefixes: `<obj>C-</obj>' for <obj>Control</obj>, `<obj>M-</obj>' for <obj>Meta</obj>, `<obj>H-</obj>' for <obj>Hyper</obj>,
+and `<obj>S-</obj>' for <obj>Super</obj>.
+
+With the colon flag (<obj>~:C</obj>), the names of the control bits are spelled out
+(e.g. `<obj>Control-Meta-F</obj>') and non-printing characters
+are represented by their names (e.g. `<obj>Return</obj>') rather than being output
+as themselves.  The printing characters Space and Altmode are also represented
+as their names, but all others are printed directly.
+
+With both colon and atsign (<obj>~:@C</obj>), the colon-only format is printed, and then
+if the character requires the <obj>Top</obj> or <obj>Greek</obj> (<obj>Front</obj>) shift key(s) to type it,
+this fact is mentioned (e.g. `<obj>∀ (Top-U)</obj>').  This is the format
+used for telling the user about a key he is expected to type, for instance
+in prompt messages.
+
+For all three of these formats, if the character is a mouse character, it
+is printed as <obj>Mouse-</obj>, the name of the button, `<example>-</example>', and the number
+of clicks.
+
+With just an atsign (<obj>~@C</obj>), the character is printed in such a way that
+the Lisp reader can understand it, using `<obj>#\</obj>' or `<obj>#/</obj>', depending
+on the escaping character of <obj>*readtable*</obj> (see <ref definition-in-file="rdprt" key="escape-characters" type="page"></ref>).
+
+</td></tr><tr><td><obj>~%</obj></td><td>Outputs a carriage return.  <obj>~<arg>n</arg>%</obj> outputs <arg>n</arg> carriage returns.
+No argument is used.  Simply putting a carriage return in the control string
+would work, but <obj>~%</obj> is usually used because it makes the control string
+look nicer in the Lisp source program.
+
+</td></tr><tr><td><obj>~&amp;</obj></td><td>The <obj>:fresh-line</obj> operation is performed on the output stream.
+Unless the stream knows that it is already at the front of a line,
+this outputs a carriage return.  <obj>~<arg>n</arg>&amp;</obj> does a <obj>:fresh-line</obj> operation
+and then outputs <arg>n</arg>-1 carriage returns.
+
+</td></tr><tr><td><obj>~|</obj></td><td>Outputs a page separator character (<obj>#\page</obj>).  <obj>~<arg>n</arg>|</obj> does this
+<arg>n</arg> times.  With a <obj>:</obj> modifier, if the output stream supports the
+<obj>:clear-screen</obj> operation this directive clears the screen, otherwise
+it outputs page separator character(s) as if no <obj>:</obj> modifier were
+present.  <obj>|</obj> is vertical bar, not capital I.
+
+</td></tr><tr><td><obj>~~</obj></td><td>Outputs a tilde.  <obj>~<arg>n</arg>~</obj> outputs <arg>n</arg> tildes.
+
+</td></tr><tr><td><obj>~ &lt;CR&gt;</obj></td><td>Tilde immediately followed by a carriage return ignores the carriage return
+and any whitespace at the beginning of the next line.  With a <obj>:</obj>, the whitespace
+is left in place.  With an <obj>@</obj>, the carriage return is left in place.
+This directive is typically used when a format control string is too long
+to fit nicely into one line of the program.
+
+</td></tr><tr><td><obj>~*</obj></td><td><arg>arg</arg> is ignored.  <obj>~<arg>n</arg>*</obj> ignores the next <arg>n</arg> arguments.
+<obj>~:*</obj> ``ignores backwards''; that is, it backs up in the list of
+arguments so that the argument last processed will be processed again.
+<obj>~<arg>n</arg>:*</obj> backs up <arg>n</arg> arguments.  <obj>~<arg>n</arg>@*</obj> is absolute;
+it moves to argument <arg>n</arg> (<arg>n</arg> = 0 specifies the first argument).
+
+When within a <obj>~{</obj> construct (see below), the ignoring (in either
+direction) is relative to the list of arguments being processed by the
+iteration.
+
+</td></tr><tr><td><obj>~P</obj></td><td>If <arg>arg</arg> is not <obj>1</obj>, a lower-case `s' is printed.  (`<obj>P</obj>' is for `plural'.)
+<obj>~:P</obj> does the same thing, after doing a <obj>~:*</obj>; that is, it prints
+a lower-case s if the <arg>last</arg> argument was not 1.  <obj>~@P</obj> prints `y'
+if the argument is 1, or `ies' if it is not.  <obj>~:@P</obj> does the same thing,
+but backs up first.
+
+</td></tr><tr><td><obj>~T</obj></td><td>Spaces over to a given column.  <obj>~<arg>n</arg>,<arg>m</arg>T</obj> outputs
+sufficient spaces to move the cursor to column <arg>n</arg>.  If the cursor
+is already past column <arg>n</arg>, it outputs spaces to move it to
+column <arg>n</arg>+<arg>mk</arg>, for the smallest integer value <arg>k</arg> possible.
+<arg>n</arg> and <arg>m</arg> default to <obj>1</obj>.  Without the colon flag, <arg>n</arg> and
+<arg>m</arg> are in units of characters; with it, they are in units of pixels.
+
+Note: this operation works properly <arg>only</arg> on streams that support
+the <obj>:read-cursorpos</obj> and <obj>:increment-cursorpos</obj> stream operations
+(see <ref definition-in-file="stream" key="read-cursorpos" type="page"></ref>).  On other streams, any <obj>~T</obj> operation
+simply outputs two spaces.  When <obj>format</obj> is creating
+a string, <obj>~T</obj> works by assuming that the first character in the string
+is at the left margin.
+
+<obj>~@T</obj> simply outputs a space.
+<obj>~<arg>rel</arg> T</obj> simply outputs <arg>rel</arg> spaces.
+<obj>~<arg>rel</arg>, <arg>period</arg> T</obj> outputs <arg>rel</arg> spaces and then
+additional spaces until it reaches a column which is a multiple
+of <arg>period</arg>.  If the output stream does not support <obj>:read-cursorpos</obj>
+then it simply outputs <arg>rel</arg> spaces.
+
+</td></tr><tr><td><obj>~R</obj></td><td><obj>~R</obj> prints <arg>arg</arg> as a cardinal English number, e.g. four.
+<obj>~:R</obj> prints <arg>arg</arg> as an ordinal number, e.g. fourth.
+<obj>~@R</obj> prints <arg>arg</arg> as a Roman numeral, e.g. <obj>IV</obj>.
+<obj>~:@R</obj> prints <arg>arg</arg> as an old Roman numeral, e.g. <obj>IIII</obj>.
+
+<obj>~<arg>n</arg>R</obj> prints <arg>arg</arg> in radix <arg>n</arg>.
+The flags and any remaining parameters are used as for the <obj>~D</obj> directive.
+Indeed, <obj>~D</obj> is the same as <obj>~10R</obj>.  The full form here is therefore
+<obj>~<arg>radix</arg>,<arg>mincol</arg>,<arg>padchar</arg>,<arg>commachar</arg>R</obj>.
+
+</td></tr><tr><td><obj>~?</obj></td><td>Uses up two arguments, and processes the first one as a format control string
+using the second one's elements as arguments.  Thus,
+
+<lisp>(format nil &quot;~? ~D&quot; &quot;~O ~O&quot; '(4 20.) 9)
+</lisp>returns <obj>&quot;4 24 9&quot;</obj>.
+
+<obj>~@?</obj> processes the following argument as a format control string,
+using all the remaining arguments.  Any arguments it does not use
+are left to be processed by the format directives following the <obj>~@?</obj>
+in the original control string.
+
+<lisp>(format nil &quot;~@? ~D&quot; &quot;~O ~O&quot; 4 20. 9)
+</lisp>likewise returns <obj>&quot;4 24 9&quot;</obj>.
+
+</td></tr><tr><td><obj>~→<arg>str</arg>~←</obj></td><td>Performs the formatting specified by <arg>str</arg>, with indentation on
+any new lines.  Each time a <obj>Return</obj> is printed during the processing of <arg>str</arg>,
+it is followed by indentation sufficient to line up underneath the place
+where the cursor was at the beginning of <arg>str</arg>.  For example,
+
+<lisp>(format t &quot;Foo: ~8T~~A~&quot; <arg>string</arg>)
+</lisp>prints <arg>string</arg> with each line starting at column 8.  If <arg>string</arg>
+is <obj>(string-append &quot;This is&quot; #\return &quot;the string&quot;)</obj> then the output is
+
+<lisp>Foo:    This is
+        the string
+</lisp>
+</td></tr><tr><td><obj>~(<arg>str</arg>~)</obj></td><td>Performs output with case conversion.
+The formatting specified by <arg>str</arg> is done, with all the letters in the
+resulting output being converted to upper or lower case according to
+the modifiers given to the <obj>~(</obj> command:
+
+<table><tbody><tr><td><obj>~(  <standard>without modifiers</standard></obj></td><td>Converts all the letters to lower case.
+</td></tr><tr><td><obj>~:(</obj></td><td>Converts the first letter of each word to upper case and the rest to lower case.
+</td></tr><tr><td><obj>~@(</obj></td><td>Converts the first letter of the first word to upper case, and all other letters
+to lower case.
+</td></tr><tr><td><obj>~:@(</obj></td><td>Converts all the letters to upper case.
+</td></tr><tr><td><obj>~1(</obj></td><td>Converts the first letter of the first word to upper case
+and does not change anything else.  If you arrange to generate
+all output in lower case except for letters that should be
+upper case regardless of context, you can use this directive
+when the output appears at the beginning of a sentence.
+</td></tr></tbody></table>
+<lisp><exdent amount="96"><caption>Example: </caption>&quot;~(FoO BaR~) ~:(FoO BaR~) ~@(FoO BaR~) ~:@(FoO BaR~)
+~1(at the White Hart~)&quot;
+</exdent><exdent amount="96"><caption>produces </caption>foo bar Foo Bar Foo bar FOO BAR
+At the White Hart
+</exdent></lisp>
+</td></tr><tr><td><obj>~[<arg>str0</arg>~;<arg>str1</arg>~;<arg>...</arg>~;<arg>strn</arg>~]</obj></td><td>This is a set of alternative control strings.  The alternatives
+(called <arg>clauses</arg>)
+are separated by <obj>~;</obj> and the construct is terminated by <obj>~]</obj>.
+For example,
+
+<lisp>&quot;~[Siamese ~;Manx ~;Persian ~;Tortoise-Shell ~
+   ~;Tiger ~;Yu-Shiang ~]kitty&quot;
+</lisp>
+<index-entry index="concepts" title="kitty, yu-shiang"></index-entry>
+The <arg>arg</arg>th
+alternative is selected; <obj>0</obj> selects the first.
+If a prefix parameter is given (i.e. <obj>~<arg>n</arg>[</obj>),
+then the parameter is used instead of an argument
+(this is useful only if the parameter is `<obj>#</obj>').
+If <arg>arg</arg> is out of range no alternative is selected.
+After the selected alternative has been processed, the control string
+continues after the <obj>~]</obj>.
+
+<obj>~[<arg>str0</arg>~;<arg>str1</arg>~;<arg>...</arg>~;<arg>strn</arg>~:;<arg>default</arg>~]</obj> has a default case.
+If the <arg>last</arg> <obj>~;</obj> used to separate clauses
+is instead <obj>~:;</obj>, then the last clause is an ``else'' clause,
+which is performed if no other clause is selected.
+For example,
+
+<lisp>&quot;~[Siamese ~;Manx ~;Persian ~;Tiger ~
+   ~;Yu-Shiang ~:;Bad ~] kitty&quot;
+</lisp>
+<obj>~[~<arg>tag00</arg>,<arg>tag01</arg>,<arg>...</arg>;<arg>str0</arg>~<arg>tag10</arg>,<arg>tag11</arg>,<arg>...</arg>;<arg>str1...</arg>~]</obj>
+allows the clauses to have explicit tags.  The parameters to each <obj>~;</obj>
+are numeric tags for the clause which follows it.  That clause is processed
+which has a tag matching the argument.  If <obj>~<arg>a1</arg>,<arg>a2</arg>,<arg>b1</arg>,<arg>b2</arg>,<arg>...</arg>:;</obj> (note the colon)
+is used, then the following clause is tagged not by single values but
+by ranges of values <arg>a1</arg> through <arg>a2</arg> (inclusive), <arg>b1</arg> through <arg>b2</arg>, etc.
+<obj>~:;</obj> with no parameters may be used at the end to denote a default clause.
+For example,
+
+<lisp>&quot;~[~'+,'-,'*,'//;operator ~'A,'Z,'a,'z:;letter ~
+   ~'0,'9:;digit ~:;other ~]&quot;
+</lisp>
+<obj>~:[<arg>false</arg>~;<arg>true</arg>~]</obj> selects the <arg>false</arg> control string
+if <arg>arg</arg> is <obj>nil</obj>, and selects the <arg>true</arg> control string otherwise.
+
+<obj>~@[<arg>true</arg>~]</obj> tests the argument.  If it is not <obj>nil</obj>,
+then the argument is not used up, but is the next one to be processed,
+and the one clause is processed.
+If it is <obj>nil</obj>, then the argument is used up, and the clause is not processed.  For example,
+
+<lisp>(setq *print-level* nil *print-length* 5)
+(format nil
+        &quot;~@[ *PRINT-LEVEL*=~D~]~@[ *PRINT-LENGTH*=~D~]&quot;
+        prinlevel prinlength)
+   =&gt;  &quot; *PRINT-LENGTH*=5&quot;
+</lisp>
+The combination of <obj>~[</obj> and <obj>#</obj> is useful, for
+example, for dealing with English conventions for printing lists:
+
+<lisp>(setq foo &quot;Items:~#[ none~; ~S~; ~S and ~
+           ~S~:;~@{~#[~1; and~] ~S~^,~}~].&quot;)
+(format nil foo)
+        =&gt;  &quot;Items: none.&quot;
+(format nil foo 'foo)
+        =&gt;  &quot;Items: FOO.&quot;
+(format nil foo 'foo 'bar)
+        =&gt;  &quot;Items: FOO and BAR.&quot;
+(format nil foo 'foo 'bar 'baz)
+        =&gt;  &quot;Items: FOO, BAR, and BAZ.&quot;
+(format nil foo 'foo 'bar 'baz 'quux)
+        =&gt;  &quot;Items: FOO, BAR, BAZ, and QUUX.&quot;
+</lisp>
+</td></tr><tr><td><obj>~;</obj></td><td>Separates clauses in <obj>~[</obj> and <obj>~&lt;</obj> constructions.  It is undefined elsewhere.
+
+</td></tr><tr><td><obj>~]</obj></td><td>Terminates a <obj>~[</obj>.  It is undefined elsewhere.
+
+</td></tr><tr><td><obj>~{<arg>str</arg>~}</obj></td><td>This is an iteration construct.  The argument should be a list,
+which is used as a set of arguments as if for a recursive call to <obj>format</obj>.
+The string <arg>str</arg> is used repeatedly as the control string.
+Each iteration can absorb as many elements of the list as it likes;
+if <arg>str</arg> uses up two arguments by itself, then two elements of the
+list get used up each time around the loop.
+If before any iteration step the list is empty, then the iteration is terminated.
+Also, if a prefix parameter <arg>n</arg> is given, then there can be at most <arg>n</arg>
+repetitions of processing of <arg>str</arg>.  Here are some simple examples:
+
+<lisp>(format nil &quot;Here it is:~{ ~S~}.&quot; '(a b c))
+     =&gt; &quot;Here it is: A B C.&quot;
+(format nil &quot;Pairs of things:~{ &lt;~S,~S&gt;~}.&quot; '(a 1 b 2 c 3))
+     =&gt; &quot;Pairs of things: &lt;A,1&gt; &lt;B,2&gt; &lt;C,3&gt;.&quot;
+</lisp>
+Using <obj>~^</obj> as well, to terminate <arg>str</arg> if no arguments remain,
+we can print a list with commas between the elements:
+
+<lisp>(format nil &quot;Elements: ~{~S~^, ~}.&quot; '(a b c))
+     =&gt; &quot;Elements: A, B, C.&quot;
+</lisp>
+<obj>~:{<arg>str</arg>~}</obj> is similar, but the argument should be a list of sublists.
+At each repetition step one sublist is used as the set of arguments for
+processing <arg>str</arg>; on the next repetition a new sublist is used, whether
+or not all of the last sublist had been processed.  Example:
+
+<lisp>(format nil &quot;Pairs of things:~:{ &lt;~S,~S&gt;~}.&quot;
+            '((a 1) (b 2) (c 3)))
+     =&gt; &quot;Pairs of things: &lt;A,1&gt; &lt;B,2&gt; &lt;C,3&gt;.&quot;
+</lisp>
+<obj>~@{<arg>str</arg>~}</obj> is similar to <obj>~{<arg>str</arg>~}</obj>, but instead of
+using one argument which is a list, all the remaining arguments
+are used as the list of arguments for the iteration.  Example:
+
+<lisp>(format nil &quot;Pairs of things:~@{ &lt;~S,~S&gt;~}.&quot;
+            'a 1 'b 2 'c 3)
+     =&gt; &quot;Pairs of things: &lt;A,1&gt; &lt;B,2&gt; &lt;C,3&gt;.&quot;
+</lisp>
+<obj>~:@{<arg>str</arg>~}</obj> combines the features of <obj>~:{<arg>str</arg>~}</obj> and <obj>~@{<arg>str</arg>~}</obj>.
+All the remaining arguments
+are used, and each one must be a list.
+On each iteration the next argument is used as a list of arguments to <arg>str</arg>.
+Example:
+
+<lisp>(format nil &quot;Pairs of things:~:@{ &lt;~S,~S&gt;~}.&quot;
+            '(a 1) '(b 2) '(c 3))
+     =&gt; &quot;Pairs of things: &lt;A,1&gt; &lt;B,2&gt; &lt;C,3&gt;.&quot;
+</lisp>
+Terminating the repetition construct with <obj>~:}</obj> instead of <obj>~}</obj>
+forces <arg>str</arg> to be processed at least once even if the initial
+list of arguments is null (however, it does not override an explicit
+prefix parameter of zero).
+
+If <arg>str</arg> is empty, then an argument is used as <arg>str</arg>.  It must be a string,
+and precedes any arguments processed by the iteration.  As an example,
+the following are equivalent:
+
+<lisp>(apply #'format stream string args)
+(format stream &quot;~1{~:}&quot; string args)
+</lisp>This uses <obj>string</obj> as a formatting string.  The <obj>~1{</obj> says it must
+be processed at most once, and the <obj>~:}</obj> says it must be processed at least once.
+Therefore it is processed exactly once, using <obj>args</obj> as the arguments.
+
+As another example, the <obj>format</obj> function itself uses <obj>format-error</obj>
+(a routine internal to the <obj>format</obj> package) to signal
+error messages, which in turn uses <obj>ferror</obj>, which uses <obj>format</obj> recursively.  
+Now <obj>format-error</obj> takes a string and arguments, just like <obj>format</obj>,
+but also prints some additional information: if the control string in <obj>ctl-string</obj>
+actually is a string (it might be a list--see below), then it prints the string
+and a little arrow showing where in the processing of the control string the
+error occurred.  The variable <obj>ctl-index</obj> points one character after the place of
+the error.
+
+<lisp>(defun format-error (string &amp;rest args)
+  (if (stringp ctl-string)
+      (ferror nil &quot;~1{~:}~%~VT↓~%~3@T/&quot;~A/&quot;~%&quot;
+              string args (+ ctl-index 3) ctl-string)
+    (ferror nil &quot;~1{~:}&quot; string args)))
+</lisp>This first processes the given string and arguments using <obj>~1{~:}</obj>, then
+tabs a variable amount for printing the down-arrow, then prints the control
+string between double-quotes.  The effect is something like this:
+
+<lisp>(format t &quot;The item is a ~[Foo~;Bar~;Loser~].&quot; 'quux)
+&gt;&gt;ERROR: The argument to the FORMAT &quot;~[&quot; command 
+         must be a number
+                   ↓
+   &quot;The item is a ~[Foo~;Bar~;Loser~].&quot;
+...
+</lisp>
+</td></tr><tr><td><obj>~}</obj></td><td>Terminates a <obj>~{</obj>.  It is undefined elsewhere.
+
+</td></tr><tr><td><obj>~&lt;</obj></td><td><obj>~<arg>mincol</arg>,<arg>colinc</arg>,<arg>minpad</arg>,<arg>padchar</arg>&lt;<arg>text</arg>~&gt;</obj>
+justifies <arg>text</arg> within a field at least <arg>mincol</arg> wide.  <arg>text</arg>
+may be divided up into segments with <obj>~;</obj>--the
+spacing is evenly divided between the text segments.
+With no modifiers, the leftmost text segment is left justified in the
+field, and the rightmost text segment right justified;  if there is
+only one, as a special case, it is right justified.
+The <obj>:</obj> modifier causes
+spacing to be introduced before the first text segment;  the <obj>@</obj>
+modifier causes spacing to be added after the last.
+<arg>Minpad</arg>, default <obj>0</obj>, is the minimum number of <arg>padchar</arg>
+(default space) padding characters to be output between each segment.
+If the total width needed to satisfy these constraints is greater
+than <arg>mincol</arg>, then <arg>mincol</arg> is adjusted upwards in
+<arg>colinc</arg> increments.  <arg>colinc</arg> defaults to <obj>1</obj>.  <arg>mincol</arg> defaults to <obj>0</obj>.
+For example,
+
+<lisp>(format nil &quot;~10&lt;foo~;bar~&gt;&quot;)          =&gt;  &quot;foo    bar&quot;
+(format nil &quot;~10:&lt;foo~;bar~&gt;&quot;)         =&gt;  &quot;  foo  bar&quot;
+(format nil &quot;~10:@&lt;foo~;bar~&gt;&quot;)        =&gt;  &quot;  foo bar &quot;
+(format nil &quot;~10&lt;foobar~&gt;&quot;)            =&gt;  &quot;    foobar&quot;
+(format nil &quot;~10:&lt;foobar~&gt;&quot;)           =&gt;  &quot;    foobar&quot;
+(format nil &quot;~10@&lt;foobar~&gt;&quot;)           =&gt;  &quot;foobar    &quot;
+(format nil &quot;~10:@&lt;foobar~&gt;&quot;)          =&gt;  &quot;  foobar  &quot;
+(format nil &quot;$~10,,,'*&lt;~3f~&gt;&quot; 2.5902)  =&gt;  &quot;$******2.59&quot;
+</lisp>
+Note that <arg>text</arg> may include format directives.  The last example
+illustrates how the <obj>~&lt;</obj> directive can be combined with the <obj>~f</obj>
+directive to provide more advanced control over the formatting of
+numbers.
+
+Here are some examples of the use of <obj>~^</obj> within a <obj>~&lt;</obj> construct.
+<obj>~^</obj> is explained in detail below, however the general idea is that
+it eliminates the segment in which it appears and all following segments
+if there are no more arguments.
+
+<lisp>(format nil &quot;~15&lt;~S~;~^~S~;~^~S~&gt;&quot; 'foo)
+        =&gt;  &quot;            FOO&quot;
+(format nil &quot;~15&lt;~S~;~^~S~;~^~S~&gt;&quot; 'foo 'bar)
+        =&gt;  &quot;FOO         BAR&quot;
+(format nil &quot;~15&lt;~S~;~^~S~;~^~S~&gt;&quot; 'foo 'bar 'baz)
+        =&gt;  &quot;FOO   BAR   BAZ&quot;
+</lisp>
+The idea is that if a segment contains a <obj>~^</obj>, and <obj>format</obj> runs out
+of arguments, it just stops there instead of getting an error, and it as
+well as the rest of the segments are ignored.
+
+If the first clause of a <obj>~&lt;</obj> is terminated with <obj>~:;</obj> instead of <obj>~;</obj>,
+then it is used in a special way.  All of the clauses are processed
+(subject to <obj>~^</obj>, of course), but the first one is omitted in
+performing the spacing and padding.  When the padded result has been
+determined, then if it will fit on the current line of output, it is output,
+and the text for the first clause is discarded.  If, however, the padded text
+will not fit on the current line, then the
+text segment for the first clause is output before the padded text.  The first clause ought
+to contain a carriage return (<obj>~%</obj>).  The first clause is
+always processed, and so any arguments it refers to will be used;
+the decision is whether to use the resulting segment of text, not whether to
+process the first clause.  If the <obj>~:;</obj> has a prefix parameter <arg>n</arg>, then
+the padded text must fit on the current line with <arg>n</arg> character positions to spare
+to avoid outputting the first clause's text.
+For example, the control string
+
+<lisp>&quot;~%;; ~{~&lt;~%;; ~1:; ~S~&gt;~^,~}.~%&quot;
+</lisp>can be used to print a list of items separated by commas, without
+breaking items over line boundaries, and beginning each line with
+`<obj>;; </obj>'.  The prefix parameter <obj>1</obj> in <obj>~1:;</obj> accounts for the width of the
+comma which will follow the justified item if it is not the last
+element in the list, or the period if it is.  If <obj>~:;</obj> has a second
+prefix parameter, then it is used as the width of the line,
+thus overriding the natural line width of the output stream.  To make
+the preceding example use a line width of 50, one would write
+
+<lisp>&quot;~%;; ~{~&lt;~%;; ~1,50:; ~S~&gt;~^,~}.~%&quot;
+</lisp>
+If the second argument is not specified, then <obj>format</obj> sees whether
+the stream handles the <obj>:size-in-characters</obj> message.  If it does,
+then <obj>format</obj> sends that message and uses the first returned value as
+the line length in characters.  If it doesn't, <obj>format</obj> uses <obj>72.</obj>
+as the line length.
+
+Rather than using this complicated syntax, one can often call the function
+<obj>format:print-list</obj> (see <ref definition-in-file="fd-fio" key="format:print-list-fun" title="Function format:print-list" type="fun"></ref>).
+
+</td></tr><tr><td><obj>~&gt;</obj></td><td>Terminates a <obj>~&lt;</obj>.  It is undefined elsewhere.
+
+</td></tr><tr><td><obj>~^</obj></td><td>This is an escape construct.  If there are no more arguments remaining
+to be processed, then the immediately enclosing <obj>~{</obj> or <obj>~&lt;</obj>
+construct is terminated.  If there is no such enclosing construct, then
+the entire formatting operation is terminated.
+In the <obj>~&lt;</obj> case, the formatting <arg>is</arg> performed, but no
+more segments are processed before doing the justification.
+The <obj>~^</obj> should appear only at the <arg>beginning</arg> of a <obj>~&lt;</obj> clause,
+because it aborts the entire clause.  <obj>~^</obj> may appear anywhere in a <obj>~{</obj> construct.
+
+If a prefix parameter is given, then termination occurs if the parameter
+is zero.  (Hence <obj>~^</obj> is the same as <obj>~#^</obj>.)  If two parameters are
+given, termination occurs if they are equal.  If three are given, termination
+occurs if the second is between the other two in ascending order.  Of course,
+this is useless if all the prefix parameters are constants; at least one
+of them should be a <obj>#</obj> or a <obj>V</obj> parameter.
+
+If <obj>~^</obj> is used within a <obj>~:{</obj> construct, then it merely terminates
+the current iteration step (because in the standard case it tests for
+remaining arguments of the current step only); the next iteration step
+commences immediately.  To terminate the entire iteration process,
+use <obj>~:^</obj>.
+
+</td></tr><tr><td><obj>~Q</obj></td><td>An escape to arbitrary user-supplied code.  <arg>arg</arg> is called as a function;
+its arguments are the prefix parameters to <obj>~Q</obj>, if any.  <arg>args</arg> can be
+passed to the function by using the <obj>V</obj> prefix parameter.  The function may
+output to <obj>*standard-output*</obj> and may look at the variables <obj>format:colon-flag</obj>
+and <obj>format:atsign-flag</obj>, which are <obj>t</obj> or <obj>nil</obj> to reflect the
+<obj>:</obj> and <obj>@</obj> modifiers on the <obj>~Q</obj>.  For example,
+
+<lisp>(format t &quot;~VQ&quot; foo bar)
+</lisp>is a fancy way to say
+
+<lisp>(funcall bar foo)
+</lisp>and discard the value.
+Note the reversal of order; the <obj>V</obj> is processed before the <obj>Q</obj>.
+
+</td></tr><tr><td><obj>~\</obj></td><td>This begins a directive whose name is longer than one character.
+The name is terminated by another <obj>\</obj> character.
+The following directives have names longer than one character
+and make use of the <obj>~\</obj> mechanism as part of their operation.
+
+<need amount="1500"></need></td></tr><tr><td><obj>~\lozenged-string\</obj></td><td>This is like <obj>~A</obj> except when output is to a window, in which case the
+argument is printed in a small font inside a lozenge.
+
+</td></tr><tr><td><obj>~\lozenged-character\</obj></td><td>This is like <obj>~C</obj> except when output is to a window, in which case the
+argument is printed in a small font inside a lozenge if it has a character name,
+even if it is a formatting character or graphic character.
+
+</td></tr><tr><td><obj>~\date\</obj></td><td>This expects an argument that is a universal time (see
+<ref definition-in-file="time" key="universal-time" type="page"></ref>), and prints it as a date and time using
+<obj>time:print-universal-date</obj>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(format t &quot;It is now ~\date\&quot; (get-universal-time))
+</exdent><exdent amount="96"><caption>prints </caption>It is now Saturday the fourth of December, 1982; 4:00:32 am
+</exdent></lisp>
+</td></tr><tr><td><obj>~\time\</obj></td><td>This expects an argument that is a universal time (see
+<ref definition-in-file="time" key="universal-time" type="page"></ref>), and prints it in a brief format using
+<obj>time:print-universal-time</obj>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(format t &quot;It is now ~\time\&quot; (get-universal-time))
+</exdent><exdent amount="96"><caption>prints </caption>It is now 12/04/82 04:01:38
+</exdent></lisp>
+</td></tr><tr><td><obj>~\datime\</obj></td><td>This prints the current time and date.  It does not use an argument.
+It is equivalent to using the <obj>~\time\</obj> directive with
+<obj>(time:get-universal-time)</obj> as argument.
+
+</td></tr><tr><td><obj>~\time-interval\</obj></td><td>This prints a time interval measured in seconds using the function
+<obj>time:print-interval-or-never</obj>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(format t &quot;It took ~\time-interval\.&quot; 3601.)
+</exdent><exdent amount="96"><caption>prints </caption>It took 1 hour 1 second.
+</exdent></lisp></td></tr></tbody></table></p>
+
+<p>You can define your own directives.  How to do this is not documented
+here; read the code.  Names of user-defined directives longer than one
+character may be used if they are enclosed in backslashes (e.g.
+<obj>~4,3\GRAPH\</obj>).
+</p>
+
+<p>(Note: <obj>format</obj> also allows <arg>control-string</arg> to be a list.  If the
+list is a list of one element, which is a string, the string is simply
+printed.  This is for the use of the <obj>format:outfmt</obj> function below.
+The old feature wherein a more complex interpretation of this list was
+possible is now considered obsolete; use <obj>format:output</obj> if you like
+using lists.)
+</p>
+
+<p>A condition instance can also be used as the <arg>control-string</arg>.  Then
+the <obj>:report</obj> operation is used to print the condition instance;
+any other arguments are ignored.  This way, you can pass a condition
+instance directly to any function that normally expects a format string
+and arguments.
+</p>
+<definition><define key="format:print-list-fun" name="format:print-list" type="fun"><args>destination element-format list <standard>&amp;optional</standard> separator start-line tilde-brace-options</args>
+</define>
+
+<description>This function provides a simpler interface for the specific purpose of
+printing comma-separated lists with no list element split across two
+lines; see the description of the <obj>~:;</obj> directive
+(<ref definition-in-file="fd-fio" key="ultra-hairy-print-list" type="page"></ref>) to see the more complex way to do this
+within <obj>format</obj>.  <arg>destination</arg> tells where to send the output; it
+can be <obj>t</obj>, <obj>nil</obj>, a <obj>string-nconc</obj>'able string, or a stream, as
+with <obj>format</obj>.  <arg>element-format</arg> is a <obj>format</obj> control-string
+that tells how to print each element of <arg>list</arg>; it is used as the
+body of a <obj>~{...~}</obj> construct.  <arg>separator</arg>, which defaults to
+<obj>&quot;, &quot;</obj> (comma, space) is a string which goes after each element
+except the last.  <obj>format</obj> control commands are not recommended in
+<arg>separator</arg>.  <arg>start-line</arg>, which defaults to three spaces, is a
+<obj>format</obj> control-string that is used as a prefix at the beginning of
+each line of output, except the first.  <obj>format</obj> control commands are
+allowed in <arg>separator</arg>, but they should not swallow arguments from
+<arg>list</arg>.  <arg>tilde-brace-options</arg> is a string inserted before the
+opening `<obj>{</obj>'; it defaults to the null string, but allows you to
+insert colon and/or atsign.  The line-width of the stream is computed
+the same way that the <obj>~:;</obj> command computes it;
+it is not possible to override the natural line-width of the stream.
+</description></definition><page></page></subsection>
+
+
+<subsection name="NIL" title="The Output Subsystem"><p>The formatting functions associated with the <obj>format:output</obj> subsystem allow
+you to do formatted output using Lisp-style control structure.  Instead
+of a directive in a <obj>format</obj> control string, there is one formatting
+function for each kind of formatted output.
+</p>
+
+<p>The calling conventions of most of the formatting functions are similar.
+The first argument is usually the datum to be output.  The second
+argument is usually the minimum number of columns to use.  The
+remaining arguments are keyword arguments.
+</p>
+
+<p>Most of the functions accept the keyword arguments <arg>padchar</arg>, <arg>minpad</arg>
+and <arg>tab-period</arg>.  <arg>padchar</arg> is a character to use for padding.
+<arg>minpad</arg> is a minimum number of padding characters to output after the data.
+<arg>tab-period</arg> is the distance between allowable places
+to stop padding.  To make the meaning of <arg>tab-period</arg> clearer, if
+the value of <arg>tab-period</arg> is 5, if the minimum size of the field
+is 10, and if the value of <arg>minpad</arg> is 2, then a datum that takes 9
+characters is padded out to 15 characters.  The requirement to
+use at least two characters of padding means it can't fit into 10
+characters, and the <arg>tab-period</arg> of 5 means the next allowable
+stopping place is at 10+5 characters.  The default values for
+<arg>minpad</arg> and <arg>tab-period</arg>, if they are not specified, are
+zero and one.  The default value for <arg>padchar</arg> is space.
+</p>
+
+<p>The formatting functions always output to <obj>*standard-output*</obj> and do
+not require an argument to specify the stream.  The macro
+<obj>format:output</obj> allows you to specify the stream or a string, just
+as <obj>format</obj> does, and also makes it convenient to concatenate
+constant and variable output.
+</p>
+<definition><define key="format:output-fun" name="format:output" type="mac"><args>stream string-or-form...</args>
+</define>
+
+<description>Makes it convenient to intersperse arbitrary output
+operations with printing of constant strings.
+<obj>*standard-output*</obj> is bound to <arg>stream</arg>, and each <arg>string-or-form</arg>
+is processed in succession from left to right.  If it is a string, it is
+printed; otherwise it is a form, which is evaluated for effect.  Presumably
+the forms will send output to <obj>*standard-output*</obj>.
+
+If <arg>stream</arg> is written as <obj>nil</obj>, then the output is put into a
+string which is returned by <obj>format:output</obj>.  If <arg>stream</arg> is written
+as <obj>t</obj>, then the output goes to the prevailing value of
+<obj>*standard-output*</obj>.  Otherwise <arg>stream</arg> is a form, which must evaluate
+to a stream.
+
+Here is an example:
+
+<lisp>(format:output t &quot;FOO is &quot; (prin1 foo) &quot; now.&quot; (terpri))
+</lisp>
+Because <obj>format:output</obj> is a macro, what matters about <arg>stream</arg> is
+not whether it <arg>evaluates</arg> to <obj>t</obj> or <obj>nil</obj>, but whether it
+is actually written as <obj>t</obj> or <obj>nil</obj>.
+</description></definition><definition><define key="format:outfmt-fun" name="format:outfmt" type="mac"><args>string-or-form...</args>
+</define>
+
+<description>Some system functions ask for a <obj>format</obj> control string and
+arguments, to be printed later.  If you wish to generate the output
+using the formatted output functions, you can use <obj>format:outfmt</obj>, which
+produces a control argument that will eventually make <obj>format</obj>
+print the desired output (this is a list whose one element is a string
+containing the output).  A call to <obj>format:outfmt</obj> can be used as
+the second argument to <obj>ferror</obj>, for example:
+
+<lisp>(ferror nil (format:outfmt &quot;Foo is &quot; (format:onum foo) 
+                           &quot; which is too large&quot;))
+</lisp></description></definition><definition><define key="format:onum-fun" name="format:onum" type="fun"><args>number <standard>&amp;optional</standard> radix minwidth <standard>&amp;key</standard> padchar minpad tab-period signed commas</args>
+</define>
+
+<description>Outputs <arg>number</arg> in base <arg>radix</arg>, padding to at least
+<arg>minwidth</arg> columns and obeying the other padding options specified
+as described above.
+
+<arg>radix</arg> can be a number, or it can be <obj>:roman</obj>, <obj>:english</obj>,
+or <obj>:ordinal</obj>.  The default <arg>radix</arg> is <obj>10.</obj> (decimal).
+
+If <arg>signed</arg> is non-<obj>nil</obj>, a <obj>+</obj> sign is printed if the number is
+positive.  If <arg>commas</arg> is non-<obj>nil</obj>, a comma is printed every third
+digit in the customary way.  These arguments are meaningful only with
+numeric radices.
+</description></definition><definition><define key="format:ofloat-fun" name="format:ofloat" type="fun"><args>number <standard>&amp;optional</standard> n-digits force-exponential-notation minwidth <standard>&amp;key</standard> padchar minpad tab-period</args>
+</define>
+
+<description>Outputs <arg>number</arg> as a floating point number using
+<arg>n-digits</arg> digits.  If <arg>force-exponential-notation</arg> is
+non-<obj>nil</obj>, then an exponent is always used.  <arg>minwidth</arg> and
+the padding options are interpreted as usual.
+</description></definition><definition><define key="format:ostring-fun" name="format:ostring" type="fun"><args>string <standard>&amp;optional</standard> minwidth <standard>&amp;key</standard> padchar minpad tab-period right-justify</args>
+</define>
+
+<description>Outputs <arg>string</arg>, padding to at least
+<arg>minwidth</arg> columns if <arg>minwidth</arg> is not <obj>nil</obj>, and obeying
+the other padding options specified as described above.
+
+Normally the data are left justified; any padding follows the data.
+If <arg>right-justify</arg> is non-<obj>nil</obj>, the padding comes before
+the data.  The amount of padding is not affected.
+
+The argument need not really be a string.  Any Lisp object is allowed,
+and it is output with <obj>princ</obj>.
+</description></definition><definition><define key="format:oprint-fun" name="format:oprint" type="fun"><args>object <standard>&amp;optional</standard> minwidth <standard>&amp;key</standard> padchar minpad tab-period right-justify</args>
+</define>
+
+<description>Prints <arg>object</arg>, any Lisp object, padding to at
+least <arg>minwidth</arg> columns if <arg>minwidth</arg> is not <obj>nil</obj>, and
+obeying the padding options specified as described above.
+
+Normally the data are left justified; any padding follows the data.
+If <arg>right-justify</arg> is non-<obj>nil</obj>, the padding comes before
+the data.  The amount of padding is not affected.
+
+The printing of the object is done with <obj>prin1</obj>.
+</description></definition><definition><define key="format:ochar-fun" name="format:ochar" type="fun"><args>character <standard>&amp;optional</standard> style top-explain minwidth <standard>&amp;key</standard> padchar minpad tab-period</args>
+</define>
+
+<description>Outputs <arg>character</arg> in one of three styles, selected
+by the <arg>style</arg> argument.  <arg>minwidth</arg> and the padding options control
+padding as usual.
+
+
+<table><tbody><tr><td><obj>:read <standard>or</standard> nil</obj></td><td>The character is printed using <obj>#\</obj> or <obj>#/</obj> so that it could be read
+back in.
+
+</td></tr><tr><td><obj>:editor</obj></td><td>Output is in the style of
+`<obj>Meta-Rubout</obj>'.   Non-printing characters, and the two printing
+characters Space and Altmode, are represented by their names.  Other printing
+characters are printed directly.
+
+</td></tr><tr><td><obj>:brief</obj></td><td>Brief prefixes such as `<obj>C-</obj>' and
+`<obj>M-</obj>' are used, rather than `<obj>Control-</obj>' or `<obj>Meta-</obj>'.  Also,
+character names are used only if there are meta bits present.
+
+</td></tr><tr><td><obj>:lozenged</obj></td><td>The output is the same as that of the <obj>:editor</obj> style, but If the
+character is not a graphic character or if it has meta bits, and the
+stream supports the <obj>:display-lozenged-string</obj> operation, that
+operation is used instead of <obj>:string-out</obj> to print the text.  On
+windows this operation puts the character name inside a lozenge.
+
+</td></tr><tr><td><obj>:sail</obj></td><td>`<example></example>', `<example></example>', etc. are used to represent <obj>Control</obj> and <obj>Meta</obj>,
+and shorter names for characters are also used when possible.  See
+<ref chapter="11" definition-in-file="fd-str" key="character-set" section="1" title="Characters" type="section"></ref>.
+</td></tr></tbody></table>
+<arg>top-explain</arg> is useful with the <obj>:editor</obj>, <obj>:brief</obj> and
+<obj>:sail</obj>
+styles.  It says that any character that has to be typed using the
+Top or Greek keys should be followed by an explanation of how to type
+it.  For example: `<obj>→ (Top-K)</obj>' or `<obj>α (Greek-a)</obj>'.
+</description></definition><definition><define key="format:tab-fun" name="format:tab" type="fun"><args>mincol <standard>&amp;key</standard> padchar minpad tab-period terpri unit</args>
+</define>
+
+<description>Outputs padding at least until column <arg>mincol</arg>.  It
+is the only formatting function that bases its actions on the actual
+cursor position rather than the width of what is being output.  The
+padding options <arg>padchar</arg>, <arg>minpad</arg>, and <arg>tab-period</arg> are
+obeyed.  Thus, at least the <arg>minpad</arg> number of padding characters
+are output even if that goes past <arg>mincol</arg>, and once past
+<arg>mincol</arg>, padding can only stop at a multiple of <arg>tab-period</arg>
+characters past <arg>mincol</arg>.
+
+In addition, if the <arg>terpri</arg> option is <obj>t</obj>, then if column
+<arg>mincol</arg> is passed, <obj>format:tab</obj> starts a new line and indents it
+to <arg>mincol</arg>.
+
+The <arg>unit</arg> option specifies the units of horizontal position.
+The default is to count in units of characters.  If <arg>unit</arg> is
+specified as <obj>:pixel</obj>, then the computation (and the argument
+<arg>mincol</arg> and the <arg>minpad</arg> and <arg>tab-period</arg> options) are
+in units of pixels.
+</description></definition><definition><define key="format:pad-fun" name="format:pad" type="mac"><args>(minwidth <standard>&amp;key</standard> padchar minpad tab-period...) body...</args>
+</define>
+
+<description><obj>format:pad</obj> is used for printing several items in a fixed amount of
+horizontal space, padding between them to use up any excess space.
+Each of the <arg>body</arg> forms prints one item.  The padding goes between
+items.  The entire <obj>format:pad</obj> always uses at least <arg>minwidth</arg>
+columns; any columns that the items don't need are distributed as
+padding between the items.  If that isn't enough space, then more
+space is allocated in units controlled by the <arg>tab-period</arg> option
+until there is enough space.  If it's more than enough, the excess is
+used as padding.
+
+If the <arg>minpad</arg> option is specified, then at least that many pad
+characters must go between each pair of items.
+
+Padding goes only between items.  If you want to treat several actual
+pieces of output as one item, put a <obj>progn</obj> around them.  If you
+want padding before the first item or after the last, as well as
+between the items, include a dummy item <obj>nil</obj> at the beginning or
+the end.
+
+If there is only one item, it is right justified.  One item followed by
+<obj>nil</obj> is left-justified.  One item preceded and followed by <obj>nil</obj> is
+centered.  Therefore, <obj>format:pad</obj> can be used to provide the usual
+padding options for a function that does not provide them itself.
+</description></definition><definition><define key="format:plural-fun" name="format:plural" type="fun"><args>number singular <standard>&amp;optional</standard> plural</args>
+</define>
+
+<description>Outputs either the singular or the plural form of a
+word depending on the value of <arg>number</arg>.  The singular is used if and only if
+<arg>number</arg> is 1.  <arg>singular</arg> specifies the singular form of the word.
+<obj>string-pluralize</obj> is used to compute the plural, unless
+<arg>plural</arg> is explicitly specified.
+
+It is often useful for <arg>number</arg> to be a value returned by
+<obj>format:onum</obj>, which returns its argument.  For example:
+
+<lisp>(format:plural (format:onum n-frobs) &quot; frob&quot;)
+</lisp>prints &quot;1 frob&quot; or &quot;2 frobs&quot;.
+</description></definition><definition><define key="format:breakline-fun" name="format:breakline" type="mac"><args>linel print-if-terpri print-always...</args>
+</define>
+
+<description>Goes to the next line if there is
+not enough room for something to be output on the current line.
+The <arg>print-always</arg> forms print the text which is supposed to fit
+on the line.  <arg>linel</arg> is the column before which the text must end.
+If it doesn't end before that column, then <obj>format:breakline</obj>
+moves to the next line and executes the <arg>print-if-terpri</arg> form
+before doing the <arg>print-always</arg> forms.
+
+Constant strings are allowed as well as forms for <arg>print-if-terpri</arg>
+and <arg>print-always</arg>.  A constant string is just printed.
+
+To go to a new line unconditionally, simply call <obj>terpri</obj>.
+
+Here is an example that prints the elements of a list,
+separated by commas, breaking lines between elements when necessary.
+
+
+<lisp>(defun pcl (list linel)
+  (do ((l list (cdr l))) ((null l))
+    (format:breakline linel &quot;  &quot;
+      (princ (car l))
+      (and (cdr l) (princ &quot;, &quot;)))))
+</lisp></description></definition><page></page></subsection></section>
+</document-part>

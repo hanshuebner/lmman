@@ -1,0 +1,1643 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="number-chapter"></a>
+<chapter name="number-chapter" number="8" title="Numbers"><index-entry index="concepts" title="number"></index-entry>
+
+<p>Zetalisp includes several types of numbers, with different
+characteristics.  Most numeric functions accept any type of numbers as
+arguments and do the right thing.  That is to say, they are <arg>generic</arg>.
+In Maclisp, there are generic numeric functions (like <obj>plus</obj>) and there
+are specific numeric functions (like <obj>+</obj>) which only operate on a certain
+type of number, but are much more efficient.
+In Zetalisp, this distinction does not exist; both function
+names exist for compatibility but they are identical.  The microprogrammed
+structure of the machine makes it possible to have only the generic
+functions without loss of efficiency. 
+</p>
+
+<index-entry index="concepts" title="fixnum"></index-entry>
+
+<index-entry index="concepts" title="bignum"></index-entry>
+
+<index-entry index="concepts" title="ratio"></index-entry>
+
+<index-entry index="concepts" title="float"></index-entry>
+
+<index-entry index="concepts" title="short float"></index-entry>
+
+<index-entry index="concepts" title="complexnum"></index-entry>
+
+<p>The types of numbers in Zetalisp are:
+
+<table><tbody><tr><td><standard>fixnum</standard></td><td>Fixnums are 25-bit twos-complement binary integers.  These are the preferred,
+most efficient type of number.
+</td></tr><tr><td><standard>bignum</standard></td><td>Bignums are arbitrary-precision binary integers.
+</td></tr><tr><td><standard>ratio</standard></td><td>Ratios represent rational numbers exactly as the quotient of two
+integers, each of which can be a fixnum or a bignum.  Ratios with
+a denominator of one are not normally created, as an integer is returned instead.
+</td></tr><tr><td><standard>single-float or full-size float</standard></td><td>Full size floats are floating-point numbers.  They have a mantissa of 31 bits and an exponent
+of 11 bits, providing a precision of about 9 digits and a range of about 10^300.
+Stable rounding is employed.
+</td></tr><tr><td><standard>short-float</standard></td><td>Short floats are another form of floating-point number, with a mantissa of
+17 bits and an exponent of 8 bits, providing a precision of about 5 digits
+and a range of about 10^38.  Stable rounding is employed.
+Short floats are useful because, like fixnums,
+and unlike full-size floats, they don't require any storage.  Computing with short floats is
+more efficient than with full-size floats because the operations are faster
+and consing overhead is eliminated.
+</td></tr><tr><td><standard>complexnum</standard></td><td>Complexnums represent complex numbers with a real part and an imaginary
+part, which can be any type of number except complexnums.  (They must be
+both rational or both floats of the same type).  It is impossible to
+make a complexnum whose real part is rational and whose imaginary part
+is the intreger zero; it is always changed into a real number. However, it <arg>is</arg>
+possible to create complexnums with an imaginary part of 0.0, and such numbers may result from
+calculations involving complexnums. In fact, 5.0 and 5.0+0.0i are <arg>always</arg> distinct;
+they are not <obj>eql</obj>, and arithmetic operations will never canonicalize a complexnum
+with floating-point zero imaginary part into a real number.
+</td></tr></tbody></table></p>
+
+<p>Generally, Lisp objects have a unique identity; each exists, independent
+of any other, and you can use the <obj>eq</obj> predicate to determine whether
+two references are to the same object or not.  Numbers are the exception
+to this rule; they don't work this way.  The following function may return
+either <obj>t</obj> or <obj>nil</obj>.  Its behavior is considered undefined;
+as this manual is written, it returns <obj>t</obj> when interpreted but <obj>nil</obj> when compiled.
+
+<lisp>(defun foo ()
+   (let ((x (float 5)))
+     (eq x (car (cons x nil)))))
+</lisp>This is very strange from the point of view of Lisp's usual object
+semantics, but the implementation works this way, in order to gain
+efficiency, and on the grounds that identity testing of numbers is not
+really an interesting thing to do.  So the rule is that the result
+of applying <obj>eq</obj> to numbers is undefined, and may return either
+<obj>t</obj> or <obj>nil</obj> on what appear to be two pointers to the same
+numeric object.  The only reasonable ways to compare numbers are
+<obj>=</obj> (see <ref definition-in-file="fd-num" key="=-fun" title="Function =" type="fun"></ref>) and <obj>eql</obj> (<ref definition-in-file="fd-flo" key="eql-fun" title="Function eql" type="fun"></ref>), and other
+things (<obj>equal</obj> or <obj>equalp</obj>) based on them.
+</p>
+
+<p>Conversely, fixnums and short floats have the unusual property that
+they are always <obj>eq</obj> if they are equal in value.  This is because
+they do not point to storage; the ``pointer'' field of a fixnum is actually
+its numeric value, and likewise for short floats.  Stylisticly it is
+better to avoid depending on this, by using <obj>eql</obj> rather than
+<obj>eq</obj>.  Also, comparing floats of any sort for exact equality, even
+with <obj>=</obj> which is guaranteed to consider only the numeric values, is
+usually unwise since round-off error can make the answer unpredictable
+and meaningless.
+</p>
+
+<p>The distinction between fixnums and bignums is largely transparent to
+the user.  The user simply computes with integers, and the system
+represents some as fixnums and the rest (less efficiently) as bignums.
+The system automatically converts back and forth between fixnums and
+bignums based solely on the size of the integer.  There are a few low
+level functions which only work on fixnums; this fact is noted in
+their documentation.  Also, when using <obj>eq</obj> on numbers the user
+needs to be aware of the fixnum/bignum distinction.
+</p>
+
+<p>Integer computations cannot overflow, except for division by zero,
+since bignums can be of arbitrary size.  Floating-point computations
+can get exponent overflow or underflow, if the result is too large or small
+to be represented.  Exponent overflow always signals an error.
+Exponent underflow normally signals an error, and assumes <obj>0.0</obj> as the answer
+if the user says to proceed from the error.  However, if the value of the
+variable <obj>zunderflow</obj> is non-<obj>nil</obj>, the error is skipped
+and computation proceeds with <obj>0.0</obj> in place of the result that was too small.
+</p>
+
+<p>When an arithmetic function of more than one argument is given arguments
+of different numeric types, uniform <arg>coercion rules</arg> are followed to
+convert the arguments to a common type, which is also the type of the
+result (for functions which return a number).  When an integer meets a
+ratio, the result is a ratio.  When an integer or ratio meets a float,
+the result is a float of the same sort.  When a short-float meets a
+full-size float, the result is a full-size float.
+</p>
+
+<p>If any argument of the arithmetic function is complex, the other
+arguments are converted to complex.
+The components of a complex result must be both full-size floats,
+both small-floats, or both rational; if they differ, the one
+whose type comes last in that list is converted to match the other.
+Finally, if the components of the result are rational and the imaginary part is
+zero, the result is simply the real part.  If, however, the components
+are floats, the value is always complex even if the imaginary part is zero.
+</p>
+
+<p>Thus if the constants in a numerical algorithm are written as
+short floats (assuming this provides adequate precision), and if the input
+is a short float, the computation is done with short floats and
+the result is a short float, while if the input is a full-size float
+the computation is done in full precision and the result is
+a full-size float.
+</p>
+
+<p>Zetalisp never automatically converts between full-size floats and short
+floats in the same way as it automatically converts between fixnums and
+bignums since this would lead either to inefficiency or to unexpected
+numerical inaccuracies.  (When a short float meets a full-size float, the result
+is a full-size float, but if you use only one type, all the results are of
+the same type too.)  This means that a short float computation can get
+an exponent overflow error even when the result could have been
+represented as a full-size float.
+</p>
+
+<p>Floating-point numbers retain only a certain number of bits of precision;
+therefore, the results of computations are only approximate.  Full-size floats
+have 31 bits and short floats have 17 bits, not counting the sign.
+The method of approximation is ``stable rounding''.  The result of an
+arithmetic operation is the float which is closest to the exact
+value.  If the exact result falls precisely halfway between two representable floats,
+the result is rounded down if the least-significant bit is 0,
+or up if the least-significant bit is 1.  This choice is arbitrary
+but insures that no systematic bias is introduced.
+</p>
+
+<p>Unlike Maclisp, Zetalisp does not have number declarations in
+the compiler.  Note that because fixnums and short floats require no
+associated storage they are as efficient as declared numbers in Maclisp.
+Bignums and full-size floats are less efficient; however, bignum and
+float intermediate results are garbage-collected in a special way that
+avoids the overhead of the full garbage collector.
+</p>
+
+<p>The different types of numbers can be distinguished by their printed
+representations.  If a number has an exponent separated by `<obj>s</obj>', it
+is a short float.  If a number has an exponent separated by `<obj>f</obj>', it
+is a full-size float.  A leading or embedded (but <arg>not</arg> trailing)
+decimal point, and/or an exponent separated by `<obj>e</obj>', indicates a
+float; which kind is controlled by the variable
+<obj>*read-default-float-format*</obj>, which is usually set to specify
+full-size floats.  Short floats require a special indicator so that
+naive users will not accidentally compute with the lesser precision.
+Fixnums and bignums have similar printed representations since there is
+no numerical value that has a choice of whether to be a fixnum or a
+bignum; an integer is a bignum if and only if its magnitude is too big
+for a fixnum.  See the examples on <ref definition-in-file="rdprt" key="flonum-examples" type="page"></ref>, in the
+description of what the reader understands.
+</p>
+<definition>
+<define key="zunderflow-var" name="zunderflow" type="var"></define>
+
+<description>When this is <obj>nil</obj>, floating point exponent underflow is an error.
+When this is <obj>t</obj>, exponent underflow proceeds, returning zero as the value.
+The same thing could be accomplished with a condition handler.
+However, <obj>zunderflow</obj> is useful for Maclisp compatibility, and is also faster.
+</description></definition><definition><define key="sys:floating-exponent-overflow-condition" name="sys:floating-exponent-overflow" type="condition"><args>(<obj>sys:arithmetic-error</obj> <obj>error</obj>)</args>
+</define><define key="sys:floating-exponent-underflow-condition" name="sys:floating-exponent-underflow" type="condition"><args>(<obj>sys:arithmetic-error</obj> <obj>error</obj>)</args>
+</define>
+
+<description><obj>sys:floating-exponent-overflow</obj> is signaled when the result of an
+arithmetic operation should be a floating point number, but the exponent
+is too large to be represented in the format to be used for the value.
+<obj>sys:floating-exponent-underflow</obj> is signaled when the exponent is too
+small.
+
+The condition instance provides two additional operations:
+<obj>:function</obj>, which returns the arithmetic function that was called,
+and <obj>:small-float-p</obj>, which is <obj>t</obj> if the result was supposed to be
+a short float.
+
+<obj>sys:floating-exponent-overflow</obj> provides the <obj>:new-value</obj> proceed
+type.  It expects one argument, a new value.
+
+<obj>sys:floating-exponent-underflow</obj> provides the <obj>:use-zero</obj> proceed
+type, which expects no argument.
+
+Unfortunately, it is not possible to make the arguments to the operation
+available.  Perhaps someday they will be.
+</description></definition><a name="Numeric Predicates"></a>
+
+<section chapter-number="8" name="Numeric Predicates" number="1" title="Numeric Predicates"><definition><define key="zerop-fun" name="zerop" type="fun"><args>x</args>
+</define>
+
+<description>Returns <obj>t</obj> if <arg>x</arg> is zero.  Otherwise it returns <obj>nil</obj>.
+If <arg>x</arg> is not a number, <obj>zerop</obj> causes an error.  For floats,
+this only returns <obj>t</obj> for exactly <obj>0.0</obj> or <obj>0.0s0</obj>.
+For complex numbers, it returns <obj>t</obj> if both real and imaginary
+parts are zero.
+</description></definition><definition><define key="plusp-fun" name="plusp" type="fun"><args>x</args>
+</define>
+
+<description>Returns <obj>t</obj> if its argument is a positive number, strictly greater
+than zero.  Otherwise it returns <obj>nil</obj>.
+If <arg>x</arg> is not a number, <obj>plusp</obj> causes an error.
+</description></definition><definition><define key="minusp-fun" name="minusp" type="fun"><args>x</args>
+</define>
+
+<description>Returns <obj>t</obj> if its argument is a negative number, strictly
+less than zero.  Otherwise it returns <obj>nil</obj>.
+If <arg>x</arg> is not a number, <obj>minusp</obj> causes an error.
+</description></definition><definition><define key="oddp-fun" name="oddp" type="fun"><args>number</args>
+</define>
+
+<description>Returns <obj>t</obj> if <arg>number</arg> is odd, otherwise <obj>nil</obj>.
+If <arg>number</arg> is not a fixnum or a bignum, <obj>oddp</obj> causes an error.
+</description></definition><definition><define key="evenp-fun" name="evenp" type="fun"><args>number</args>
+</define>
+
+<description>Returns <obj>t</obj> if <arg>number</arg> is even, otherwise <obj>nil</obj>.
+If <arg>number</arg> is not a fixnum or a bignum, <obj>evenp</obj> causes an error.
+</description></definition><definition><define key="signp-fun" name="signp" type="spec"><args>test x</args>
+</define>
+
+<description>Tests the sign of a number.  <obj>signp</obj> is present only for
+Maclisp compatibility and is not recommended for use in new programs.
+<obj>signp</obj> returns <obj>t</obj> if <arg>x</arg> is a number which
+satisfies the <arg>test</arg>, <obj>nil</obj> if it is not a number or does not meet
+the test.  <arg>test</arg> is not evaluated, but <arg>x</arg> is.  <arg>test</arg> can be
+one of the following:
+
+<table><tbody><tr><td><obj>l</obj></td><td>x &lt; 0
+</td></tr><tr><td><obj>le</obj></td><td>x <obj>≤</obj> 0
+</td></tr><tr><td><obj>e</obj></td><td>x = 0
+</td></tr><tr><td><obj>n</obj></td><td>x <obj>≠</obj> 0
+</td></tr><tr><td><obj>ge</obj></td><td>x <obj>≥</obj> 0
+</td></tr><tr><td><obj>g</obj></td><td>x &gt; 0
+</td></tr></tbody></table>
+<lisp><exdent amount="96"><caption>Examples: </caption>(signp ge 12) =&gt; t
+(signp le 12) =&gt; nil
+(signp n 0) =&gt; nil
+(signp g 'foo) =&gt; nil
+</exdent></lisp></description></definition><nopara></nopara>
+<p>See also the data-type predicates <obj>integerp</obj>, <obj>rationalp</obj>,
+<obj>realp</obj>, <obj>complexp</obj>,
+<obj>floatp</obj>, <obj>bigp</obj>, <obj>small-floatp</obj>, and <obj>numberp</obj> (<ref definition-in-file="fd-dtp" key="fixp-fun" title="Function fixp" type="fun"></ref>).
+</p>
+</section><a name="Numeric Comparisons"></a>
+
+
+<section chapter-number="8" name="Numeric Comparisons" number="2" title="Numeric Comparisons"><p>All of these functions require that their arguments be numbers; they signal
+an error if given a non-number.  Equality tests work on all types of numbers,
+automatically performing any required coercions (as opposed to
+Maclisp in which generally only the spelled-out names work for
+all kinds of numbers).  Ordering comparisons allow only real numbers,
+since they are meaningless on complex numbers.
+</p>
+<definition><define key="=-fun" name="=" type="fun"><args><standard>&amp;rest</standard> numbers</args>
+</define>
+
+<description>Returns <obj>t</obj> if all the arguments are numerically equal.  They need not
+be of the same type; 1 and 1.0 are considered equal.  Character objects
+are also allowed, and in effect coerced to integers for comparison.
+</description></definition>
+<p>See also <obj>eql</obj>, <ref definition-in-file="fd-flo" key="eql-fun" title="Function eql" type="fun"></ref>, which insists that both the type and the value
+match when its arguments are numbers.
+</p>
+<definition><define key="&gt;-fun" name="&gt;" type="fun"><args><standard>&amp;rest</standard> numbers</args>
+</define><define key="greaterp-fun" name="greaterp" type="fun"><args><standard>&amp;rest</standard> numbers</args>
+</define>
+
+<description><obj>&gt;</obj> compares each pair of successive arguments.  If any argument
+is not greater than the next, <obj>&gt;</obj> returns <obj>nil</obj>.  But if the
+arguments are monotonically strictly decreasing, the result is <obj>t</obj>.
+Zero arguments are always monotonically decreasing, and so is
+a single argument.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(&gt;) =&gt; t
+(&gt; 3) =&gt; t
+(&gt; 4 3) =&gt; t
+(&gt; 4 3 2 1 0) =&gt; t
+(&gt; 4 3 1 2 0) =&gt; nil
+</exdent></lisp>
+<obj>greaterp</obj> is the Maclisp name for this function.
+</description></definition><definition><define key="&gt;=-fun" name="&gt;=" type="fun"><args><standard>&amp;rest</standard> numbers</args>
+</define><define key="≥-fun" name="≥" type="fun"><args><standard>&amp;rest</standard> numbers</args>
+</define>
+
+<description><obj>≥</obj> compares each pair of successive arguments.  If any argument
+is less than the next, <obj>≥</obj> returns <obj>nil</obj>.  But if the
+arguments are monotonically decreasing or equal, the result is <obj>t</obj>.
+
+<obj>&gt;=</obj> is the Common Lisp name for this function.
+</description></definition><definition><define key="&lt;-fun" name="&lt;" type="fun"><args><standard>&amp;rest</standard> numbers</args>
+</define><define key="lessp-fun" name="lessp" type="fun"><args><standard>&amp;rest</standard> numbers</args>
+</define>
+
+<description><obj>&lt;</obj> compares each pair of successive arguments.  If any argument
+is not less than the next, <obj>&lt;</obj> returns <obj>nil</obj>.  But if the
+arguments are monotonically strictly increasing, the result is <obj>t</obj>.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(&lt;) =&gt; t
+(&lt; 3) =&gt; t
+(&lt; 3 4) =&gt; t
+(&lt; 1 1) =&gt; nil
+(&lt; 0 1 2 3 4) =&gt; t
+(&lt; 0 1 3 2 4) =&gt; nil
+</exdent></lisp>
+<obj>lessp</obj> is the Maclisp name for this function.
+</description></definition><definition><define key="&lt;=-fun" name="&lt;=" type="fun"><args><standard>&amp;rest</standard> numbers</args>
+</define><define key="≤-fun" name="≤" type="fun"><args><standard>&amp;rest</standard> numbers</args>
+</define>
+
+<description><obj>≤</obj> compares its arguments from left to right.  If any argument
+is greater than the next, <obj>≤</obj> returns <obj>nil</obj>.  But if the
+arguments are monotonically increasing or equal, the result is <obj>t</obj>.
+
+<obj>&lt;=</obj> is the Common Lisp name for this function.
+</description></definition><definition><define key="≠-fun" name="≠" type="fun"><args><standard>&amp;rest</standard> numbers</args>
+</define><define key="//=-fun" name="//=" type="fun"><args><standard>&amp;rest</standard> numbers</args>
+</define>
+
+<description><obj>t</obj> if no two arguments are numerically equal.
+This is the same as <obj>(not (= ...))</obj> when there are two arguments,
+but not when there are more than two.
+
+With zero or one argument, the value is always <obj>t</obj>, since
+there is no pair of arguments that fail to be equal.
+
+<obj>//=</obj> is the Common Lisp name for this function.
+In Common Lisp syntax, it would be written <obj>/=</obj>.
+</description></definition><definition><define key="max-fun" name="max" type="fun"><args><standard>&amp;rest</standard> one-or-more-args</args>
+</define>
+
+<description>Returns the largest of its arguments, which must not be complex.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(max 1 3 2) =&gt; 3
+</exdent></lisp><obj>max</obj> requires at least one argument.
+</description></definition><definition><define key="min-fun" name="min" type="fun"><args><standard>&amp;rest</standard> one-or-more-args</args>
+</define>
+
+<description>Returns the smallest of its arguments, which must not be complex.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(min 1 3 2) =&gt; 1
+</exdent></lisp><obj>min</obj> requires at least one argument.
+</description></definition></section><a name="Arithmetic"></a>
+
+
+<section chapter-number="8" name="Arithmetic" number="3" title="Arithmetic"><p>All of these functions require that their arguments be numbers, and signal
+an error if given a non-number.  They work on all types of numbers,
+automatically performing any required coercions (as opposed to Maclisp,
+in which generally only the spelled-out versions work for all kinds
+of numbers, and the `<obj>$</obj>' versions are needed for floats).
+</p>
+<definition><define key="+-fun" name="+" type="fun"><args><standard>&amp;rest</standard> args</args>
+</define><define key="plus-fun" name="plus" type="fun"><args><standard>&amp;rest</standard> args</args>
+</define><define key="+$-fun" name="+$" type="fun"><args><standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Returns the sum of its arguments.  If there are no arguments, it returns
+<obj>0</obj>, which is the identity for this operation.
+
+<obj>plus</obj> and <obj>$+</obj> are Maclisp names, supported for
+compatibility.
+</description></definition><definition><define key="--fun" name="-" type="fun"><args>arg <standard>&amp;rest</standard> args</args>
+</define><define key="-$-fun" name="-$" type="fun"><args>arg <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>With only one argument, <obj>-</obj> returns the negative of its argument.
+With more than one argument, <obj>-</obj> returns its first argument minus
+all of the rest of its arguments.
+
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(- 1) =&gt; -1
+(- -3.0) =&gt; 3.0
+(- 3 1) =&gt; 2
+(- 9 2 1) =&gt; 6
+</exdent></lisp>
+<obj>-$</obj> is a Maclisp name, supported for compatibility.
+</description></definition><definition><define key="minus-fun" name="minus" type="fun"><args>x</args>
+</define>
+
+<description>Returns the negative of <arg>x</arg>, just like <obj>-</obj> with one argument.
+</description></definition><definition><define key="difference-fun" name="difference" type="fun"><args>arg <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Returns its first argument minus all of the rest of its arguments.
+If there are at least two arguments, <obj>difference</obj> is equivalent to
+<obj>-</obj>.
+</description></definition><definition><define key="abs-fun" name="abs" type="fun"><args>x</args>
+</define>
+
+<description>Returns <obj>|<arg>x</arg>|</obj>, the absolute value of the number <arg>x</arg>.
+<obj>abs</obj> for real numbers could have been defined as
+
+<lisp>(defun abs (x)
+    (cond ((minusp x) (minus x))
+          (t x)))
+</lisp>
+<obj>abs</obj> of a complex number could be computed, though imprecisely, as
+
+<lisp>(sqrt (^ (realpart x) 2) (^ (imagpart x) 2))
+</lisp></description></definition><definition><define key="*-fun" name="*" type="fun"><args><standard>&amp;rest</standard> args</args>
+</define><define key="times-fun" name="times" type="fun"><args><standard>&amp;rest</standard> args</args>
+</define><define key="*$-fun" name="*$" type="fun"><args><standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Returns the product of its arguments.  If there are no arguments, it
+returns <obj>1</obj>, which is the identity for this operation.
+
+<obj>times</obj> and <obj>*$</obj> are Maclisp names, supported for compatibility.
+</description></definition><definition><define key="//-fun" name="//" type="fun"><args>arg <standard>&amp;rest</standard> args</args>
+</define><define key="//$-fun" name="//$" type="fun"><args>arg <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>With more than one argument, <obj>//</obj>
+it returns the first argument divided by all of the rest of its arguments.
+With only one argument, <obj>(// <arg>x</arg>)</obj> is the same as <obj>(// 1 <arg>x</arg>)</obj>.
+
+The name of this function is written <obj>//</obj> rather than <obj>/</obj> because
+<obj>/</obj> is the escape character in traditional Lisp syntax and must be
+escaped in order to suppress that significance.  <obj>//$</obj> is a Maclisp
+name, supported for compatibility.
+
+<obj>//</obj> of two integers returns an integer even if the mathematically
+correct value is not an integer.  More precisely, the value is the
+same as the first value returned by <obj>truncate</obj> (see below).  This
+will eventually be changed, and then the value will be a ratio if
+necessary so that the it is mathematically correct.  All code that
+relies on <obj>//</obj> to return an integer value rather than a ratio should
+be converted to use <obj>truncate</obj> (or <obj>floor</obj> or <obj>ceiling</obj>, which
+may simplify the code further).  In the mean time, use the function
+<obj>cli://</obj> if you want a rational result.
+
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(// 3 2) =&gt; 1       <standard>;Fixnum division truncates.</standard>
+(// 3 -2) =&gt; -1
+(// -3 2) =&gt; -1
+(// -3 -2) =&gt; 1
+(// 3 2.0) =&gt; 1.5
+(// 3 2.0s0) =&gt; 1.5s0
+(// 4 2) =&gt; 2
+(// 12. 2. 3.) =&gt; 2
+(// 4.0) =&gt; .25
+</exdent></lisp></description></definition><definition><define key="quotient-fun" name="quotient" type="fun"><args>arg <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Returns the first argument divided by all of the rest of its arguments.
+When there are two or more arguments, <obj>quotient</obj> is equivalent to
+<obj>//</obj>.
+</description></definition><definition><define key="cli://-fun" name="cli://" type="fun"><args>number <standard>&amp;rest</standard> numbers</args>
+</define>
+
+<description>This is the Common Lisp division function.  It is like <obj>//</obj> except
+that it uses exact rational division when the arguments are integers.
+
+<obj>//</obj> will someday be changed to divide integers exactly.  Then there
+will no longer be a distinct function <obj>cli://</obj>; that name will become
+equivalent to <obj>//</obj>.
+
+Note that in Common Lisp syntax you would write just <obj>/</obj> rather than
+<obj>cli://</obj>.
+</description></definition>
+<p>There are four functions for ``integer division'', the sort which
+produces a quotient and a remainder.  They differ in how they round the
+quotient to an integer, and therefore also in the sign of the remainder.
+The arguments must be real, since ordering is needed to compute the
+value.  The quotient is always an integer, but the arguments and remainder
+need not be.
+</p>
+<definition><define key="floor-fun" name="floor" type="fun"><args>x <standard>&amp;optional</standard> (y <obj>1</obj>)</args>
+</define>
+
+<description><obj>floor</obj>'s first value is the largest integer less than or equal to the
+quotient of <arg>x</arg> divided by <arg>y</arg>.
+
+The second value is the remainder, <arg>x</arg> minus <arg>y</arg> times the first
+value.  This has the same sign as <arg>y</arg> (or may be zero), regardless of
+the sign of <arg>x</arg>.
+
+With one argument, <obj>floor</obj>'s first value is the largest integer less than
+or equal to the argument.
+</description></definition><definition><define key="ceiling-fun" name="ceiling" type="fun"><args>x <standard>&amp;optional</standard> (y <obj>1</obj>)</args>
+</define>
+
+<description><obj>ceiling</obj>'s first value is the smallest integer greater than or equal
+to the quotient of <arg>x</arg> divided by <arg>y</arg>.
+
+The second value is the remainder, <arg>x</arg> minus <arg>y</arg> times the first
+value.  This has the opposite sign from <arg>y</arg> (or may be zero),
+regardless of the sign of <arg>x</arg>.
+
+With one argument, <obj>ceiling</obj>'s first value is the smallest integer greater than
+or equal to the argument.
+</description></definition><definition><define key="truncate-fun" name="truncate" type="fun"><args>x <standard>&amp;optional</standard> (y <obj>1</obj>)</args>
+</define>
+
+<description><obj>truncate</obj> is the same as <obj>floor</obj> if the arguments have the same
+sign, <obj>ceiling</obj> if they have opposite signs.  <obj>truncate</obj> is the
+function that the divide instruction on most computers implements.
+
+<obj>truncate</obj>'s first value is the nearest integer, in the direction of
+zero, to the quotient of <arg>x</arg> divided by <arg>y</arg>.
+
+The second value is the remainder, <arg>x</arg> minus <arg>y</arg> times the first
+value.  This has the same sign as <arg>x</arg> (or may be zero).
+</description></definition><definition><define key="round-fun" name="round" type="fun"><args>x <standard>&amp;optional</standard> (y <obj>1</obj>)</args>
+</define>
+
+<description><obj>round</obj>'s first value is the nearest integer 
+to the quotient of <arg>x</arg> divided by <arg>y</arg>.  If the quotient is midway
+between two integers, the even integer of the two is used.
+
+The second value is the remainder, <arg>x</arg> minus <arg>y</arg> times the first
+value.  The sign of this remainder cannot be predicted from the signs of
+the arguments alone.
+
+With one argument, <obj>round</obj>'s first value is the integer nearest to the
+argument.
+</description></definition><nopara></nopara>
+<p>Here is a table which clarifies the meaning of <obj>floor</obj>, <obj>ceiling</obj>,
+<obj>truncate</obj> and <obj>round</obj> with one argument:
+</p>
+
+<lisp>           floor   ceiling   truncate    round
+
+  2.6        2         3         2         3
+  2.5        2         3         2         2
+  2.4        2         3         2         2
+  0.7        0         1         0         1
+  0.3        0         1         0         0
+ -0.3       -1         0         0         0
+ -0.7       -1         0         0        -1
+ -2.4       -3        -2        -2        -2
+ -2.5       -3        -2        -2        -2
+ -2.5       -3        -2        -2        -2
+ -2.6       -3        -2        -2        -3
+</lisp>
+<p>There are two kinds of remainder function, which differ in the treatment
+of negative numbers.  The remainder can also be obtained as the second
+value of one of the integer division functions above, but if only the
+remaineder is desired it is simpler to use these functions.
+</p>
+<definition><define key="\-fun" name="\" type="fun"><args>x y</args>
+</define><define key="remainder-fun" name="remainder" type="fun"><args>x y</args>
+</define><define key="cli:rem-fun" name="cli:rem" type="fun"><args>x y</args>
+</define>
+
+<description>Returns the remainder of <arg>x</arg> divided by <arg>y</arg>.
+<arg>x</arg> and <arg>y</arg> must be integers (fixnums or bignums).
+This is the same as the second value of <obj>(truncate <arg>x</arg> <arg>y</arg>)</obj>.
+Only the absolute value of the divisor is relevant.
+
+<lisp>(\ 3 2) =&gt; 1
+(\ -3 2) =&gt; -1
+(\ 3 -2) =&gt; 1
+(\ -3 -2) =&gt; -1
+</lisp>
+Common Lisp gives this function the name <obj>rem</obj>, but since <obj>rem</obj> in
+traditional Zetalisp is a function to remove elements from lists (see
+<ref definition-in-file="fd-con" key="rem-fun" title="Function rem" type="fun"></ref>), the name <obj>rem</obj> is defined to mean remainder only in Common
+Lisp programs.  Note that the name <obj>\</obj> would have to be written as
+<obj>\\</obj> in Common Lisp syntax; but the function <obj>\</obj> is not standard
+Common Lisp.
+</description></definition><definition><define key="mod-fun" name="mod" type="fun"><args>number divisor</args>
+</define>
+
+<description>Returns the root of <arg>number</arg> modulo <arg>divisor</arg>.  This is a number
+between 0 and <arg>divisor</arg>, or possibly 0, whose difference from
+<arg>number</arg> is a multiple of <arg>divisor</arg>.  It is the same as the second
+value of <obj>(floor <arg>number</arg> <arg>divisor</arg>)</obj>.  Examples:
+
+<lisp>(mod 2 5)  =&gt;  2
+(mod -2 5)  =&gt;  3
+(mod -2 -5)  =&gt;  -2
+(mod 2 -5)  =&gt;  -3
+</lisp></description></definition>
+<p>There are four ``floating point integer division'' functions.
+These produce a result which is a floating point number whose value
+is exactly integral.
+</p>
+<definition><define key="ffloor-fun" name="ffloor" type="fun"><args>x <standard>&amp;optional</standard> (y <obj>1</obj>)</args>
+</define><define key="fceiling-fun" name="fceiling" type="fun"><args>x <standard>&amp;optional</standard> (y <obj>1</obj>)</args>
+</define><define key="ftruncate-fun" name="ftruncate" type="fun"><args>x <standard>&amp;optional</standard> (y <obj>1</obj>)</args>
+</define><define key="fround-fun" name="fround" type="fun"><args>x <standard>&amp;optional</standard> (y <obj>1</obj>)</args>
+</define>
+
+<description>Like <obj>floor</obj>, <obj>ceiling</obj>, <obj>truncate</obj> and <obj>round</obj> except
+that the first value is converted from an integer to a float.
+If <arg>x</arg> is a float, then the result is the same type of float as <arg>x</arg>.
+</description></definition><definition><define key="sys:divide-by-zero-condition" name="sys:divide-by-zero" type="condition"><args>(<obj>sys:arithmetic-error</obj> <obj>error</obj>)</args>
+</define>
+
+<description>Dividing by zero, using any of the above division functions, signals this
+condition.  The <obj>:function</obj> operation on the condition instance
+returns the name of the division function.  The <obj>:dividend</obj> operation
+may be available to return the number that was divided.
+</description></definition><definition><define key="1+-fun" name="1+" type="fun"><args>x</args>
+</define><define key="add1-fun" name="add1" type="fun"><args>x</args>
+</define><define key="1+$-fun" name="1+$" type="fun"><args>x</args>
+</define>
+
+<description><obj>(1+ x)</obj> is the same as <obj>(+ x 1)</obj>.  The other two names
+are for Maclisp compatibility.
+</description></definition><definition><define key="1--fun" name="1-" type="fun"><args>x</args>
+</define><define key="sub1-fun" name="sub1" type="fun"><args>x</args>
+</define><define key="1-$-fun" name="1-$" type="fun"><args>x</args>
+</define>
+
+<description><obj>(1- x)</obj> is the same as <obj>(- x 1)</obj>.  Note that the
+short name may be confusing: <obj>(1- <arg>x</arg>)</obj> does <arg>not</arg> mean 1-<arg>x</arg>;
+rather, it means <arg>x</arg>-1.  The names <obj>sub1</obj> and <obj>1-$</obj> are
+for Maclisp compatibility.
+</description></definition><definition><define key="gcd-fun" name="gcd" type="fun"><args><standard>&amp;rest</standard> integers</args>
+</define><define key="\\-fun" name="\\" type="fun"><args><standard>&amp;rest</standard> integers</args>
+</define>
+
+<description>Returns the greatest common divisor of all its arguments,
+which must be integers.
+With one argument, the value is that argument.  With no arguments,
+the value is zero.
+
+In Common Lisp syntax <obj>\\</obj> would be written as <obj>\\\\</obj>,
+but only the name <obj>gcd</obj> is valid in strict Common Lisp.
+</description></definition><definition><define key="lcm-fun" name="lcm" type="fun"><args>integer <standard>&amp;rest</standard> more-integers</args>
+</define>
+
+<description>Returns the least common multiple of the specified integers.
+</description></definition><definition><define key="expt-fun" name="expt" type="fun"><args>x y</args>
+</define><define key="^-fun" name="^" type="fun"><args>x y</args>
+</define><define key="^$-fun" name="^$" type="fun"><args>x y</args>
+</define>
+
+<description>Returns <arg>x</arg> raised to the <arg>y</arg>'th power.  The result is rational (and
+possibly an integer) if <arg>x</arg> is rational and <arg>y</arg> an integer.  If the exponent is
+an integer a repeated-squaring algorithm is used; otherwise the result
+is <obj>(exp (* <arg>y</arg> (log <arg>x</arg>)))</obj>.
+
+If <arg>y</arg> is zero, the result is <obj>(+ 1 (* <arg>x</arg> <arg>y</arg>))</obj>;
+this is equal to one, but its type depends on those of <arg>x</arg> and <arg>y</arg>.
+</description></definition><definition><define key="sys:zero-to-negative-power-condition" name="sys:zero-to-negative-power" type="condition"><args>(<obj>sys:arithmetic-error</obj> <obj>error</obj>)</args>
+</define>
+
+<description>This condition is signaled when <obj>expt</obj>'s first argument is zero
+and the second argument is negative.
+</description></definition><definition><define key="sqrt-fun" name="sqrt" type="fun"><args>x</args>
+</define>
+
+<description>Returns the square root of <arg>x</arg>.  A mathematically unavoidable
+discontinuity occurs for negative real arguments, for which the value
+returned is a positive real times <obj>i</obj>.
+
+<lisp>(sqrt 4) =&gt; 2
+(sqrt -4) =&gt; 0+2i
+(sqrt -4+.0001i) =&gt; .00005+2i <standard>(approximately)</standard>
+(sqrt -4-.0001i) =&gt; .00005-2i <standard>(approximately)</standard>
+</lisp></description></definition><definition><define key="isqrt-fun" name="isqrt" type="fun"><args>x</args>
+</define>
+
+<description>Integer square-root.  <arg>x</arg> must be an integer; the result is the greatest
+integer less than or equal to the exact square root of <arg>x</arg>.
+</description></definition><definition><define key="*dif-fun" name="*dif" type="fun"><args>x y</args>
+</define><define key="*plus-fun" name="*plus" type="fun"><args>x y</args>
+</define><define key="*quo-fun" name="*quo" type="fun"><args>x y</args>
+</define><define key="*times-fun" name="*times" type="fun"><args>x y</args>
+</define>
+
+<description>These are the internal microcoded arithmetic functions.  There is no
+reason why anyone should need to write code with these explicitly, since the
+compiler knows how to generate the appropriate code for <obj>plus</obj>,
+<obj>+</obj>, etc.  These names are only here for Maclisp compatibility.
+</description></definition><definition><define key="%div-fun" name="%div" type="fun"><args>dividend divisor</args>
+</define>
+
+<description>The internal division function used by <obj>cli://</obj>,
+it was available before <obj>cli://</obj> was and may therefore
+be used in some programs.  It takes exactly two arguments.
+Uses of <obj>%div</obj> should be changed to use <obj>cli://</obj>.
+</description></definition></section><a name="Complex Number Functions"></a>
+
+
+<section chapter-number="8" name="Complex Number Functions" number="4" title="Complex Number Functions"><p>See also the predicates <obj>realp</obj> and <obj>complexp</obj> (<ref definition-in-file="fd-dtp" key="complexp-fun" title="Function complexp" type="fun"></ref>).
+</p>
+<definition><define key="complex-fun" name="complex" type="fun"><args>x <standard>&amp;optional</standard> y</args>
+</define>
+
+<description>Returns the complex number whose real part is <arg>x</arg> and whose imaginary
+part is <arg>y</arg>.
+
+If <arg>x</arg> is rational and <arg>y</arg> is zero or omitted, the value is <arg>x</arg>,
+and not a complex number at all.
+If <arg>x</arg> is a float and <arg>y</arg> is zero or omitted, of if <arg>y</arg> is
+a floating zero, the result is a complexnum whose imaginary part is zero.
+</description></definition><definition><define key="realpart-fun" name="realpart" type="fun"><args>z</args>
+</define>
+
+<description>Returns the real part of the number <arg>z</arg>.  If <arg>z</arg> is real,
+this is the same as <arg>z</arg>.
+</description></definition><definition><define key="imagpart-fun" name="imagpart" type="fun"><args>z</args>
+</define>
+
+<description>Returns the imaginary part of the number <arg>z</arg>.  If <arg>z</arg> is real, this
+is zero.
+</description></definition><definition><define key="conjugate-fun" name="conjugate" type="fun"><args>z</args>
+</define>
+
+<description>Returns the complex conjugate of the number <arg>z</arg>.  If <arg>z</arg> is real,
+this is the same as <arg>z</arg>.
+</description></definition><definition><define key="phase-fun" name="phase" type="fun"><args>z</args>
+</define>
+
+<description>Returns the phase angle of the complex number <arg>z</arg> in its polar form.
+This is the angle from the positive <arg>x</arg> axis to the ray from the
+origin through <arg>z</arg>.  The value is always in the interval <obj>(-π, π]</obj>.
+
+<lisp>(phase -4) =&gt; π
+(phase -4-.0001i) <standard>is just over <obj>-π</obj>.</standard>
+(phase 0) =&gt; 0 <standard>(an arbitrary choice)</standard>
+</lisp></description></definition><definition><define key="cis-fun" name="cis" type="fun"><args>angle</args>
+</define>
+
+<description>Returns the complex number of unit magnitude whose phase is <arg>angle</arg>.
+This is equal to <obj>(complex (cos <arg>angle</arg>) (sin <arg>angle</arg>))</obj>.
+<arg>angle</arg> must be real.
+</description></definition><definition><define key="signum-fun" name="signum" type="fun"><args>z</args>
+</define>
+
+<description>Returns a number with unit magnitude and the same type and phase as <arg>z</arg>.  If
+<arg>z</arg> is zero, the value is zero.
+
+If <arg>z</arg> is real, the value is <obj>=</obj> to <obj>1</obj> or <obj>-1</obj>;
+it may be a float, however.
+</description></definition></section><a name="Transcendental Functions"></a>
+
+
+<section chapter-number="8" name="Transcendental Functions" number="5" title="Transcendental Functions"><p>These functions are only for floating-point arguments; if given an integer
+they convert it to a float.  If given a short float, they return a
+short float.
+</p>
+<definition>
+<define key="pi-var" name="pi" type="const"></define>
+
+<description>The value of <obj>π</obj>, as a full-size float.
+</description></definition><definition><define key="exp-fun" name="exp" type="fun"><args>x</args>
+</define>
+
+<description>Returns <arg>e</arg> raised to the <arg>x</arg>'th power, where <arg>e</arg> is the base of natural logarithms.
+</description></definition><definition><define key="log-fun" name="log" type="fun"><args>x <standard>&amp;optional</standard> base</args>
+</define>
+
+<description>Returns the logarithm of <arg>x</arg> to base <arg>base</arg>.  <arg>base</arg>
+defaults to <arg>e</arg>.  When <arg>base</arg> is <arg>e</arg>, the imaginary
+part of the value is in the interval <obj>(-π, π]</obj>; for
+negative real <arg>x</arg>, the value has imaginary part <obj>π</obj>.
+
+If <arg>base</arg> is specified, the result is
+
+<lisp>(// (log <arg>x</arg>) (log <arg>base</arg>))
+</lisp></description></definition><definition><define key="sys:zero-log-condition" name="sys:zero-log" type="condition"><args>(<obj>sys:arithmetic-error</obj> <obj>error</obj>)</args>
+</define>
+
+<description>This is signaled when the argument to <obj>log</obj> is zero.
+</description></definition><definition><define key="sin-fun" name="sin" type="fun"><args>x</args>
+</define><define key="cos-fun" name="cos" type="fun"><args>x</args>
+</define><define key="tan-fun" name="tan" type="fun"><args>x</args>
+</define>
+
+<description>Return, respectively, the sine, cosine and tangent of <arg>x</arg>, where
+<arg>x</arg> is expressed in radians.  <arg>x</arg> may be complex.
+</description></definition><definition><define key="sind-fun" name="sind" type="fun"><args>x</args>
+</define><define key="cosd-fun" name="cosd" type="fun"><args>x</args>
+</define><define key="tand-fun" name="tand" type="fun"><args>x</args>
+</define>
+
+<description>Return, respectively, the sine, cosine and tangent of <arg>x</arg>, where
+<arg>x</arg> is expressed in degrees.
+</description></definition><definition><define key="asin-fun" name="asin" type="fun"><args>x</args>
+</define><define key="acos-fun" name="acos" type="fun"><args>x</args>
+</define>
+
+<description>Returns the angle (in radians) whose sine (respectively, cosine)
+is <arg>x</arg>.  The real part of the result of <obj>asin</obj> is
+between <obj>-π/2</obj> and <obj>π/2</obj>; <obj>acos</obj> and <obj>asin</obj>
+of any given argument always add up to <obj>π/2</obj>.
+</description></definition><definition><define key="atan-fun" name="atan" type="fun"><args>y <standard>&amp;optional</standard> x</args>
+</define>
+
+<description>If only <arg>y</arg> is given, the value is the angle, in radians, whose
+tangent is <arg>y</arg>.  The real part of the result is between zero and <obj>-π</obj>.
+
+If <arg>x</arg> is also given, both arguments must be real, and the value is
+an angle, in radians, whose tangent is <arg>y /x</arg>.  However, the signs
+of the two arguments are used to choose between two angles which
+differ by <obj>π</obj> and have the same tangent.  The one chosen is the
+angle from the <arg>x</arg>-axis counterclockwise to the line from the origin
+to the point (<arg>x</arg>, <arg>y</arg>).
+
+<obj>atan</obj> always returns a non-negative number between zero and
+<obj>2π</obj>.
+</description></definition><definition><define key="atan2-fun" name="atan2" type="fun"><args>y <standard>&amp;optional</standard> x</args>
+</define><define key="cli:atan-fun" name="cli:atan" type="fun"><args>y <standard>&amp;optional</standard> x</args>
+</define>
+
+<description>Like <obj>atan</obj> but always returns a value whose real part is between
+<obj>-π/2</obj> and <obj>π/2</obj>.  The value is either the same as
+the value of <obj>atan</obj> or differs from it by <obj>π</obj>.
+
+<obj>atan2</obj> is the traditional name of this function.
+In Common Lisp it is called <obj>atan</obj>; it is documented as
+<obj>cli:atan</obj> since the name <obj>atan</obj> has a different meaning
+in traditional syntax.
+</description></definition><definition><define key="sinh-fun" name="sinh" type="fun"><args>x</args>
+</define><define key="cosh-fun" name="cosh" type="fun"><args>x</args>
+</define><define key="tanh-fun" name="tanh" type="fun"><args>x</args>
+</define><define key="asinh-fun" name="asinh" type="fun"><args>x</args>
+</define><define key="acosh-fun" name="acosh" type="fun"><args>x</args>
+</define><define key="atanh-fun" name="atanh" type="fun"><args>x</args>
+</define>
+
+<description>The hyperbolic and inverse hyperbolic functions.
+</description></definition></section><a name="Numeric Type Conversions"></a>
+
+
+<section chapter-number="8" name="Numeric Type Conversions" number="6" title="Numeric Type Conversions"><p>These functions are provided to allow specific conversions of data
+types to be forced, when desired.
+</p>
+<definition><define key="float-fun" name="float" type="fun"><args>number <standard>&amp;optional</standard> float</args>
+</define>
+
+<description>Converts <arg>number</arg> to a floating point number and returns it.
+
+If <arg>float</arg> is specified, the result is of the same
+floating point format as <arg>float</arg>.  If <arg>number</arg> is
+a float of a different format then it is converted.
+
+If <arg>float</arg> is omitted, then <arg>number</arg> is converted to
+a single-float unless it is already a floating point number.
+
+A complex number is converted to one whose real and imaginary
+parts are full-size floats unless they are already both floats.
+</description></definition><definition><define key="small-float-fun" name="small-float" type="fun"><args>x</args>
+</define><define key="short-float-fun" name="short-float" type="fun"><args>x</args>
+</define>
+
+<description>Converts any kind of real number to a short-float.
+A complex number is converted to one whose real and imaginary
+parts are short floats.  The two names are synonymous.
+</description></definition><definition><define key="numerator-fun" name="numerator" type="fun"><args>x</args>
+</define>
+
+<description>Returns the numerator of the rational number <arg>x</arg>.  If <arg>x</arg> is an
+integer, the value equals <arg>x</arg>.  If <arg>x</arg> is not an integer or
+ratio, an error is signaled.
+</description></definition><definition><define key="denominator-fun" name="denominator" type="fun"><args>x</args>
+</define>
+
+<description>Returns the denominator of the rational number <arg>x</arg>.  If <arg>x</arg> is an
+integer, the value is <obj>1</obj>.  If <arg>x</arg> is not an integer or
+ratio, an error is signaled.
+</description></definition><definition><define key="rational-fun" name="rational" type="fun"><args>x</args>
+</define>
+
+<description>Converts <arg>x</arg> to a rational number.  If <arg>x</arg> is an integer or a
+ratio, it is returned unchanged.  If it is a floating point
+number, it is regarded as an exact fraction whose numerator is
+the mantissa and whose denominator is a power of two.
+For any other argument, an error is signaled.
+</description></definition><definition><define key="rationalize-fun" name="rationalize" type="fun"><args>x <standard>&amp;optional</standard> precision</args>
+</define>
+
+<description>Returns a rational approximation to <arg>x</arg>.
+
+If there is only one argument, and it is an integer or a ratio, it
+is returned unchanged.  If the argument is a floating point number,
+a rational number is returned which, if converted to a floating point
+number, would produce the original argument.  Of all such rational
+numbers, the one chosen has the smallest numerator and denominator.
+
+If there are two arguments, the second one specifies how much precision
+of the first argument should be considered significant.  <arg>precision</arg>
+can be a positive integer (the number of bits to use), a negative integer
+(the number of bits to drop at the end), or a floating point number
+(minus its exponent is the number of bits to use).
+
+If there are two arguments and the first is rational, the value is a
+``simpler'' rational which approximates it.
+</description></definition><definition><define key="fix-fun" name="fix" type="fun"><args>x</args>
+</define>
+
+<description>Converts <arg>x</arg> from a float or ratio to an integer,
+truncating towards negative infinity.
+The result is a fixnum or a bignum as appropriate.  If <arg>x</arg> is already
+a fixnum or a bignum, it is returned unchanged.
+
+<obj>fix</obj> is the same as <obj>floor</obj> except that <obj>floor</obj> returns an
+additional value.  <obj>fix</obj> is semi-obsolete, since the functions <obj>floor</obj>,
+<obj>ceiling</obj>, <obj>truncate</obj> and <obj>round</obj> provide four different ways of
+converting numbers to integers with different kinds of rounding.
+</description></definition><definition><define key="fixr-fun" name="fixr" type="fun"><args>x</args>
+</define>
+
+<description><obj>fixr</obj> is the same as <obj>round</obj> except that <obj>round</obj> returns an
+additional value.  <obj>fixr</obj> is considered obsolete.
+</description></definition></section><a name="Floating Point Numbers"></a>
+
+<section chapter-number="8" name="Floating Point Numbers" number="7" title="Floating Point Numbers"><definition><define key="decode-float-fun" name="decode-float" type="fun"><args>float</args>
+</define>
+
+<description>Returns three values which describe the value of <arg>float</arg>.
+
+The first value is a positive float of the same format having the same
+mantissa, but with an exponent chosen to make it between 1/2 and 1, less
+than 1.
+
+The second value is the exponent of <arg>float</arg>: the power of 2 by which
+the first value needs to be scaled in order to get <arg>float</arg> back.
+
+The third value expresses the sign of <arg>float</arg>.  It is a float of the
+same format as <arg>float</arg>, whose value is either 1 or -1.  Example:
+
+<lisp>(decode-float 38.2)
+  =&gt;  0.596875   6   1.0
+</lisp></description></definition><definition><define key="integer-decode-float-fun" name="integer-decode-float" type="fun"><args>float</args>
+</define>
+
+<description>Like <obj>decode-float</obj> except that the first value is scaled so as to
+make it an integer, and the second value is modified by addition of a
+constant to compensate.
+
+<lisp>(integer-decode-float 38.2)
+  =&gt;  #o11431463146   -25.   1.0
+</lisp></description></definition><definition><define key="scale-float-fun" name="scale-float" type="fun"><args>float integer</args>
+</define>
+
+<description>Multiplies <arg>float</arg> by 2 raised to the <arg>integer</arg> power.  <arg>float</arg> can actually be
+an integer also; it is converted to a float and then scaled.
+
+<lisp>(scale-float 0.596875 6)  =&gt;  38.2
+(scale-float #o11431463146 -25.)  =&gt;  38.2
+</lisp></description></definition><definition><define key="float-sign-fun" name="float-sign" type="fun"><args>float1 <standard>&amp;optional</standard> float2</args>
+</define>
+
+<description>Returns a float whose sign matches that of <arg>float1</arg> and whose
+magnitude and format are those of <arg>float2</arg>.  If <arg>float2</arg> is omitted,
+1.0 is used as the magnitude and <arg>float1</arg> 's format is used.
+
+<lisp>(float-sign -1.0s0 35.3)  =&gt;  -35.3
+(float-sign -1.0s0 35.3s0)  =&gt;  -35.3s0
+</lisp></description></definition><definition><define key="float-radix-fun" name="float-radix" type="fun"><args>float</args>
+</define>
+
+<description>Defined by Common Lisp to return the radix used for the exponent in the
+format used for <arg>float</arg>.  On the Lisp Machine, floating point
+exponents are always powers of 2, so <obj>float-radix</obj> ignores its
+argument and always returns 2.
+</description></definition><definition><define key="float-digits-fun" name="float-digits" type="fun"><args>float</args>
+</define>
+
+<description>Returns the number of bits of mantissa in the floating point format
+which float is an example of.  It is 17 for short floats and 31 for
+full size ones.
+</description></definition><definition><define key="float-precision-fun" name="float-precision" type="fun"><args>float</args>
+</define>
+
+<description>Returns the number of significant figures present in in the mantissa of <arg>float</arg>.
+This is always the same as <obj>(float-digits <arg>float</arg>)</obj> for normalized numbers,
+and on the Lisp Machine all floats are normalized, so the two functions are the same.
+</description></definition></section><a name="Logical Operations on Numbers"></a>
+
+
+<section chapter-number="8" name="Logical Operations on Numbers" number="8" title="Logical Operations on Numbers"><p>Except for <obj>lsh</obj> and <obj>rot</obj>, these functions operate on both
+fixnums and bignums.  <obj>lsh</obj> and <obj>rot</obj> have an inherent word-length
+limitation and hence only operate on 25-bit fixnums.  Negative numbers
+are operated on in their 2's-complement representation.
+</p>
+<definition><define key="logior-fun" name="logior" type="fun"><args><standard>&amp;rest</standard> integers</args>
+</define>
+
+<description>Returns the bit-wise logical <arg>inclusive or</arg> of its arguments.
+With no arguments, the value is zero, which is the identity for this
+operation.
+
+<lisp><exdent amount="96"><caption>Example (in octal): </caption>(logior #o4002 #o67) =&gt; #o4067
+</exdent></lisp></description></definition><definition><define key="logand-fun" name="logand" type="fun"><args><standard>&amp;rest</standard> integers</args>
+</define>
+
+<description>Returns the bit-wise logical <arg>and</arg> of its arguments.
+With no arguments, the value is -1, which is the identity for this operation.
+
+<lisp><exdent amount="96"><caption>Examples (in octal): </caption>(logand #o3456 #o707) =&gt; #o406
+(logand #o3456 #o-100) =&gt; #o3400
+</exdent></lisp></description></definition><definition><define key="logxor-fun" name="logxor" type="fun"><args><standard>&amp;rest</standard> integers</args>
+</define>
+
+<description>Returns the bit-wise logical <arg>exclusive or</arg> of its arguments.
+With no arguments, the value is zero, which is the identity for this operation.
+
+<lisp><exdent amount="96"><caption>Example (in octal): </caption>(logxor #o2531 #o7777) =&gt; #o5246
+</exdent></lisp></description></definition><definition><define key="logeqv-fun" name="logeqv" type="fun"><args><standard>&amp;rest</standard> integers</args>
+</define>
+
+<description>Combines the <arg>integers</arg> together bitwise using the equivalence
+operation, which, for two arguments, is defined to result in 1 if the
+two argument bits are equal.  This operation is asociative.  With no
+args, the value is -1, which is an identity for the equivalence
+operation.
+
+<lisp><exdent amount="96"><caption>Example (in octal): </caption>(logeqv #o2531 #o7707) =&gt; #o-5237 = ...77772541
+</exdent></lisp></description></definition>
+<p>Non-associative bitwise operations take only two arguments:
+</p>
+<definition><define key="lognand-fun" name="lognand" type="fun"><args>integer1 integer2</args>
+</define>
+
+<description>Returns the bitwise-nand of the two arguments.  A bit of the result is 1
+if at least one of the corresponding argument bits is 0.
+</description></definition><definition><define key="lognor-fun" name="lognor" type="fun"><args>integer1 integer2</args>
+</define>
+
+<description>Returns the bitwise-nor of the two arguments.  A bit of the result is 1
+if both of the corresponding argument bits are 0.
+</description></definition><definition><define key="logorc1-fun" name="logorc1" type="fun"><args>integer1 integer2</args>
+</define>
+
+<description>Returns the bitwise-or of <arg>integer2</arg> with the complement of <arg>integer1</arg>.
+</description></definition><definition><define key="logorc2-fun" name="logorc2" type="fun"><args>integer1 integer2</args>
+</define>
+
+<description>Returns the bitwise-or of <arg>integer1</arg> with the complement of <arg>integer2</arg>.
+</description></definition><definition><define key="logandc1-fun" name="logandc1" type="fun"><args>integer1 integer2</args>
+</define>
+
+<description>Returns the bitwise-and of <arg>integer2</arg> with the complement of <arg>integer1</arg>.
+</description></definition><definition><define key="logandc2-fun" name="logandc2" type="fun"><args>integer1 integer2</args>
+</define>
+
+<description>Returns the bitwise-and of <arg>integer1</arg> with the complement of <arg>integer2</arg>.
+</description></definition><definition><define key="lognot-fun" name="lognot" type="fun"><args>number</args>
+</define>
+
+<description>Returns the logical complement of <arg>number</arg>.  This is the same as
+<obj>logxor</obj>'ing <arg>number</arg> with -1.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(lognot #o3456) =&gt; #o-3457
+</exdent></lisp></description></definition><definition><define key="boole-fun" name="boole" type="fun"><args>fn <standard>&amp;rest</standard> one-or-more-args</args>
+</define>
+
+<description><obj>boole</obj> is the generalization of <obj>logand</obj>, <obj>logior</obj>, and <obj>logxor</obj>.
+<arg>fn</arg> should be a fixnum between 0 and 17 octal inclusive;
+it controls the function which is computed.  If the binary representation
+of <arg>fn</arg> is <arg>abcd</arg> (<arg>a</arg> is the most significant bit, <arg>d</arg> the least)
+then the truth table for the Boolean operation is as follows:
+<sp></sp>
+<lisp>       y
+   | 0  1
+---------
+  0| a  c
+x  |
+  1| b  d
+</lisp>
+If <obj>boole</obj> has more than three arguments, it is associated left
+to right; thus,
+
+<lisp>(boole fn x y z) = (boole fn (boole fn x y) z)
+</lisp>With two arguments, the result of <obj>boole</obj> is simply its second argument.
+At least two arguments are required.
+
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(boole 1 x y) = (logand x y)
+(boole 6 x y) = (logxor x y)
+(boole 2 x y) = (logand (lognot x) y)
+</exdent></lisp>
+<obj>logand</obj>, <obj>logior</obj>, and so on are usually preferred over the equivalent
+forms of <obj>boole</obj>.  <obj>boole</obj> is useful when the operation to be performed
+is not constant.
+</description></definition><definition>
+<define key="boole-ior-var" name="boole-ior" type="const"></define>
+<define key="boole-and-var" name="boole-and" type="const"></define>
+<define key="boole-xor-var" name="boole-xor" type="const"></define>
+<define key="boole-eqv-var" name="boole-eqv" type="const"></define>
+<define key="boole-nand-var" name="boole-nand" type="const"></define>
+<define key="boole-nor-var" name="boole-nor" type="const"></define>
+<define key="boole-orc1-var" name="boole-orc1" type="const"></define>
+<define key="boole-orc2-var" name="boole-orc2" type="const"></define>
+<define key="boole-andc1-var" name="boole-andc1" type="const"></define>
+<define key="boole-andc2-var" name="boole-andc2" type="const"></define>
+
+<description>The <obj>boole</obj> opcodes that correspond to the functions <obj>logior</obj>, <obj>logand</obj>, etc.
+</description></definition><definition>
+<define key="boole-clr-var" name="boole-clr" type="const"></define>
+<define key="boole-set-var" name="boole-set" type="const"></define>
+<define key="boole-1-var" name="boole-1" type="const"></define>
+<define key="boole-2-var" name="boole-2" type="const"></define>
+
+<description>The <obj>boole</obj> opcodes for the four trivial operations.  Respectively, they
+are those which always return zero, always return one, always return the
+first argument, and always return the second argument.
+</description></definition><definition><define key="bit-test-fun" name="bit-test" type="fun"><args>x y</args>
+</define><define key="logtest-fun" name="logtest" type="fun"><args>x y</args>
+</define>
+
+<description><obj>bit-test</obj> is a predicate which returns <obj>t</obj> if any of
+the bits designated by the 1's in <arg>x</arg> are 1's in <arg>y</arg>.
+<obj>bit-test</obj> is implemented as a macro which expands as follows:
+
+<lisp>(bit-test <arg>x</arg> <arg>y</arg>) ==&gt; (not (zerop (logand <arg>x</arg> <arg>y</arg>)))
+</lisp><obj>logtest</obj> is the Common Lisp name for this function.
+</description></definition><definition><define key="lsh-fun" name="lsh" type="fun"><args>x y</args>
+</define>
+
+<description>Returns <arg>x</arg> shifted left <arg>y</arg> bits if <arg>y</arg> is positive or zero,
+or <arg>x</arg> shifted right <obj>|<arg>y</arg>|</obj> bits if <arg>y</arg> is negative.
+Zero bits are shifted in (at either end) to fill unused positions.
+<arg>x</arg> and <arg>y</arg> must be fixnums.  (In some applications you may
+find <obj>ash</obj> useful for shifting bignums; see below.)
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(lsh 4 1) =&gt; #o10
+(lsh #o14 -2) =&gt; 3
+(lsh -1 1) =&gt; -2
+</exdent></lisp></description></definition><definition><define key="ash-fun" name="ash" type="fun"><args>x y</args>
+</define>
+
+<description>Shifts <arg>x</arg> arithmetically left <arg>y</arg> bits if <arg>y</arg> is positive,
+or right <arg>-y</arg> bits if <arg>y</arg> is negative.
+Unused positions are filled by zeroes from the right, and
+by copies of the sign bit from the left.  Thus, unlike <obj>lsh</obj>,
+the sign of the result is always the same as the sign of <arg>x</arg>.
+If <arg>x</arg> is a fixnum or a bignum, this is a shifting operation.
+If <arg>x</arg> is a float, this does scaling (multiplication by a power of two),
+rather than actually shifting any bits.
+</description></definition><definition><define key="rot-fun" name="rot" type="fun"><args>x y</args>
+</define>
+
+<description>Returns <arg>x</arg> rotated left <arg>y</arg> bits if <arg>y</arg> is positive or zero,
+or <arg>x</arg> rotated right <obj>|<arg>y</arg>|</obj> bits if <arg>y</arg> is negative.
+The rotation considers <arg>x</arg> as a 25-bit number (unlike Maclisp,
+which considers <arg>x</arg> to be a 36-bit number in both the pdp-10
+and Multics implementations).
+<arg>x</arg> and <arg>y</arg> must be fixnums.  (There is no function for
+rotating bignums.)
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(rot 1 2) =&gt; 4
+(rot 1 -2) =&gt; #o20000000
+(rot -1 7) =&gt; -1
+(rot #o15 25.) =&gt; #o15
+</exdent></lisp></description></definition><definition><define key="logcount-fun" name="logcount" type="fun"><args>integer</args>
+</define>
+
+<description>Returns the number of 1 bits in <arg>integer</arg>, if it is positive.
+Returns the number of 0 bits in <arg>integer</arg>, if it is negative.
+(There are infinitely many 1 bits in a negative integer.)
+
+<lisp>(logcount #o15)  =&gt;  3
+(logcount #o-15)  =&gt;  2
+</lisp></description></definition><definition><define key="integer-length-fun" name="integer-length" type="fun"><args>integer</args>
+</define>
+
+<description>The minimum number of bits (aside from sign) needed to represent
+<arg>integer</arg> in two's complement.  This is the same as <obj>haulong</obj>
+for positive numbers.
+
+<lisp>(integer-length 0) =&gt; 0
+(integer-length 7) =&gt; 3
+(integer-length 8) =&gt; 4
+(integer-length -7) =&gt; 3
+(integer-length -8) =&gt; 3
+(integer-length -9) =&gt; 4
+</lisp></description></definition><definition><define key="haulong-fun" name="haulong" type="fun"><args>integer</args>
+</define>
+
+<description>The same as <obj>integer-length</obj> of the absolute value of <obj>integer</obj>.
+This name exists for Maclisp compatibility only.
+</description></definition><definition><define key="haipart-fun" name="haipart" type="fun"><args>x n</args>
+</define>
+
+<description>Returns the high <arg>n</arg> bits of the binary representation of <obj>|<arg>x</arg>|</obj>,
+or the low <obj>-<arg>n</arg></obj> bits if <arg>n</arg> is negative.
+<arg>x</arg> may be a fixnum or a bignum; its sign is ignored.
+<obj>haipart</obj> could have been defined by:
+
+<lisp>(defun haipart (x n)
+  (setq x (abs x))
+  (if (minusp n)
+      (logand x (1- (ash 1 (- n))))
+      (ash x (min (- n (haulong x))
+                  0))))
+</lisp></description></definition></section><a name="byte-manipulation-functions"></a>
+
+
+<section chapter-number="8" name="byte-manipulation-functions" number="9" title="Byte Manipulation Functions"><index-entry index="concepts" title="byte"></index-entry>
+
+<p>Several functions are provided for dealing with an arbitrary-width field of
+contiguous bits appearing anywhere in an integer (a fixnum or a bignum).
+Such a contiguous set of bits is called a <arg>byte</arg>.  Note that
+we are not using the term <arg>byte</arg> to mean eight bits, but rather
+any number of bits within a number.
+These functions use numbers called <arg>byte specifiers</arg> to
+
+<index-entry index="concepts" title="byte specifiers"></index-entry>
+designate a specific byte position within any word.  A byte specifier
+contains two pieces of information: the size of the byte, and the
+position of the byte.  The position is expressed as the number of least
+significant bits which are not included in the byte.  A position of zero
+means that the byte is at the right (least significant) end of the
+number.
+</p>
+
+<p>The maximum value of the size is 24, since a byte must fit in a fixnum
+although bytes can be loaded from and deposited into bignums.  (Bytes
+are always positive numbers.)
+</p>
+
+<p>Byte specifiers are represented as fixnums whose two lowest octal digits
+represent the <arg>size</arg> of the byte, and whose higher (usually two, but
+sometimes more) octal digits represent the <arg>position</arg> of the byte
+within a number.  For example, the byte-specifier #o0010 (i.e. 10
+octal) refers to the lowest eight bits of a word, and the byte-specifier
+#o1010 refers to the next eight bits.  The format of byte-specifiers is
+taken from the pdp-10 byte instructions.
+</p>
+
+<p>Much old code contains byte specifiers written explicitly as octal numbers.
+It is cleaner to construct byte specifiers using <obj>byte</obj> instead.
+Decomposition of byte specifiers should always be done with
+<obj>byte-position</obj> and <obj>byte-size</obj>, as at some time in the future
+other kinds of byte specifiers may be created to refer to fields
+whose size is greater than #o77.
+</p>
+<definition><define key="byte-fun" name="byte" type="fun"><args>size position</args>
+</define>
+
+<description>Returns a byte specifier for the byte of <arg>size</arg> bits, positioned to
+exclude the <arg>position</arg> least significant bits.  This byte specifier
+can be passed as the first argument to <obj>ldb</obj>, <obj>dpb</obj>, <obj>%logldb</obj>,
+<obj>%logdpb</obj>, <obj>mask-field</obj>, <obj>%p-ldb</obj>, <obj>%p-ldb-offset</obj>, and so on.
+</description></definition><definition><define key="byte-position-fun" name="byte-position" type="fun"><args>byte-spec</args>
+</define><define key="byte-size-fun" name="byte-size" type="fun"><args>byte-spec</args>
+</define>
+
+<description>Return, respectively, the size and the position of <arg>byte-spec</arg>.
+It is always true that
+
+<lisp>(byte (byte-size <arg>byte-spec</arg>) (byte-position <arg>byte-spec</arg>))
+</lisp>equals <arg>byte-spec</arg>.
+</description></definition><definition><define key="ldb-fun" name="ldb" type="fun"><args>byte-spec integer </args>
+</define>
+
+<description>Extracts a byte from <arg>integer</arg> according to <arg>byte-soec</arg>.  The
+contents of this byte are returned right-justified in a fixnum.  The
+name of the function, <obj>ldb</obj>, means `load byte'.  <arg>integer</arg> may be a
+fixnum or a bignum.  The returned value is always a fixnum.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(ldb (byte 6 3) #o4567) =&gt; #o56
+</exdent></lisp></description></definition><definition><define key="load-byte-fun" name="load-byte" type="fun"><args>integer position size</args>
+</define>
+
+<description>This is like <obj>ldb</obj> except that instead of using a byte specifier,
+the <arg>position</arg> and <arg>size</arg> are passed as separate arguments.
+The argument order is not analogous to that of <obj>ldb</obj> so that
+<obj>load-byte</obj> can be compatible with Maclisp.
+</description></definition><definition><define key="ldb-test-fun" name="ldb-test" type="fun"><args>byte-spec integer</args>
+</define>
+
+<description><obj>ldb-test</obj> is a predicate which returns <obj>t</obj> if any of
+the bits designated by the byte specifier <arg>byte-spec</arg> are 1's in <arg>integer</arg>.
+That is, it returns <obj>t</obj> if the designated field is non-zero.
+<obj>ldb-test</obj> is implemented as a macro which expands as follows:
+
+<lisp>(ldb-test <arg>byte-spec</arg> <arg>integer</arg>) ==&gt; (not (zerop (ldb <arg>byte-spec</arg> <arg>integer</arg>)))
+</lisp></description></definition><definition><define key="logbitp-fun" name="logbitp" type="fun"><args>index integer</args>
+</define>
+
+<description><obj>t</obj> if the bit <arg>index</arg> up from the least significant in <arg>integer</arg> is a 1.
+This is equivalent to <obj>(ldb-test (byte <arg>index</arg> 1) <arg>integer</arg>)</obj>.
+</description></definition><definition><define key="mask-field-fun" name="mask-field" type="fun"><args>byte-spec fixnum</args>
+</define>
+
+<description>This is similar to <obj>ldb</obj>; however, the specified byte of <arg>fixnum</arg> is
+positioned in the same byte of the returned value.  The returned value
+is zero outside of that byte.  <arg>fixnum</arg> must be a fixnum.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(mask-field (byte 6 3) #o4567) =&gt; #o560
+</exdent></lisp></description></definition><definition><define key="dpb-fun" name="dpb" type="fun"><args>byte byte-spec integer</args>
+</define>
+
+<description>Returns a number which is the same as <arg>integer</arg> except in the bits
+specified by <arg>byte-spec</arg>.  The low bits of <arg>byte</arg>, appropriately
+many, are placed in those bits.  <arg>byte</arg> is interpreted as being
+right-justified, as if it were the result of <obj>ldb</obj>.  <arg>integer</arg> may
+be a fixnum or a bignum.  The name means `deposit byte'.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(dpb #o23 (byte 6 3) #o4567) =&gt; #o4237
+</exdent></lisp></description></definition><definition><define key="deposit-byte-fun" name="deposit-byte" type="fun"><args>integer position size byte</args>
+</define>
+
+<description>This is like <obj>dpb</obj> except that instead of using a byte specifier,
+the <arg>position</arg> and <arg>size</arg> are passed as separate arguments.
+The argument order is not analogous to that of <obj>dpb</obj> so that
+<obj>deposit-byte</obj> can be compatible with Maclisp.
+</description></definition><definition><define key="deposit-field-fun" name="deposit-field" type="fun"><args>byte byte-spec fixnum</args>
+</define>
+
+<description>This is like <obj>dpb</obj>, except that <arg>byte</arg> is not taken to
+be left-justified; the <arg>byte-spec</arg> bits of <arg>byte</arg> are used
+for the <arg>byte-spec</arg> bits of the result, with the rest of the
+bits taken from <arg>fixnum</arg>.  <arg>fixnum</arg> must be a fixnum.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(deposit-field #o230 (byte 6 3) #o4567) =&gt; #o4237
+</exdent></lisp></description></definition>
+<p>The behavior of the following two functions depends on the size of
+fixnums, and so functions using them may not work the same way
+on future implementations of Zetalisp.  Their names start
+with <obj>%</obj> because they are more like machine-level subprimitives
+than the previous functions.
+</p>
+<definition><define key="%logldb-fun" name="%logldb" type="fun"><args>byte-spec fixnum</args>
+</define>
+
+<description><obj>%logldb</obj> is like <obj>ldb</obj> except that it only loads out of fixnums and
+allows a byte size of 25, i.e. all 25 bits of the fixnum
+including the sign bit.
+</description></definition><definition><define key="%logdpb-fun" name="%logdpb" type="fun"><args>byte byte-spec fixnum</args>
+</define>
+
+<description><obj>%logdpb</obj> is like <obj>dpb</obj> except that it only deposits into fixnums.
+Using this to change the sign-bit leaves the result as a fixnum,
+while <obj>dpb</obj> would produce a bignum result for arithmetic correctness.
+<obj>%logdpb</obj> is good for manipulating fixnum bit-masks such as are used
+in some internal system tables and data-structures.
+</description></definition></section><a name="Random Numbers"></a>
+
+
+<section chapter-number="8" name="Random Numbers" number="10" title="Random Numbers"><p>The functions in this section provide a pseudo-random number generator
+facility.  The basic function you use is <obj>random</obj>, which returns a new
+pseudo-random number each time it is called.
+</p>
+<definition><define key="random-fun" name="random" type="fun"><args><standard>&amp;optional</standard> number random-state</args>
+</define>
+
+<description>Returns a randomly generated number.  If <arg>number</arg> is specified, the
+random number is of the same type as <arg>number</arg> (floating if <arg>number</arg>
+is floating, etc.), nonnegative, and less than <arg>number</arg>.
+
+If <arg>number</arg> is omitted, the result is a randomly chosen fixnum,
+with all fixnums being equally likely.
+
+If <arg>random-state</arg> is present, it is used and updated in generating
+the random number.  Otherwise, the default random-state (the value of
+<obj>*random-state*</obj>) is used (and is created if it doesn't already
+exist).  The algorithm is executed inside a <obj>without-interrupts</obj>
+(see <ref definition-in-file="proces" key="without-interrupts-fun" title="Macro without-interrupts" type="mac"></ref>) so two processes can use the same
+random-state without colliding.
+</description></definition><definition><define key="si:random-in-range-fun" name="si:random-in-range" type="fun"><args>low high</args>
+</define>
+
+<description>Returns a random float in the interval [<arg>low</arg>, <arg>high</arg>).
+The default random-state is used.
+</description></definition>
+<p>A <arg>random-state</arg> is a named structure of type <obj>random-state</obj> whose
+contents control the future actions of the random number generator.
+Each time you call the function <obj>random</obj>, it uses (and updates) one
+random-state.  One random-state exists standardly and is used by
+default.  To have several different controllable, resettable sources of
+random numbers, you can create your own random-states.  Random-states
+print as
+
+<lisp>#s(random-state ...<arg>more data</arg>...)
+</lisp>so that they can be read back in.
+</p>
+<definition><define key="random-state-p-fun" name="random-state-p" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is a random-state.
+</description></definition><definition>
+<define key="*random-state*-var" name="*random-state*" type="var"></define>
+
+<description>This random-state is used by default when <obj>random</obj> is called
+and the random-state is not explicitly specified.
+</description></definition><definition><define key="make-random-state-fun" name="make-random-state" type="fun"><args><standard>&amp;optional</standard> random-state</args>
+</define>
+
+<description>Creates and returns a new random-state object.
+If <arg>random-state</arg> is <obj>nil</obj>, the new random-state is a copy of <obj>*random-state*</obj>.
+If <arg>random-state</arg> is a random-state, the new one is a copy of that one.
+If <arg>random-state</arg> is <obj>t</obj>, the new random-state is initialized truly randomly
+(based on the value of <obj>(time)</obj>).
+</description></definition>
+<p>A random-state actually consists of an array of numbers and two pointers
+into the array.  The pointers circulate around the array; each time a
+random number is requested, both pointers are advanced by one, wrapping
+around at the end of the array.  Thus, the distance forward from the
+first pointer to the second pointer stays the same, allowing for
+wraparound.  Let the length of the array be <arg>length</arg> and the distance
+between the pointers be <arg>offset</arg>.  To generate a new random number,
+each pointer is set to its old value plus one, modulo <arg>length</arg>.  Then
+the two elements of the array addressed by the pointers are added
+together; the sum is stored back into the array at the location where
+the second pointer points, and is returned as the random number after
+being normalized into the right range.
+</p>
+
+<p>This algorithm produces well-distributed random numbers if <arg>length</arg>
+and <arg>offset</arg> are chosen carefully, so that the polynomial
+<arg>x</arg> <obj>^</obj> <arg>length</arg> + <arg>x</arg> <obj>^</obj> <arg>offset</arg> + 1 is irreducible over the mod-2 integers.  The
+system uses 71. and 35.
+</p>
+
+<p>The contents of the array of numbers should be initialized to anything
+moderately random, to make the algorithm work.  The contents get
+initialized by a simple random number generator, based on a
+number called the <arg>seed</arg>.  The initial value of the seed is set when
+the random-state is created, and it can be changed.
+</p>
+<definition><define key="si:random-create-array-fun" name="si:random-create-array" type="fun"><args>length offset seed <standard>&amp;optional</standard> (area <obj>nil</obj>)</args>
+</define>
+
+<description>Creates and returns a new random-state according to precise
+specifications.  <arg>length</arg> is the length of the array.  <arg>offset</arg> is
+the distance between the pointers and should be an integer less than
+<arg>length</arg>.  <arg>seed</arg> is the initial value of the seed, and should be a
+fixnum.  This calls <obj>si:random-initialize</obj> on the random state before
+returning it.
+</description></definition><definition><define key="si:random-initialize-fun" name="si:random-initialize" type="fun"><args>random-state <standard>&amp;optional</standard> new-seed</args>
+</define>
+
+<description><arg>random-state</arg> must be a random-state, such as is created by
+<obj>si:random-create-array</obj>.  If <arg>new-seed</arg> is provided, it should be a
+fixnum, and the seed is set to it.  <obj>si:random-initialize</obj> reinitializes the
+contents of the array from the seed (calling <obj>random</obj> changes the
+contents of the array and the pointers, but not the seed).
+</description></definition></section><a name="Information on Numeric Precision"></a>
+
+
+<section chapter-number="8" name="Information on Numeric Precision" number="11" title="Information on Numeric Precision"><p>Common Lisp defines some constants whose values give information
+in a standard way about the ranges of numbers representable in the
+individual Lisp implementation.
+</p>
+<definition>
+<define key="most-negative-fixnum-var" name="most-negative-fixnum" type="const"></define>
+
+<description>Any integer smaller than this must be a bignum.
+</description></definition><definition>
+<define key="most-positive-fixnum-var" name="most-positive-fixnum" type="const"></define>
+
+<description>Any integer larger than this must be a bignum.
+</description></definition><definition>
+<define key="most-positive-short-float-var" name="most-positive-short-float" type="const"></define>
+
+<description>No short float can be greater than this number.
+</description></definition><definition>
+<define key="least-positive-short-float-var" name="least-positive-short-float" type="const"></define>
+
+<description>No positive short float can be closer to zero than this number.
+</description></definition><definition>
+<define key="least-negative-short-float-var" name="least-negative-short-float" type="const"></define>
+
+<description>No negative short float can be closer to zero than this number.
+</description></definition><definition>
+<define key="most-negative-short-float-var" name="most-negative-short-float" type="const"></define>
+
+<description>No short float can be less than this (negative) number.
+</description></definition><definition>
+<define key="most-positive-single-float-var" name="most-positive-single-float" type="const"></define>
+<define key="least-positive-single-float-var" name="least-positive-single-float" type="const"></define>
+<define key="least-negative-single-float-var" name="least-negative-single-float" type="const"></define>
+<define key="most-negative-single-float-var" name="most-negative-single-float" type="const"></define>
+
+<description>Similar to the above, but for full-size floats rather than
+for short floats.
+</description></definition><definition>
+<define key="most-positive-double-float-var" name="most-positive-double-float" type="const"></define>
+<define key="least-positive-double-float-var" name="least-positive-double-float" type="const"></define>
+<define key="least-negative-double-float-var" name="least-negative-double-float" type="const"></define>
+<define key="most-negative-double-float-var" name="most-negative-double-float" type="const"></define>
+<define key="most-positive-long-float-var" name="most-positive-long-float" type="const"></define>
+<define key="least-positive-long-float-var" name="least-positive-long-float" type="const"></define>
+<define key="least-negative-long-float-var" name="least-negative-long-float" type="const"></define>
+<define key="most-negative-long-float-var" name="most-negative-long-float" type="const"></define>
+
+<description>These are defined by Common Lisp to be similar to the above,
+but for double-floats and long-floats.  On the Lisp Machine,
+there are no distinct double and long floating formats; they are
+synonyms for single-floats.  So these constants exist but their values
+are the same as those of <obj>most-positive-single-float</obj> and so on.
+</description></definition><definition>
+<define key="short-float-epsilon-var" name="short-float-epsilon" type="const"></define>
+
+<description>Smallest positive short float which can be added to 1.0s0 and make a difference.
+That is, for any short float <arg>x</arg> less than this, <obj>(+ 1.0s0 <arg>x</arg>)</obj>
+equals 1.0s0.
+</description></definition><definition>
+<define key="single-float-epsilon-var" name="single-float-epsilon" type="const"></define>
+<define key="double-float-epsilon-var" name="double-float-epsilon" type="const"></define>
+<define key="long-float-epsilon-var" name="long-float-epsilon" type="const"></define>
+
+<description>Smallest positive float which can be added to 1.0 and make a difference.
+The three names are synonyms on the Lisp Machine,
+for reasons explained above.
+</description></definition><definition>
+<define key="short-float-negative-epsilon-var" name="short-float-negative-epsilon" type="const"></define>
+
+<description>Smallest positive short float which can be subtracted from 1.0s0
+and make a difference.
+</description></definition><definition>
+<define key="single-float-negative-epsilon-var" name="single-float-negative-epsilon" type="const"></define>
+<define key="double-float-negative-epsilon-var" name="double-float-negative-epsilon" type="const"></define>
+<define key="long-float-negative-epsilon-var" name="long-float-negative-epsilon" type="const"></define>
+
+<description>Smallest positive float which can be subtracted from 1.0 and make a difference.
+</description></definition></section><a name="Arithmetic Ignoring Overflow"></a>
+
+
+<section chapter-number="8" name="Arithmetic Ignoring Overflow" number="12" title="Arithmetic Ignoring Overflow"><p>Sometimes it is desirable to have a form of arithmetic which has no
+overflow checking (that would produce bignums),
+and truncates results to the word size of the machine.
+</p>
+<definition><define key="%pointer-plus-fun" name="%pointer-plus" type="fun"><args>pointer-1 pointer-2</args>
+</define>
+
+<description>Returns a fixnum which is <arg>pointer-1</arg> plus <arg>pointer-2</arg>, modulo
+what could be stored in the size of the pointer field (currently 25
+bits).  Arguments other than fixnums are rarely useful, but no type
+checks are made.
+</description></definition><definition><define key="%pointer-difference-fun" name="%pointer-difference" type="fun"><args>pointer-1 pointer-2</args>
+</define>
+
+<description>Returns a fixnum which is <arg>pointer-1</arg> minus <arg>pointer-2</arg>.
+If the arguments are fixnums, rather than true pointers,
+this provides subtraction modulo what can be stored in the
+pointer field.
+</description></definition><definition><define key="%pointer-times-fun" name="%pointer-times" type="fun"><args>pointer-1 pointer-2</args>
+</define>
+
+<description>Returns a fixnum which is <arg>pointer-1</arg> times <arg>pointer-2</arg>.  Arguments
+other than fixnums are rarely useful, but no type checks are made.  The
+two pointer fields are regarded as signed numbers.
+</description></definition></section><a name="24-Bit Arithmetic"></a>
+
+
+<section chapter-number="8" name="24-Bit Arithmetic" number="13" title="24-Bit Arithmetic"><p>Sometimes it is useful to have a form of truncating arithmetic
+with a strictly specified field width which is independent of
+the range of fixnums permissible on a particular machine.
+In Zetalisp, this is provided by the following set of functions.
+Their answers are correct only modulo 2^24.
+</p>
+
+<p>These functions should <arg>not</arg> be used for efficiency; they are
+probably less efficient than the functions which <arg>do</arg> check for
+overflow.  They are intended for algorithms which require this sort of
+arithmetic, such as hash functions and pseudo-random number generation.
+</p>
+<definition><define key="%24-bit-plus-fun" name="%24-bit-plus" type="fun"><args>x y</args>
+</define>
+
+<description>Returns the sum of <arg>x</arg> and <arg>y</arg> modulo 2^24.  Both arguments must
+be fixnums.
+</description></definition><definition><define key="%24-bit-difference-fun" name="%24-bit-difference" type="fun"><args>x y</args>
+</define>
+
+<description>Returns the difference of <arg>x</arg> and <arg>y</arg> modulo 2^24.  Both arguments must
+be fixnums.
+</description></definition><definition><define key="%24-bit-times-fun" name="%24-bit-times" type="fun"><args>x y</args>
+</define>
+
+<description>Returns the product of <arg>x</arg> and <arg>y</arg> modulo 2^24.  Both arguments must
+be fixnums.
+</description></definition></section><a name="array"></a>
+
+
+<section chapter-number="8" name="array" number="14" title="Double-Precision Arithmetic"><p>These peculiar functions are useful in programs that don't want to use
+bignums for one reason or another.  They should usually be avoided,
+as they are difficult to use and understand, and they depend on special
+numbers of bits and on the use of twos-complement notation.
+</p>
+
+<p>A double-precision number has 50 bits, of which one is the sign bit.  It
+is represented as two fixnums.  The less signficant fixnum conveys 25
+signficant bits and is regarded as unsigned (that is, what is normally
+the sign bit is treated as an ordinary data bit); the more significant
+fixnum has the same sign as the double-precision number.  Only
+<obj>%float-double</obj> handles negative double-precision numbers; for the
+other functions, the more signficant fixnum is always positive and
+contains only 24 bits of actual data.
+</p>
+<definition><define key="%multiply-fractions-fun" name="%multiply-fractions" type="fun"><args>num1 num2</args>
+</define>
+
+<description>Returns bits 25 through 48 (the most significant half) of the product of
+<arg>num1</arg> and <arg>num2</arg>, regarded as unsigned integers.  If you call this
+and <obj>%pointer-times</obj> on the same arguments <arg>num1</arg> and <arg>num2</arg>, you
+can combine the results into a double-precision product.  If <arg>num1</arg>
+and <arg>num2</arg> are regarded as two's-complement fractions, -1 <obj>≤
+<arg>num</arg></obj> &lt; 1, <obj>%multiply-fractions</obj> returns 1/2 of their correct
+product as a fraction.
+
+[The name of this function isn't too great.]
+</description></definition><definition><define key="%divide-double-fun" name="%divide-double" type="fun"><args>dividend[25:48] dividend[0:24] divisor</args>
+</define>
+
+<description>Divides the double-precision number given by the first two
+arguments by the third argument, and returns the single-precision
+quotient.  Causes an error if <arg>divisor</arg> is zero or if the quotient won't
+fit in single precision.
+
+There are only 24 bits in each half of the number, as neither sign
+bit is used to convey information.
+</description></definition><definition><define key="%remainder-double-fun" name="%remainder-double" type="fun"><args>dividend[25:48] dividend[0:24] divisor</args>
+</define>
+
+<description>Divides the double-precision number given by the first two
+arguments by the third argument, and returns the
+remainder.  Causes an error if <arg>divisor</arg> is zero.
+</description></definition><definition><define key="%float-double-fun" name="%float-double" type="fun"><args>high25 low25</args>
+</define>
+
+<description><arg>high25</arg> and <arg>low25</arg>, which must be fixnums, are concatenated
+to produce a 50-bit unsigned positive integer.  A full-size float containing the
+same value is constructed and returned.  Note that only the 31 most significant
+bits are retained (after removal of leading zeroes.)  This function is
+mainly for the benefit of <obj>read</obj>.
+</description></definition></section></chapter>
+</document-part>

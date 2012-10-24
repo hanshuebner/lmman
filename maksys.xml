@@ -1,0 +1,755 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="system-chapter"></a>
+<chapter name="system-chapter" number="29" title="Maintaining Large Systems"><index-entry index="concepts" title="system"></index-entry>
+
+<p>When a program gets large, it is often desirable to split it up into
+several files.  One reason for this is to help keep the parts of the
+program organized, to make things easier to find.  It's also useful to
+have the program broken into small pieces that are more convenient to
+edit and compile.  It is particularly important to avoid the need to
+recompile all of a large program every time any piece of it changes; if
+the program is broken up into many files, only the files that have
+changes in them need to be recompiled.
+</p>
+
+<p>The apparent drawback to splitting up a program is that more commands
+are needed to manipulate it.  To load the program, you now have to load
+several files separately, instead of just loading one file.  To compile
+it, you have to figure out which files need compilation, by seeing
+which have been edited since they were last compiled, and then you have
+to compile those files.
+</p>
+
+<p>What's even more complicated is that files can have interdependencies.
+You might have a file called <obj>DEFS</obj> that contains some macro
+definitions (or flavor or structure definitions), and functions in
+other files might use those macros.  This means that in order to
+compile any of those other files, you must first load the file <obj>DEFS</obj>
+into the Lisp environment so that the macros will be defined and can
+be expanded at compile time.  You have to remember this whenever you
+compile any of those files.  Furthermore, if <obj>DEFS</obj> has changed, other
+files of the program may need to be recompiled because the macros
+may have changed and need to be re-expanded.
+</p>
+
+<p>This chapter describes the <arg>system</arg> facility, which takes care of all
+these things for you.  The way it works is that you define a set of
+files to be a <arg>system</arg>, using the <obj>defsystem</obj> special form,
+described below.  This system definition says which files make up the
+system, which ones depend on the presence of others, and so on.  You
+put this system definition into its own little file, and then all you
+have to do is load that file and the Lisp environment will know about
+your system and what files are in it.  You can then use the
+<obj>make-system</obj> function (see <ref definition-in-file="maksys" key="make-system-fun" title="Function make-system" type="fun"></ref>) to load in all the
+files of the system, recompile all the files that need compiling,
+and so on.
+</p>
+
+<p>The system facility is very general and extensible.  This chapter
+explains how to use it and how to extend it.  This chapter also
+explains the <arg>patch</arg> facility, which lets you conveniently update a
+large program with incremental changes.
+</p>
+<a name="Defining a System"></a>
+
+<section chapter-number="29" name="Defining a System" number="1" title="Defining a System"><definition><define key="defsystem-fun" name="defsystem" type="mac"><args>name (keyword args...)...</args>
+</define>
+
+<description>Defines a system named <arg>name</arg>.  The options
+selected by the keywords are explained in detail later.  In general,
+they fall into two categories: properties of the system and
+<arg>transformations</arg>.  A transformation is an operation such as compiling
+or loading that takes one or more files and does something to them.
+The simplest system is a set of files and a transformation to be
+performed on them.
+</description></definition><nopara></nopara>
+<p>Here are a few examples.
+
+<lisp>(defsystem mysys
+  (:compile-load (&quot;OZ:&lt;GEORGE&gt;PROG1.LISP&quot; &quot;OZ:&lt;GEORGE2&gt;PROG2.LISP&quot;)))
+
+(defsystem zmail
+  (:name &quot;ZMail&quot;)
+  (:pathname-default &quot;SYS: ZMAIL;&quot;)
+  (:package zwei)
+  (:module defs &quot;DEFS&quot;)
+  (:module mult &quot;MULT&quot; :package tv)
+  (:module main (&quot;TOP&quot; &quot;COMNDS&quot; &quot;MAIL&quot; &quot;USER&quot; &quot;WINDOW&quot;
+                 &quot;FILTER&quot; mult &quot;COMETH&quot;))
+  (:compile-load defs)
+  (:compile-load main (:fasload defs)))
+
+(defsystem bar
+  (:module reader-macros &quot;BAR:BAR;RDMAC&quot;)
+  (:module other-macros &quot;BAR:BAR;MACROS&quot;)
+  (:module main-program &quot;BAR:BAR;MAIN&quot;)
+  (:compile-load reader-macros)
+  (:compile-load other-macros (:fasload reader-macros))
+  (:compile-load main-program (:fasload reader-macros
+                                        other-macros)))
+</lisp></p>
+
+<p>The first example defines a new <arg>system</arg> called <obj>mysys</obj>, which
+consists of two files, stored on a Tops-20 host names OZ, both of which
+are to be compiled and loaded.  The second example is somewhat more
+complicated.  What all the options mean is described below, but the
+primary difference is that there is a file <obj>DEFS</obj> which must be loaded
+before the rest of the files (<obj>main</obj>) can be compiled.  Also, the files
+are stored on logical host SYS and directory ZMAIL.
+</p>
+
+<p>The last example has two levels of dependency.  <obj>reader-macros</obj> must be
+compiled and loaded before <obj>other-macros</obj> can be compiled.  Both
+<obj>reader-macros</obj> and <obj>other-macros</obj> must then be loaded before
+<obj>main-program</obj> can be compiled.  All the source files are stored on
+host BAR, presumably a logical host defined specifically for this system.
+It is desirable to use a logical host for the files of a system
+if there is a chance that people at more than one site will be using it;
+the logical host allows the identical <obj>defsystem</obj> to be valid at all sites.
+See <ref chapter="25" definition-in-file="pathnm" key="logical-pathnames" section="7" title="Host File Systems Supported" type="section"></ref> for more on logical hosts and logical pathnames.
+</p>
+
+<p>Note that 
+The <obj>defsystem</obj> options other than transformations are:
+
+<table><tbody><tr><td><obj>:name</obj></td><td>Specifies a ``pretty'' version of the name for the system, for use in printing.
+
+</td></tr><tr><td><obj>:short-name</obj></td><td>Specified an abbreviated name used in constructing disk label comments
+and in patch file names for some file systems.
+
+</td></tr><tr><td><obj>:component-systems</obj></td><td>Specifies the names of other systems used to make up this system.
+Performing an operation on a system with component systems is equivalent
+to performing the same operation on all the individual systems.  The format
+is <obj>(:component-systems <arg>names</arg>...)</obj>.
+
+</td></tr><tr><td><obj>:package</obj></td><td>Specifies the package in which transformations are performed.  A package
+specified here overrides one in the <example>-*-</example> line of the file in question.
+
+</td></tr><tr><td><obj>:pathname-default</obj></td><td>Gives a local default within the definition of the system for strings to be
+parsed into pathnames.  Typically this specifies the directory, when all the
+files of a system are on the same directory.
+
+</td></tr><tr><td><obj>:warnings-pathname-default</obj></td><td>Gives a default for the file to use to store compiler warnings in,
+when <obj>make-system</obj> is used with the <obj>:batch</obj> option.
+
+</td></tr><tr><td><obj>:patchable</obj></td><td>Makes the system be a patchable system (see <ref chapter="29" definition-in-file="patch" key="patch-facility" section="8" title="The Patch Facility" type="section"></ref>).  An optional
+argument specifies the directory to put patch files in.  The default is
+the <obj>:pathname-default</obj> of the system.
+
+</td></tr><tr><td><obj>:initial-status</obj></td><td>Specifies what the status of the system should be when <obj>make-system</obj> is used
+to create a new major version.  The default is <obj>:experimental</obj>.  See
+<ref chapter="29" definition-in-file="patch" key="patch-system-status" section="8" title="The Patch Facility" type="section"></ref> for further details.
+
+</td></tr><tr><td><obj>:not-in-disk-label</obj></td><td>Make a patchable system not appear in the disk label comment.  This
+should probably never be specified for a user system.  It is used by
+patchable systems internal to the main Lisp system, to avoid cluttering up
+the label.
+
+</td></tr><tr><td><obj>:default-binary-file-type</obj></td><td>Specifies the file type to use for compiled Lisp files.  The value you
+specify should be a string.  If you do not specify this, the standard file
+type <obj>:qfasl</obj> is used.
+
+</td></tr><tr><td><obj>:module</obj></td>
+<td><index-entry index="concepts" title="module"></index-entry>
+Allows assigning a name to a set of files within the system.  This name
+can then be used instead of repeating the filenames.  The format is
+<obj>(:module <arg>name</arg> <arg>files</arg> <arg>options</arg>...)</obj>.  <arg>files</arg> is usually
+a list of filenames (strings).  In general, it is a
+<arg>module-specification</arg>, which can be any of the following:
+
+<table><tbody><tr><td><standard>a string    </standard></td><td>This is a file name.
+
+</td></tr><tr><td><standard>a symbol</standard></td><td>This is a module name.  It stands for all of the files which are in that module
+of this system.
+
+</td></tr><tr><td><standard>an <arg>external module component</arg></standard></td><td>This is a list of the form <obj>(<arg>system-name</arg> <arg>module-names</arg>...)</obj>,
+to specify modules in another system.  It stands for all of the files which
+are in all of those modules.
+
+</td></tr><tr><td><standard>a list of <arg>module components</arg></standard></td><td>A module component is any of the above, or the following:
+
+</td></tr><tr><td><standard>a list of file names</standard></td><td>This is used in the case where the names of the input and output files
+of a transformation are not related according to the standard naming
+conventions, for example when a QFASL file has a different name or
+resides on a different directory than the source file.  The file names
+in the list are used from left to right, thus the first name is the
+source file.  Each file name after the first in the list is defaulted
+from the previous one in the list.
+
+To avoid syntactic ambiguity, this is allowed as a module component but not
+as a module specification.
+</td></tr></tbody></table>
+The currently defined options for the <obj>:module</obj> clause are
+
+<table><tbody><tr><td><obj>:package</obj></td><td>Overrides any package specified for the whole system for transformations performed
+on just this module.
+</td></tr></tbody></table>
+In the second <obj>defsystem</obj> example above, there are three modules.  Each of the
+first two has only one file, and the third one (<obj>main</obj>) is made
+up both of files and another module.  To take examples of the other
+possibilities,
+
+<lisp>(:module prog ((&quot;SYS: GEORGE; PROG&quot; &quot;SYS: GEORG2; PROG&quot;)))
+(:module foo (defs (zmail defs)))
+</lisp>The <obj>prog</obj> module consists of one file, but it lives in two
+directories, <obj>GEORGE</obj> and <obj>GEORG2</obj>.  If this were a Lisp program,
+that would mean that the file <obj>SYS: GEORGE; PROG LISP</obj> would be compiled
+into <obj>SYS: GEORG2; PROG QFASL</obj>.  The <obj>foo</obj> module consists of two
+other modules the <obj>defs</obj> module in the same system, and the <obj>defs</obj>
+module in the <obj>zmail</obj> system.  It is not generally useful to
+compile files that belong to other systems; thus this <obj>foo</obj> module
+would not normally be the subject of a transformation.
+However, <arg>dependencies</arg> (defined below) use modules and
+need to be able to refer to (depend on) modules of other systems.
+</td></tr></tbody></table></p>
+<definition><define key="si:set-system-source-file-fun" name="si:set-system-source-file" type="fun"><args>system-name filename</args>
+</define>
+
+<description>This function specifies which file contains the <obj>defsystem</obj> for the
+system <arg>system-name</arg>.  <arg>filename</arg> can be a pathname object or a
+string.
+
+Sometimes it is useful to say where the definition of a system can be
+found without taking time to load that file.  If <obj>make-system</obj>, or
+<obj>require</obj> (<ref definition-in-file="maksys" key="require-fun" title="Function require" type="fun"></ref>), is ever used on that system, the file
+whose name has been specified will be loaded automatically.
+</description></definition></section><a name="Transformations"></a>
+
+
+<section chapter-number="29" name="Transformations" number="2" title="Transformations"><index-entry index="concepts" title="transformation"></index-entry>
+
+<p>Transformations are of two types, simple and complex.  A simple
+transformation is a single operation on a file, such as compiling it or
+loading it.  A complex transformation takes the output from one
+transformation and performs another transformation on it, such as
+loading the results of compilation.
+</p>
+
+<p>The general format of a simple transformation is
+<obj>(<arg>name</arg> <arg>input</arg> <arg>dependencies</arg> <arg>condition</arg>)</obj>.
+<arg>input</arg> is usually a module specification or another transformation whose output is used.
+The transformation <arg>name</arg> is to be performed on all the files in the module, or
+all the output files of the other transformation.
+</p>
+
+<p><arg>dependencies</arg> and <arg>condition</arg> are optional.
+</p>
+
+<index-entry index="concepts" title="dependency"></index-entry>
+
+<p><arg>dependencies</arg> is a <arg>transformation specification</arg>, either a list
+<obj>(<arg>transformation-name</arg> <arg>module-names</arg>...)</obj> or a list of such lists.
+A <arg>module-name</arg> is either a symbol that is the name of a module in the current system,
+or a list <obj>(<arg>system-name</arg> <arg>module-names</arg>...)</obj>.  A dependency declares that
+all of the indicated transformations must be performed on the indicated modules
+before the current transformation itself can take place.  Thus in
+the zmail example above,  the <obj>defs</obj> module must have the <obj>:fasload</obj>
+transformation performed on it before the <obj>:compile</obj> transformation
+can be performed on <obj>main</obj>.
+</p>
+
+<p>The dependency has to be a tranformation that is explicitly specified
+as a transformation in the system definition, not just an action
+that might be performed by anything.  That is, if you have
+a dependency <obj>(:fasload foo)</obj>, it means that <obj>(fasload foo)</obj> is
+a tranformation of your system and you depend on that tranformation;
+it does not simply mean that you depend on <obj>foo</obj>'s being loaded.
+Furthermore, it doesn't work if <obj>(:fasload foo)</obj> is an implicit
+piece of another tranformation.  For example, the following works:
+
+<lisp>(defsystem foo
+  (:module foo &quot;FOO&quot;)
+  (:module bar &quot;BAR&quot;)
+  (:compile-load (foo bar)))
+</lisp>but this doesn't work:
+
+<lisp>(defsystem foo
+  (:module foo &quot;FOO&quot;)
+  (:module bar &quot;BAR&quot;)
+  (:module blort &quot;BLORT&quot;)
+  (:compile-load (foo bar))
+  (:compile-load blort (:fasload foo)))
+</lisp><nopara></nopara>because <obj>foo</obj>'s <obj>:fasload</obj> is not mentioned explicitly (i.e. at
+top level) but is only implicit in the <obj>(:compile-load (foo bar))</obj>.  One
+must instead write: 
+
+<lisp>(defsystem foo
+  (:module foo &quot;FOO&quot;)
+  (:module bar &quot;BAR&quot;)
+  (:module blort &quot;BLORT&quot;)
+  (:compile-load foo)
+  (:compile-load bar)
+  (:compile-load blort (:fasload foo)))
+</lisp></p>
+
+<p><arg>condition</arg> is a predicate which specifies when the transformation
+should take place.  Generally it defaults according to the type of the
+transformation.  Conditions are discussed further on
+<ref definition-in-file="maksys" key="transformation-condition-discussion" type="page"></ref>.
+</p>
+
+<p>The defined simple transformations are:
+
+<table><tbody><tr><td><obj>:fasload</obj></td><td>Calls the <obj>fasload</obj> function to load the indicated files, which must
+be QFASL files whose pathnames have canonical type <obj>:qfasl</obj> (see
+<ref chapter="25" definition-in-file="pathnm" key="canonical-types" section="2" title="Pathname Components" type="section"></ref>).  The <arg>condition</arg> defaults to
+<obj>si:file-newer-than-installed-p</obj>, which is <obj>t</obj> if a newer version of
+the file exists on the file computer than was read into the current
+environment.
+
+</td></tr><tr><td><obj>:readfile</obj></td><td>Calls the <obj>readfile</obj> function to read in the indicated files, whose
+names must have canonical type <obj>:lisp</obj>.  Use this for files that are
+not to be compiled.  <arg>condition</arg> defaults to
+<obj>si:file-newer-than-installed-p</obj>.
+
+</td></tr><tr><td><obj>:compile</obj></td><td>Calls the <obj>compile-file</obj> function to compile the indicated files, whose names
+must have canonical type <obj>:lisp</obj>.  <arg>condition</arg> defaults to
+<obj>si:file-newer-than-file-p</obj>, which returns <obj>t</obj> if the source file
+has been written more recently than the binary file.
+</td></tr></tbody></table></p>
+
+<p>A special simple transformation is
+
+<table><tbody><tr><td><obj>:do-components</obj></td><td><obj>(:do-components <arg>dependencies</arg>)</obj> inside a system with component
+systems causes the <arg>dependencies</arg> to be done before anything in
+the component systems.  This is useful when you have a module of macro
+files used by all of the component systems.
+</td></tr></tbody></table></p>
+
+<p>The defined complex transformations are
+
+<table><tbody><tr><td><obj>:compile-load</obj></td><td><obj>(:compile-load <arg>input</arg> <arg>compile-dependencies</arg> <arg>load-dependencies</arg>
+<arg>compile-condition</arg> <arg>load-condition</arg>)</obj> is the same as <obj>(:fasload (:compile
+<arg>input</arg> <arg>compile-dependencies</arg> <arg>compile-condition</arg>) <arg>load-dependencies</arg>
+<arg>load-condition</arg>)</obj>.  This is the most commonly-used transformation.
+Everything after <arg>input</arg> is optional.
+
+</td></tr><tr><td><obj>:compile-load-init</obj></td><td>See <ref definition-in-file="maksys" key="compile-load-init-transformation" type="page"></ref>.
+</td></tr></tbody></table></p>
+
+<p>As was explained above, each filename in an input specification can
+in fact be a list of strings when the source file of a program
+differs from the binary file in more than just the file type.  In fact, every
+filename is treated as if it were an infinite list of filenames with
+the last filename, or in the case of a single string the only filename,
+repeated forever at the end.  Each simple transformation takes some
+number of input filename arguments and some number of output filename
+arguments.  As transformations are performed, these arguments are taken
+from the front of the filename list.  The input arguments are actually
+removed and the output arguments left as input arguments to the next
+higher transformation.  To make this clearer, consider the <obj>prog</obj>
+module above having the <obj>:compile-load</obj> transformation performed on
+it.  This means that <obj>prog</obj> is given as the input to the <obj>:compile</obj>
+transformation and the output from this transformation is given as the
+input to the <obj>:fasload</obj> transformation.  The <obj>:compile</obj>
+transformation takes one input filename argument, the name of a Lisp
+source file, and one output filename argument, the name of the QFASL
+file.  The <obj>:fasload</obj> transformation takes one input filename
+argument, the name of a QFASL file, and no output filename arguments.
+So, for the first and only file in the <obj>prog</obj> module, the filename
+argument list looks like <obj>(&quot;SYS: GEORGE; PROG&quot; &quot;SYS: GEORG2; PROG&quot; &quot;SYS:
+GEORG2; PROG&quot; ...)</obj>.  The <obj>:compile</obj> transformation is given
+arguments of <obj>&quot;SYS: GEORGE; PROG&quot;</obj> and <obj>&quot;SYS: GEORG2; PROG&quot;</obj> and the
+filename argument list which it outputs as the input to the <obj>:fasload</obj>
+transformation is <obj>(&quot;SYS: GEORG2; PROG&quot; &quot;SYS: GEORG2; PROG&quot; ...)</obj>.  The <obj>:fasload</obj>
+transformation then is given its one argument of <obj>&quot;SYS: GEORG2; PROG&quot;</obj>.
+</p>
+
+<p>Note that dependencies are not transitive or inherited.  For example, if
+module <obj>a</obj> depends on macros defined in module <obj>b</obj>, and therefore needs
+<obj>b</obj> to be loaded in order to compile, and <obj>b</obj> has a similar dependency
+on <obj>c</obj>, <obj>c</obj> need not be loaded for compilation of <obj>a</obj>.  Transformations
+with these dependencies would be written
+
+<lisp>(:compile-load a (:fasload b))
+(:compile-load b (:fasload c))
+</lisp>To say that compilation of <obj>a</obj> depends on both <obj>b</obj> and <obj>c</obj>, you
+would instead write
+
+<lisp>(:compile-load a (:fasload b c))
+(:compile-load b (:fasload c))
+</lisp>If in addition <obj>a</obj> depended on <obj>c</obj> (but not <obj>b</obj>) during loading
+(perhaps <obj>a</obj> contains <obj>defvar</obj>s whose initial values depend on functions
+or special variables defined in <obj>c</obj>) you would write the transformations
+
+<lisp>(:compile-load a (:fasload b c) (:fasload c))
+(:compile-load b (:fasload c))
+</lisp></p>
+<page></page></section><a name="Making a System"></a>
+
+<section chapter-number="29" name="Making a System" number="3" title="Making a System"><definition><define key="make-system-fun" name="make-system" type="fun"><args>name <standard>&amp;rest</standard> keywords</args>
+</define>
+
+<description>The <obj>make-system</obj> function does the actual work of compiling and
+loading.  In the example above, if <obj>PROG1</obj> and <obj>PROG2</obj> have both
+been compiled recently, then
+
+<lisp>(make-system 'mysys)
+</lisp>loads them as necessary.  If either one might also need to be compiled, then
+
+<lisp>(make-system 'mysys :compile)
+</lisp>does that first as necessary.
+
+The very first thing <obj>make-system</obj> does is check whether the file
+which contains the <obj>defsystem</obj> for the specified system has changed
+since it was loaded.  If so, it offers to load the latest version, so
+that the remainder of the <obj>make-system</obj> can be done using the latest
+system definition.  (This only happens if the filetype of that file is
+<obj>LISP</obj>.)  After loading this file or not, <obj>make-system</obj> goes on to
+process the files that compose the system.
+
+If the system name is not recognized, <obj>make-system</obj> attempts to load the file
+<obj>SYS: SITE; <arg>system-name</arg> SYSTEM</obj>, in the hope that that contains a system definition
+or a call to <obj>si:set-system-source-file</obj>.
+
+<obj>make-system</obj> lists what transformations it is going to perform on
+what files, then asks the user for confirmation.  If the user types S when
+confirmation is requested, then <obj>make-system</obj> asks about each file
+individually so that the user can decide selectively which
+transformations should be performed; then collective reconfirmation is
+requested.  This is like what happens if the <obj>:selective</obj> keyword
+is specified.  If the user types Y, the transformations are performed.
+Before each transformation a message is printed listing the
+transformation being performed, the file it is being done to, and the
+package.  This behavior can be altered by <arg>keywords</arg>.
+
+If the system being made is patchable, and if loading has not been inhibited,
+then the system's patches are loaded afterward.  Loading of patches
+is silent if the <obj>make-system</obj> is, and requires confirmation if the
+<obj>make-system</obj> does.
+</description></definition>
+<p>These are the keywords recognized by the <obj>make-system</obj> function and
+what they do.
+
+<table><tbody><tr><td><obj>:noconfirm make-system</obj></td><td>Assumes a yes answer for all questions that would otherwise be asked of the user.
+
+</td></tr><tr><td><obj>:selective make-system</obj></td><td>Asks the user whether or not to perform each transformation that appears to
+be needed for each file.
+
+</td></tr><tr><td><obj>:silent make-system</obj></td><td>Avoids printing out each transformation as it is performed.
+
+</td></tr><tr><td><obj>:reload make-system</obj></td><td>Bypasses the specified conditions for performing a transformation.  Thus files are
+compiled even if they haven't changed and loaded even if they aren't newer than the
+installed version.
+
+</td></tr><tr><td><obj>:noload make-system</obj></td><td>Does not load any files except those required by dependencies.  For use in
+conjunction with the <obj>:compile</obj> option.
+
+</td></tr><tr><td><obj>:compile make-system</obj></td><td>Compiles files also if need be.  The default is to load but not compile.
+
+</td></tr><tr><td><obj>:recompile make-system</obj></td><td>This is equivalent to a combination of <obj>:compile</obj> and <obj>:reload</obj>:
+it specifies compilation of all files, even those whose sources have
+not changed since last compiled.
+
+</td></tr><tr><td><obj>:no-increment-patch make-system</obj></td><td>When given along with the <obj>:compile</obj> option, disables the automatic
+incrementing of the major system version that would otherwise take
+place.  See <ref chapter="29" definition-in-file="patch" key="patch-facility" section="8" title="The Patch Facility" type="section"></ref>.
+
+</td></tr><tr><td><obj>:increment-patch make-system</obj></td><td>Increments a patchable system's major version without doing any
+compilations.  See <ref chapter="29" definition-in-file="patch" key="patch-facility" section="8" title="The Patch Facility" type="section"></ref>.
+
+</td></tr><tr><td><obj>:no-reload-system-declaration make-system</obj></td><td>Turns off the check for whether the file containing the <obj>defsystem</obj>
+has been changed.  Then the file is loaded only if it has never been
+loaded before.
+
+</td></tr><tr><td><obj>:batch make-system</obj></td><td>Allows a large compilation to be done unattended.  It acts
+like <obj>:noconfirm</obj> with regard to questions, turns off more-processing and
+fdefine-warnings (see <obj>inhibit-fdefine-warnings</obj>,
+<ref definition-in-file="fd-fun" key="inhibit-fdefine-warnings-var" title="Variable inhibit-fdefine-warnings" type="var"></ref>), and saves the compiler warnings in
+an editor buffer and a file
+(it asks you for the name).
+
+</td></tr><tr><td><obj>:defaulted-batch make-system</obj></td><td>This is like <obj>:batch</obj> except that it uses the default for the pathname
+to store warnings in and does not ask the user to type a pathname.
+
+</td></tr><tr><td><obj>:print-only make-system</obj></td><td>Just prints out what transformations would be performed; does not actually do any
+compiling or loading.
+
+</td></tr><tr><td><obj>:noop make-system</obj></td><td>Is ignored.  This is useful mainly for programs that call <obj>make-system</obj>,
+so that such programs can include forms like
+
+<lisp>(make-system 'mysys (if compile-p :compile :noop))
+</lisp></td></tr></tbody></table></p>
+<page></page></section><a name="Adding New Keywords to make-system"></a>
+
+
+<section chapter-number="29" name="Adding New Keywords to make-system" number="4" title="Adding New Keywords to make-system"><p><obj>make-system</obj> keywords are defined as functions on the
+<obj>si:make-system-keyword</obj> property of the keyword.  The functions are
+called with no arguments.  Some of the relevant variables they can use
+are
+</p>
+<definition>
+<define key="si:*system-being-made*-var" name="si:*system-being-made*" type="var"></define>
+
+<description>The internal data structure that represents the system being made.
+</description></definition><definition>
+<define key="si:*make-system-forms-to-be-evaled-before*-var" name="si:*make-system-forms-to-be-evaled-before*" type="var"></define>
+
+<description>A list of forms that are evaluated before the transformations are performed.
+</description></definition><definition>
+<define key="si:*make-system-forms-to-be-evaled-after*-var" name="si:*make-system-forms-to-be-evaled-after*" type="var"></define>
+
+<description>A list of forms that are evaluated after the transformations have been performed.
+Transformations can push entries here too.
+</description></definition><definition>
+<define key="si:*make-system-forms-to-be-evaled-finally*-var" name="si:*make-system-forms-to-be-evaled-finally*" type="var"></define>
+
+<description>A list of forms that are evaluated by an <obj>unwind-protect</obj> when the
+body of <obj>make-system</obj> is exited, whether it is completed or not.
+Closing the batch warnings file is done here.  Unlike the
+<obj>si:*make-system-forms-to-be-evaled-after*</obj> forms, these forms are
+evaluated outside of the ``compiler warnings context''.
+</description></definition><definition>
+<define key="si:*query-type*-var" name="si:*query-type*" type="var"></define>
+
+<description>Controls how questions are asked.  Its normal value is <obj>:normal</obj>.
+<obj>:noconfirm</obj> means ask no questions and <obj>:selective</obj> means
+asks a question for each individual file transformation.
+</description></definition><definition>
+<define key="si:*silent-p*-var" name="si:*silent-p*" type="var"></define>
+
+<description>If <obj>t</obj>, no messages are printed out.
+</description></definition><definition>
+<define key="si:*batch-mode-p*-var" name="si:*batch-mode-p*" type="var"></define>
+
+<description>If <obj>t</obj>, <obj>:batch</obj> was specified.
+</description></definition><definition>
+<define key="si:*redo-all*-var" name="si:*redo-all*" type="var"></define>
+
+<description>If <obj>t</obj>, all transformations are performed, regardless of the condition functions.
+</description></definition><definition>
+<define key="si:*top-level-transformations*-var" name="si:*top-level-transformations*" type="var"></define>
+
+<description>A list of the types of transformations that should be performed, such as
+<obj>(:fasload :readfile)</obj>.  The contents of this list are controlled by
+the keywords given to <obj>make-system</obj>.  This list then controls which
+transformations are actually performed.
+</description></definition><definition>
+<define key="si:*file-transformation-function*-var" name="si:*file-transformation-function*" type="var"></define>
+
+<description>The actual function that gets called with the list of transformations that need to be
+performed.  The default is <obj>si:do-file-transformations</obj>.
+</description></definition><definition><define key="si:define-make-system-special-variable-fun" name="si:define-make-system-special-variable" type="mac"><args>variable value [defvar-p]</args>
+</define>
+
+<description>Causes <arg>variable</arg> to be bound to <arg>value</arg> during the body of the call to <obj>make-system</obj>.
+This allows you to define new variables similar to those listed above.
+<arg>value</arg> is evaluated on entry to <obj>make-system</obj>.
+If <arg>defvar-p</arg> is specified as (or defaulted to) <obj>t</obj>, <arg>variable</arg>
+is defined with <obj>defvar</obj>.  It is not given an initial value.
+If <arg>defvar-p</arg> is specified as <arg>nil</arg>,
+<arg>variable</arg> belongs to some other program and is not <obj>defvar</obj>'ed here.
+</description></definition>
+<p>The following simple example adds a new keyword to <obj>make-system</obj>
+called <obj>:just-warn</obj>, which means that <obj>fdefine</obj> warnings (see
+<ref definition-in-file="fd-fun" key="fdefine-fun" title="Function fdefine" type="fun"></ref>) regarding  functions being overwritten should be printed
+out, but the user should not be queried.
+
+<lisp>(si:define-make-system-special-variable
+   inhibit-fdefine-warnings inhibit-fdefine-warnings nil)
+
+(defun (:just-warn si:make-system-keyword) ()
+  (setq inhibit-fdefine-warnings :just-warn))
+</lisp>(See the description of the <obj>inhibit-fdefine-warnings</obj> variable, on
+<ref definition-in-file="fd-fun" key="inhibit-fdefine-warnings-var" title="Variable inhibit-fdefine-warnings" type="var"></ref>.)
+</p>
+
+<p><obj>make-system</obj> keywords can do something directly when called, or they
+can have their effect by pushing a form to be evaluated onto
+<obj>si:*make-system-forms-to-be-evaled-after*</obj> or one of the other two similar lists.
+In general, the only
+useful thing to do is to set some special variable defined by
+<obj>si:define-make-system-special-variable</obj>.  In addition to the ones
+mentioned above, user-defined transformations may have their behavior
+controlled by new special variables, which can be set by new keywords.
+If you want to get at the list of transformations to be performed, for
+example, the right way is to set
+<obj>si:*file-transformation-function*</obj> to a new function, which then
+can call <obj>si:do-file-transformations</obj> with a possibly modified
+list.  That is how the <obj>:print-only</obj> keyword works.
+</p>
+</section><a name="Adding New Options for defsystem"></a>
+
+
+<section chapter-number="29" name="Adding New Options for defsystem" number="5" title="Adding New Options for defsystem"><p>Options to <obj>defsystem</obj> are defined as macros on the
+<obj>si:defsystem-macro</obj> property of the option keyword.  Such a macro can
+expand into an existing option or transformation, or it can have side effects
+and return <obj>nil</obj>.  There are several variables they can use; the only one
+of general interest is
+</p>
+<definition>
+<define key="si:*system-being-defined*-var" name="si:*system-being-defined*" type="var"></define>
+
+<description>The internal data structure that represents the system that is currently being constructed.
+</description></definition><definition><define key="si:define-defsystem-special-variable-fun" name="si:define-defsystem-special-variable" type="mac"><args>variable value</args>
+</define>
+
+<description>Causes <arg>value</arg> to be evaluated and <arg>variable</arg> to be bound to the
+result during the expansion of the <obj>defsystem</obj> special form.  This
+allows you to define new variables similar to the one listed above.
+</description></definition><definition>
+<define key="si:define-simple-transformation-fun" name="si:define-simple-transformation" type="mac"></define>
+
+<description>This is the most convenient way to define a new simple transformation.
+The form is
+
+<lisp>(si:define-simple-transformation <arg>name</arg> <arg>function</arg>
+        <arg>default-condition</arg> <arg>input-file-types</arg> <arg>output-file-types</arg>
+        <arg>pretty-names</arg> <arg>compile-like</arg> <arg>load-like</arg>)
+</lisp>For example,
+
+<lisp>(si:define-simple-transformation :compile si:qc-file-1
+        si:file-newer-than-file-p (:lisp) (:qfasl))
+</lisp><arg>input-file-types</arg> and <arg>output-file-types</arg> are how a transformation
+specifies how many input filenames and output filenames it should
+receive as arguments, in this case one of each.  They also, obviously, specify
+the default file type for these pathnames.
+The <obj>si:qc-file-1</obj> function is mostly like <obj>compile-file</obj>, except for its interface to
+packages.  It takes input-file and output-file arguments.
+
+<arg>pretty-names</arg>, <arg>compile-like</arg>, and <arg>load-like</arg> are optional.
+
+<arg>pretty-names</arg> specifies how messages printed for the user should print
+the name of the transformation.  It can be a list of the
+imperative (``Compile''), the present participle (``Compiling''), and
+the past participle (``compiled'').  Note that the past participle is not
+capitalized, because when used it does not come at the beginning of a sentence.
+<arg>pretty-names</arg> can be just a string, which is taken to be the imperative,
+and the system will conjugate the participles itself.  If <arg>pretty-names</arg>
+is omitted or <obj>nil</obj> it defaults to the name of the transformation.
+
+<arg>compile-like</arg> and <arg>load-like</arg> say when the transformation should be performed.
+Compile-like transformations are performed when the <obj>:compile</obj>
+keyword is given to <obj>make-system</obj>.
+Load-like transformations are performed unless the <obj>:noload</obj>
+keyword is given to <obj>make-system</obj>.
+By default <arg>compile-like</arg> is <obj>t</obj> but <arg>load-like</arg> is <obj>nil</obj>.
+</description></definition>
+<p>Complex transformations are defined as normal macro expansions, for example,
+
+<lisp>(defmacro (:compile-load si:defsystem-macro)
+                (input &amp;optional com-dep load-dep
+                                 com-cond load-cond)
+  `(:fasload (:compile ,input ,com-dep ,com-cond)
+             ,load-dep ,load-cond))
+</lisp></p>
+</section><a name="More Esoteric Transformations"></a>
+
+
+<section chapter-number="29" name="More Esoteric Transformations" number="6" title="More Esoteric Transformations"><p>It is sometimes useful to specify a transformation upon which something
+else can depend, but which is performed not by default, but rather only
+when requested because of that dependency.  The transformation
+nevertheless occupies a specific place in the hierarchy.  The <obj>:skip</obj>
+<obj>defsystem</obj> macro allows specifying a transformation of this type.
+For example, suppose there is a special compiler for the read table
+which is not ordinarily loaded into the system.  The compiled version
+should still be kept up to date, and it needs to be loaded if ever the
+read table needs to be recompiled.
+
+<lisp>(defsystem reader
+  (:pathname-default &quot;SYS: IO;&quot;)
+  (:package system-internals)
+  (:module defs &quot;RDDEFS&quot;)
+  (:module reader &quot;READ&quot;)
+  (:module read-table-compiler &quot;RTC&quot;)
+  (:module read-table &quot;RDTBL&quot;)
+  (:compile-load defs)
+  (:compile-load reader (:fasload defs))
+  (:skip :fasload (:compile read-table-compiler))
+  (:rtc-compile-load read-table (:fasload read-table-compiler)))
+</lisp>Assume that there is a complex transformation <obj>:rtc-compile-load</obj>,
+which is like <obj>:compile-load</obj> except that is is built on a
+transformation called something like <obj>:rtc-compile</obj>, which uses the
+read table compiler rather than the Lisp compiler.  In the above
+system, then, if the <obj>:rtc-compile</obj> transformation is to be performed,
+the <obj>:fasload</obj> transformation must be done on <obj>read-table-compiler</obj>
+first, that is the read table compiler must be loaded if the read table
+is to be recompiled.  If you say <obj>(make-system 'reader :compile)</obj>,
+then the <obj>:compile</obj> transformation is done on the
+<obj>read-table-compiler</obj> module despite the <obj>:skip</obj>, compiling the read table compiler if
+need be.  If you say <obj>(make-system 'reader)</obj>, the reader and the
+read table are loaded, but the <obj>:skip</obj> keeps this from happening
+to the read table compiler.
+</p>
+
+<p>So far nothing has been said about what can be given as a <arg>condition</arg>
+for a transformation except for the default functions, which check for
+conditions such as a source file being newer than the binary.  In
+general, any function that takes the same arguments as the
+transformation function (e.g. <obj>compile-file</obj>) and returns <obj>t</obj> if the
+transformation needs to be performed, can be in this place as a symbol,
+including for example a closure.  To take an example, suppose there is a
+file that contains <obj>compile-flavor-methods</obj> for a system and that
+should therefore be recompiled if any of the flavor method definitions
+change.  In this case, the condition function for compiling that file
+should return <obj>t</obj> if either the source of that file itself or any of
+the files that define the flavors have changed.  This is what the
+<obj>:compile-load-init</obj> complex transformation is for.  It is defined
+like this:
+
+<lisp>(defmacro (:compile-load-init si:defsystem-macro)
+                (input add-dep &amp;optional com-dep load-dep
+                 &amp;aux function)
+  (setq function (let-closed ((*additional-dependent-modules*
+                               add-dep))
+                   'compile-load-init-condition))
+  `(:fasload (:compile ,input ,com-dep ,function) ,load-dep))
+
+(defun compile-load-init-condition (source-file qfasl-file)
+  (or (si:file-newer-than-file-p source-file qfasl-file)
+      (local-declare ((special *additional-dependent-modules*))
+        (si:other-files-newer-than-file-p
+                        *additional-dependent-modules*
+                        qfasl-file))))
+</lisp></p>
+
+<p>The condition function generated when this macro is used
+returns <obj>t</obj> either if <obj>si:file-newer-than-file-p</obj> would with those
+arguments, or if any of the other files in <obj>add-dep</obj>, which presumably
+is a <arg>module specification</arg>, are newer than the QFASL file.  Thus
+the file (or module) to which the <obj>:compile-load-init</obj> transformation
+applies will be compiled if it or any of the source files it depends on has
+been changed, and will be loaded under the normal conditions.  In most
+(but not all cases), <obj>com-dep</obj> is a <obj>:fasload</obj> transformation
+of the same files as <obj>add-dep</obj> specifies, so that all the files this
+one depends on will be loaded before compiling it.
+</p>
+</section><a name="Common Lisp Modules"></a>
+
+
+<section chapter-number="29" name="Common Lisp Modules" number="7" title="Common Lisp Modules"><index-entry index="concepts" title="module"></index-entry>
+
+<p>In Common Lisp, a <arg>module</arg> is a name given to a group of files of code.
+Modules are not like systems because nothing records what the ``contents'' of any
+particular module may be.  Instead, one of the files which defines the module
+contains a <obj>provide</obj> form which says, when that file is loaded, ``Module <obj>foo</obj>
+is now present.''  Other files may say, using <obj>require</obj>, ``I want to use module <obj>foo</obj>.''
+</p>
+
+<p>Normally the <obj>require</obj> form also specifies the files to load if
+<obj>foo</obj> has not been <obj>provide</obj>'d already.  This is where the
+information of which files are in a module is stored.  If the
+<obj>require</obj> does not have file names in it, the module name <obj>foo</obj> is
+used in an implementation-dependent manner to find files to load.
+The Lisp Machine does this by using it as a system name in <obj>make-system</obj>.
+</p>
+<definition><define key="provide-fun" name="provide" type="fun"><args>module-name</args>
+</define>
+
+<description>Adds <arg>module-name</arg> to the list <obj>*modules*</obj> of modules already
+loaded.  <arg>module-name</arg> should be a string; case is significant.
+</description></definition><definition><define key="require-fun" name="require" type="fun"><args>module-name <standard>&amp;rest</standard> files</args>
+</define>
+
+<description>If module <arg>module-name</arg> is not already loaded (on <obj>*modules*</obj>), <arg>files</arg> are
+loaded in order to make the module available.
+<arg>module-name</arg> should be a string; case is significant.
+The elements of <arg>files</arg> should be pathnames or namestrings.
+If <arg>files</arg> is <obj>nil</obj>, <obj>(make-system <arg>module-name</arg> :noconfirm)</obj> is done.
+Note, however, that case is not significant in the argument to <obj>make-system</obj>.
+</description></definition><definition>
+<define key="*modules*-var" name="*modules*" type="var"></define>
+
+<description>A list of names (strings) of all modules <obj>provide</obj>'d so far.
+</description></definition></section></chapter>
+</document-part>

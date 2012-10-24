@@ -1,0 +1,1470 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="stream-implementation"></a>
+
+
+<section chapter-number="23" name="stream-implementation" number="3" title="I/O Streams"><index-entry index="concepts" title="stream"></index-entry>
+
+<index-entry index="concepts" title="I/O stream"></index-entry>
+
+<p>An <arg>I/O stream</arg>, or just <arg>stream</arg>, is a source
+and/or sink of characters or bytes.  A set of <arg>operations</arg> is
+available with every stream; operations include things like ``output a
+character'' and ``input a character''.  The way to perform an operation on
+a stream is the same for all streams, although what happens inside the
+stream is very different depending on what kind of a stream it is.  So
+all a program has to know is how to deal with streams using the
+standard, generic operations.  A programmer creating a new kind of stream
+only needs to implement the appropriate standard operations.
+</p>
+
+<p indent="1">        A stream is a message-receiving object.  This means that it is
+something that you can apply to arguments.  The first argument is a
+keyword symbol which is the name of the operation you wish to perform.
+The rest of the arguments depend on what operation you are doing.
+Message-passing and generic operations are explained in the flavor
+chapter (<ref chapter="22" definition-in-file="flavor" key="flavor" section="0" title="Objects, Message Passing, and Flavors" type="section"></ref>).
+</p>
+
+<p indent="1">        Some streams can only do input, some can only do output, and
+some can do both.  Some operations are only supported by some streams.
+Also, there are some operations that the stream may not support by
+itself, but which work anyway, albeit slowly, because the <arg>stream
+default handler</arg> can handle them.  All streams support the operation
+<obj>:which-operations</obj>, which returns a list of the names of all of the
+operations that are supported ``natively'' by the stream.
+(<obj>:which-operations</obj> itself is not in the list.)
+</p>
+
+<p>All input streams support all the standard input operations, and all
+output streams support all the standard output operations.  All
+bidirectional streams support both.
+</p>
+<definition><define key="streamp-fun" name="streamp" type="fun"><args>object</args>
+</define>
+
+<description>According to Common Lisp, this returns <obj>t</obj> if <arg>object</arg> is a stream.  In
+the Lisp machine, a stream is any object which can be called as a
+function with certain calling conventions.  It is theoretically
+impossible to test for this.  However, <obj>streamp</obj> does return <obj>t</obj> for any of
+the usual types of streams, and <obj>nil</obj> for any Common Lisp datum which is
+not a stream.
+</description></definition>
+
+
+<subsection name="NIL" title="Standard Streams"><p indent="1">        There are several variables whose values are streams used by many
+functions in the Lisp system.  These variables and their uses are listed here.
+By convention, variables that are expected to hold a stream capable of input
+have names ending with <obj>-input</obj>, and similarly for output.  Those expected
+to hold a bidirectional stream have names ending with <obj>-io</obj>.  The names
+with asterisks are synonyms introduced for the sake of Common Lisp.
+</p>
+<definition>
+<define key="*standard-input*-var" name="*standard-input*" type="var"></define>
+<define key="standard-input-var" name="standard-input" type="var"></define>
+
+<description>In the normal Lisp top-level loop, input is read from
+<obj>*standard-input*</obj> (that is, whatever stream is the value of
+<obj>*standard-input*</obj>).  Many input functions, including <obj>tyi</obj> and
+<obj>read</obj>, take a stream argument that defaults to <obj>*standard-input*</obj>.
+</description></definition><definition>
+<define key="*standard-output*-var" name="*standard-output*" type="var"></define>
+<define key="standard-output-var" name="standard-output" type="var"></define>
+
+<description>In the normal Lisp top-level loop, output is sent to
+<obj>*standard-output*</obj> (that is, whatever stream is the value of
+<obj>*standard-output*</obj>).  Many output functions, including <obj>tyo</obj> and
+<obj>print</obj>, take a stream argument that defaults to <obj>*standard-output*</obj>.
+</description></definition><definition>
+<define key="*error-output*-var" name="*error-output*" type="var"></define>
+<define key="error-output-var" name="error-output" type="var"></define>
+
+<description>The value of <obj>*error-output*</obj> is a stream on which noninteractive error
+or warning messages should be printed.  Normally this is the same as
+<obj>*standard-output*</obj>, but <obj>*standard-output*</obj> might be bound to a file
+and <obj>*error-output*</obj> left going to the terminal.
+</description></definition><definition>
+<define key="*debug-io*-var" name="*debug-io*" type="var"></define>
+<define key="debug-io-var" name="debug-io" type="var"></define>
+
+<description>The value of <obj>*debug-io*</obj> is used for all input and output by the
+error handler.  Normally this is a synonym for <obj>*terminal-io*</obj>.  The
+value may be <obj>nil</obj>, which is regarded as equivalent to a synonym for
+<obj>*terminal-io*</obj>.  This feature is provided because users often set
+<obj>*debug-io*</obj> by hand, and it is much easier to set it back to <obj>nil</obj>
+afterward than to figure out the proper synonym stream pointing to
+<obj>*terminal-io*</obj>.
+</description></definition><definition>
+<define key="*query-io*-var" name="*query-io*" type="var"></define>
+<define key="query-io-var" name="query-io" type="var"></define>
+
+<description>The value of <obj>*query-io*</obj> is a stream that should be used when
+asking questions of the user.  The question should be output to this
+stream, and the answer read from it.  The reason for this is that when
+the normal input to a program may be coming from a file, questions such
+as ``Do you really want to delete all of the files in your directory??'' should
+be sent directly to the user, and the answer should come from the user,
+not from the data file.  <obj>*query-io*</obj> is used by <obj>fquery</obj> and related
+functions; see <ref definition-in-file="query" key="fquery-fun" title="Function fquery" type="fun"></ref>.
+</description></definition><definition>
+<define key="*terminal-io*-var" name="*terminal-io*" type="var"></define>
+<define key="terminal-io-var" name="terminal-io" type="var"></define>
+
+<description>The value of <obj>*terminal-io*</obj> is the stream that the program should use
+to talk to the user's console.  In an interactive program, it is the
+window from which the program is being run; I/O on this stream reads
+from the keyboard and displays on the screen.  However, in a background
+process that has no window, <obj>*terminal-io*</obj> defaults to a stream that
+does not ever expect to be used.  If it is used, perhaps by an error
+printout, it turns into a background window and requests the user's
+attention.
+</description></definition><definition>
+<define key="*trace-output*-var" name="*trace-output*" type="var"></define>
+<define key="trace-output-var" name="trace-output" type="var"></define>
+
+<description>The value of <obj>*trace-output*</obj> is the stream on which the <obj>trace</obj> function
+prints its output.
+</description></definition>
+<p><obj>*standard-input*</obj>, <obj>*standard-output*</obj>, <obj>*error-output*</obj>, <obj>*debug-io*</obj>,
+<obj>*trace-output*</obj>, and <obj>*query-io*</obj> are initially bound to synonym
+streams that pass all operations on to the stream that is the value of
+<obj>*terminal-io*</obj>.  Thus any operations performed on those streams go
+to the keyboard and screen.
+</p>
+
+<p>Most user programs should not change the value of <obj>*terminal-io*</obj>.  A
+program which wants (for example) to divert output to a file should do
+so by binding the value of <obj>*standard-output*</obj>; that way queries on
+<obj>*query-io*</obj>, debugging on <obj>*debug-io*</obj> and error messages sent to
+<obj>*error-output*</obj> can still get to the user by going through
+<obj>*terminal-io*</obj>, which is usually what is desired.
+</p>
+</subsection>
+
+<subsection name="NIL" title="Standard Input Stream Operations"><definition><define key="streams-tyi-method" name="streams" type="metamethod"><args><standard>&amp;optional</standard> eof</args>
+</define>
+
+<description>The stream inputs one character and returns it.  For example, if the next
+character to be read in by the stream is a `C', then the form
+
+<lisp>(send s :tyi)
+</lisp>returns the value of <obj>#/C</obj> (that is, 103 octal).
+Note that the <obj>:tyi</obj> operation does not
+echo the character in any fashion; it just does the input.  The
+<obj>tyi</obj> function (see <ref definition-in-file="ios" key="tyi-fun" title="Function tyi" type="fun"></ref>) does echoing
+when reading from the terminal.
+
+The optional <arg>eof</arg> argument to the <obj>:tyi</obj>
+operation tells the stream what to do if it gets to the end of the
+file.  If the argument is not provided or is <obj>nil</obj>, the stream
+returns <obj>nil</obj> at the end of file.  Otherwise it signals a <obj>sys:end-of-file</obj> error.
+Note that this is <arg>not</arg> the same as the eof-option argument to
+<obj>read</obj>, <obj>tyi</obj>, and related functions.
+
+The <obj>:tyi</obj> operation on a binary input stream returns a non-negative
+number, not necessarily to be interpreted as a character.
+
+For some streams (such as windows), not all the input data are numbers.
+Some are lists, called <arg>blips</arg>.  The <obj>:tyi</obj> operation returns only
+numbers.  If the next available input is not a number, it is discarded,
+and so on until a number is reached (or end of file is reached).
+</description></definition><definition><define key="streams-any-tyi-method" name="streams" type="metamethod"><args><standard>&amp;optional</standard> eof</args>
+</define>
+
+<description>Like <obj>:tyi</obj> but returns any kind of datum.  Non-numbers are not
+discarded as they would be by <obj>:tyi</obj>.  This distinction only makes
+a difference on streams which can provide input which is not composed
+of numbers; currently, only windows can do that.
+</description></definition><definition><define key="streams-tyipeek-method" name="streams" type="metamethod"><args><standard>&amp;optional</standard> eof</args>
+</define>
+
+<description>Peeks at the next character or byte from the stream without discarding
+it.  The next <obj>:tyi</obj> or <obj>:tyipeek</obj> operation will get the same
+character.
+
+<arg>eof</arg> is the same as in the <obj>:tyi</obj> operation: if <obj>nil</obj>, end of
+file returns <obj>nil</obj>; otherwise, it signals a <obj>sys:end-of-file</obj> error.
+</description></definition><definition><define key="streams-untyi-method" name="streams" type="metamethod"><args>char</args>
+</define>
+
+<description>Unreads the character or byte <arg>char</arg>; that is to say, puts it back into
+the input stream so that the next <obj>:tyi</obj> operation will read it again.
+For example,
+
+<lisp>(send s :untyi 120)
+(send s :tyi) ==&gt; 120
+</lisp>This operation is used by <obj>read</obj>, and any stream that supports <obj>:tyi</obj>
+must support <obj>:untyi</obj> as well.
+
+You are only allowed to <obj>:untyi</obj> one character before doing a
+<obj>:tyi</obj>, and the character you <obj>:untyi</obj> must be the last character
+read from the stream.  That is, <obj>:untyi</obj> can only be used to back up
+one character, not to stuff arbitrary data into the stream.  You also
+can't <obj>:untyi</obj> after you have peeked ahead with <obj>:tyipeek</obj> since
+that does one <obj>:untyi</obj> itself.  Some streams implement <obj>:untyi</obj> by
+saving the character, while others implement it by backing up the
+pointer to a buffer.
+</description></definition><definition><define key="streams-string-in-method" name="streams" type="metamethod"><args>eof-option string <standard>&amp;optional</standard> (start <obj>0</obj>) end</args>
+</define>
+
+<description>Reads characters from the stream and stores them into the array
+<arg>string</arg>.  Many streams can implement this far more efficiently that
+repeated <obj>:tyi</obj>'s.  <arg>start</arg> and <arg>end</arg>, if supplied, delimit the
+portion of <arg>string</arg> to be stored into.  If <arg>eof-option</arg> is
+non-<obj>nil</obj> then a <obj>sys:end-of-file</obj> error is signaled if end of file
+is reached on the stream before the string has been filled.  If
+<arg>eof-option</arg> is <obj>nil</obj>, any number of characters before end of file
+is acceptable, even no characters.
+
+If <arg>string</arg> has an array-leader, the fill pointer is adjusted to <arg>start</arg> plus
+the number of characters stored into <arg>string</arg>.
+
+Two values are returned: the index of the next position in <arg>string</arg> to be filled,
+and a flag that is non-<obj>nil</obj> if end of file was reached before <arg>string</arg> was
+filled.  Most callers do not need to look at either of these values.
+
+<arg>string</arg> may be any kind of array, not necessarily a string; this is useful
+when reading from a binary input stream.
+</description></definition><definition><define key="streams-line-in-method" name="streams" type="metamethod"><args><standard>&amp;optional</standard> leader</args>
+</define>
+
+<description>The stream should input one line from the input source, and return it as a
+string with the carriage return character stripped off.  Contrary to what you
+might assume from its name, this operation is not much like the <obj>readline</obj> function.
+
+Many streams have a string that is used as a buffer for lines.  If this string
+itself were returned, there would be problems caused if the caller of the stream
+attempted to save the string away somewhere, because the contents of the string
+would change when the next line was read in.  In order to solve this problem,
+the string must be copied. On the other hand, some streams don't reuse the
+string, and it would be wasteful to copy it on every <obj>:line-in</obj> operation.
+This problem is solved by using the <arg>leader</arg> argument to <obj>:line-in</obj>.  If
+<arg>leader</arg> is <obj>nil</obj> (the default), the stream does not bother to copy the
+string and the caller should not rely on the contents of that string after the
+next operation on the stream.  If <arg>leader</arg> is <obj>t</obj>, the stream does make a
+copy.  If <arg>leader</arg> is a fixnum then the stream makes a copy with an array
+leader <arg>leader</arg> elements long.  (This is used by the editor, which represents
+lines of buffers as strings with additional information in their array-leaders,
+to eliminate an extra copy operation.)
+
+If the stream reaches end of file while reading in characters, it
+returns the characters it has read in as a string and returns a second value of
+<obj>t</obj>.  The caller of the stream should therefore arrange to receive the second
+value, and check it to see whether the string returned was a whole line or just
+the trailing characters after the last carriage return in the input source.
+
+This operation should be implemented by all input streams whose data are
+characters.
+</description></definition><definition><define key="streams-string-line-in-method" name="streams" type="metamethod"><args>eof-option string <standard>&amp;optional</standard> (start <obj>0</obj>) end</args>
+</define>
+
+<description>Reads characters, storing them in <arg>string</arg>, until <arg>string</arg> is full
+or a <obj>Return</obj> character is read.  If input stops due to a Return, the Return
+itself is not put in the buffer.
+
+Thus, this operation is nearly the same as <obj>:string-in</obj>, except that
+<obj>:string-in</obj> always keeps going until the buffer is full or until end
+of file.
+
+<arg>start</arg> and <arg>end</arg>, if supplied, delimit the
+portion of <arg>string</arg> to be stored into.  If <arg>eof-option</arg> is
+non-<obj>nil</obj> then a <obj>sys:end-of-file</obj> error is signaled if end of file
+is reached on the stream before the string has been filled.  If
+<arg>eof-option</arg> is <obj>nil</obj>, any number of characters before end of file
+is acceptable, even no characters.
+
+If <arg>string</arg> has an array-leader, the fill pointer is adjusted to <arg>start</arg> plus
+the number of characters stored into <arg>string</arg>.
+
+<arg>string</arg> may be any kind of array, not necessarily a string; this is useful
+when reading from a binary input stream.
+
+Three values are returned:
+
+<table><tbody><tr><td><standard>(1)</standard></td><td>The index in <arg>string</arg> at which input stopped.  This is the first
+index not stored in.
+</td></tr><tr><td><standard>(2)</standard></td><td><obj>t</obj> if input stopped due to end of file.
+</td></tr><tr><td><standard>(3)</standard></td><td><obj>t</obj> if the line is incomplete; that is, if a <obj>Return</obj> character
+did not terminate it.
+</td></tr></tbody></table></description></definition><definition>
+<define key="streams-read-until-eof-method" name="streams" type="metamethod"></define>
+
+<description>Discards all data from the stream until it is at end of file,
+or does anything else with the same result.
+</description></definition><definition><define key="streams-close-method" name="streams" type="metamethod"><args><standard>&amp;optional</standard> ignore</args>
+</define>
+
+<description>Releases resources associated with the stream, when it is not going to be
+used any more.  On some kinds of streams, this may do nothing.
+On Chaosnet streams, it closes the Chaosnet connection, and
+on file streams, it closes the input file on the file server.
+
+The argument is accepted for compatibility with <obj>:close</obj> on output streams.
+</description></definition></subsection>
+
+<subsection name="NIL" title="Standard Output Stream Operations"><definition><define key="streams-tyo-method" name="streams" type="metamethod"><args>char</args>
+</define>
+
+<description>The stream outputs the character <arg>char</arg>.  For example, if <obj>s</obj> is bound
+to a stream, then the form
+
+<lisp>(send s :tyo #/B)
+</lisp>outputs a <obj>B</obj> to the stream.  For binary output streams, the argument
+is a non-negative number rather than specifically a character.
+</description></definition><definition>
+<define key="streams-fresh-line-method" name="streams" type="metamethod"></define>
+
+<description>Tells the stream that it should position itself at the beginning of
+a new line.  If the stream is already at the beginning of a fresh line
+it should do nothing; otherwise it should output a carriage return.  If
+the stream cannot tell whether it is at the beginning of a line, it should
+always output a carriage return.
+</description></definition><definition><define key="streams-string-out-method" name="streams" type="metamethod"><args>(string <obj>0</obj>) <standard>&amp;optional</standard> start end</args>
+</define>
+
+<description>Outputs the characters of <arg>string</arg> successively to <arg>stream</arg>.  This
+operation is provided for two reasons; first, it saves the writing of a loop
+which is used very often, and second, many streams can perform this operation
+much more efficiently than the equivalent sequence of <obj>:tyo</obj> operations.
+
+If <arg>start</arg> and <arg>end</arg> are not supplied, the whole string is output.
+Otherwise a substring is output; <arg>start</arg> is the index of the first character
+to be output (defaulting to <obj>0</obj>), and <arg>end</arg> is one greater than the index of
+the last character to be output (defaulting to the length of the string).  Callers
+need not pass these arguments, but all streams that handle <obj>:string-out</obj> must
+check for them and interpret them appropriately.
+</description></definition><definition><define key="streams-line-out-method" name="streams" type="metamethod"><args>string <standard>&amp;optional</standard> (start <obj>0</obj>) end</args>
+</define>
+
+<description>Outputs the characters of <arg>string</arg> successively to <arg>stream</arg>, then
+outputs a <obj>Return</obj> character.  <arg>start</arg> and <arg>end</arg> optionally
+specify a substring, as with <obj>:string-out</obj>.  If the stream doesn't
+support <obj>:line-out</obj> itself, the default handler implements it by means
+of <obj>:tyo</obj>.
+
+This operation should be implemented by all output streams whose data are
+characters.
+</description></definition><definition><define key="streams-close-method" name="streams" type="metamethod"><args><standard>&amp;optional</standard> mode</args>
+</define>
+
+<description>Closes the stream to make the output final if this is necessary.  The
+stream becomes <arg>closed</arg> and no further output operations should be
+performed on it.  However, it is all right to <obj>:close</obj> a closed
+stream.  On many file server hosts, a file being written is not
+accessible to be read until the output stream is closed.
+
+This operation does nothing on streams for which it is not meaningful.
+
+The <arg>mode</arg> argument is normally not supplied.  If it is <obj>:abort</obj>, we are
+abnormally exiting from the use of this stream.  If the stream is outputting to
+a file, and has not been closed already, the stream's newly-created file is
+deleted; it will be as if it was never opened in the first place.  Any previously
+existing file with the same name remains undisturbed.
+</description></definition><definition>
+<define key="streams-eof-method" name="streams" type="metamethod"></define>
+
+<description>Indicates the end of data on an output stream.  This is different from <obj>:close</obj>
+because some devices allow multiple data files to be transmitted without closing.
+<obj>:close</obj> implies <obj>:eof</obj> when the stream is an output stream and the close
+mode is not <obj>:abort</obj>.
+
+This operation does nothing on streams for which it is not meaningful.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Asking Streams What They Can Do"><p>All streams are supposed to support certain operations which enable a
+program using the stream to ask which operations are available.
+</p>
+<definition>
+<define key="streams-which-operations-method" name="streams" type="metamethod"></define>
+
+<description>Returns a list of operations handled natively by the stream.
+Certain operations not in the list may work anyway, but slowly, so it is
+just as well if any programs that work with or without them
+choose not to use them.
+
+<obj>:which-operations</obj> itself need not be in the list.
+</description></definition><definition><define key="streams-operation-handled-p-method" name="streams" type="metamethod"><args>operation</args>
+</define>
+
+<description>Returns <obj>t</obj> if <arg>operation</arg> is handled natively by the stream:
+if <arg>operation</arg> is a member of the <obj>:which-operations</obj> list, or is
+<obj>:which-operations</obj>.
+</description></definition><definition><define key="streams-send-if-handles-method" name="streams" type="metamethod"><args>operation <standard>&amp;rest</standard> arguments</args>
+</define>
+
+<description>Performs the operation <arg>operation</arg>, with the specified <arg>arguments</arg>,
+only if the stream can handle it.  If <arg>operation</arg> is handled, this
+is the same as sending an <arg>operation</arg> message directly, but if <arg>operation</arg>
+is not handled, using <obj>:send-if-handles</obj> avoids any error.
+
+If <arg>operation</arg> is handled, <obj>:send-if-handles</obj> returns whatever values
+the execution of the <arg>operation</arg> returns.  If <arg>operation</arg> is not handled,
+<obj>:send-if-handles</obj> returns <obj>nil</obj>.
+</description></definition><definition>
+<define key="streams-direction-method" name="streams" type="metamethod"></define>
+
+<description>Returns <obj>:input</obj>, <obj>:output</obj>, or <obj>:bidirectional</obj>
+for a bidirectional stream.
+
+There are a few kinds of streams, which cannot do either input or
+output, for which the <obj>:direction</obj> operation returns <obj>nil</obj>.  For
+example, <obj>open</obj> with the <obj>:direction</obj> keyword specified as <obj>nil</obj>
+returns a stream-like object which cannot do input or output but can
+handle certain file inquiry operations such as <obj>:truename</obj> and
+<obj>:creation-date</obj>.
+</description></definition><definition>
+<define key="streams-characters-method" name="streams" type="metamethod"></define>
+
+<description>Returns <obj>t</obj> if the data input or output on the stream
+represent characters, or <obj>nil</obj> if they are just numbers (as for a stream
+reading a non-text file).
+</description></definition><definition>
+<define key="streams-element-type-method" name="streams" type="metamethod"></define>
+
+<description>Returns a type specified describing in principle the data input or output on the stream.
+Refer to the function <obj>stream-element-type</obj>, below, which works
+using this operation.
+</description></definition><need amount="2000"></need>
+<p>These functions for inquiring about streams are defined by Common Lisp.
+</p>
+<definition><define key="input-stream-p-fun" name="input-stream-p" type="fun"><args>stream</args>
+</define>
+
+<description><obj>t</obj> if <arg>stream</arg> handles input operations (at least, if it handles <obj>:tyi</obj>).
+</description></definition><definition><define key="output-stream-p-fun" name="output-stream-p" type="fun"><args>stream</args>
+</define>
+
+<description><obj>t</obj> if <arg>stream</arg> handles output operations (at least, if it handles <obj>:tyo</obj>).
+</description></definition><definition><define key="stream-element-type-fun" name="stream-element-type" type="fun"><args>stream</args>
+</define>
+
+<description>Returns a type specifier which describes, conceptually, the kind of data
+input from or output to <arg>stream</arg>.  The value is always a subtype of
+<obj>integer</obj> (for a binary stream) or a subtype of <obj>character</obj> (for a
+character stream).  If it is a subtype of <obj>integer</obj>, a Common Lisp
+program should use <obj>read-byte</obj> (<ref definition-in-file="ios" key="read-byte-fun" title="Function read-byte" type="fun"></ref>) or <obj>write-byte</obj>
+(<ref definition-in-file="ios" key="write-byte-fun" title="Function write-byte" type="fun"></ref>) for I/O.  If it is a subtype of <obj>character</obj>,
+<obj>read-char</obj> (<ref definition-in-file="ios" key="read-char-fun" title="Function read-char" type="fun"></ref>) or <obj>write-char</obj> (<ref definition-in-file="ios" key="write-char-fun" title="Function write-char" type="fun"></ref>)
+should be used.
+
+The value returned is not intended to be rigidly accurate.  It describes
+the typical or characteristic sort of data transferred by the stream,
+but the stream may on occasion deal with data that do not fit the type;
+also, not all objects of the type may be possible as input or even make
+sense as output.  For example, windows describe their element type
+as <obj>character</obj> even though they may offer blips, which are lists,
+as input on occasion.  In addition, streams which say they provide
+characters really return integers if the <obj>:tyi</obj> operation is used
+rather than the standard Common Lisp function <obj>read-char</obj>.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Operations for Interactive Streams"><p>The operations <obj>:listen</obj>, <obj>:tyi-no-hang</obj>, <obj>:rubout-handler</obj> and
+<obj>:beep</obj> are intended for interactive streams, which communicate with
+the user.  <obj>:listen</obj> and <obj>:tyi-no-hang</obj> are supported in a trivial
+fashion by other streams, for compatibility.
+</p>
+<definition>
+<define key="streams-listen-method" name="streams" type="metamethod"></define>
+
+<description>On an interactive device, the <obj>:listen</obj> operation returns non-<obj>nil</obj> if
+there are any input characters immediately available, or <obj>nil</obj> if there is
+no immediately available input.  On a non-interactive device, the operation
+always returns non-<obj>nil</obj> except at end of file.
+
+The main purpose of <obj>:listen</obj> is to test whether the user has hit
+a key, perhaps trying to stop a program in progress.
+</description></definition><definition><define key="streams-tyi-no-hang-method" name="streams" type="metamethod"><args><standard>&amp;optional</standard> eof</args>
+</define>
+
+<description>Just like <obj>:tyi</obj> except that it returns <obj>nil</obj> rather than waiting if
+it would be necessary to wait in order to get the character.  This lets
+the caller check efficiently for input being available and get the input
+if there is any.
+
+<obj>:tyi-no-hang</obj> is different from <obj>:listen</obj> because it reads a
+character.
+
+Streams for which the question of whether input is available is not
+meaningful treat this operation just like <obj>:tyi</obj>.  So do
+Chaosnet file streams.  Although in fact reading a
+character from a file stream may involve a delay, these delays are
+<arg>supposed</arg> to be insignificant, so we pretend they do not exist.
+</description></definition><definition><define key="streams-any-tyi-no-hang-method" name="streams" type="metamethod"><args><standard>&amp;optional</standard> eof</args>
+</define>
+
+<description>Like <obj>:tyi-no-hang</obj> but does not filter and discard input which is not numbers.
+It is therefore possible to see blips in the input stream.
+The distinction matters only for input from windows.
+</description></definition><definition><define key="streams-rubout-handler-method" name="streams" type="metamethod"><args>options function <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>This is supported by interactive bidirectional streams, such as windows
+on the terminal, and is described in its own section below (see
+<ref chapter="23" definition-in-file="ios" key="rubout-handler" section="5" title="Rubout Handling" type="section"></ref>).
+</description></definition><definition><define key="streams-beep-method" name="streams" type="metamethod"><args><standard>&amp;optional</standard> type</args>
+</define>
+
+<description>This is supported by interactive streams.  It attracts the attention of the
+user by making an audible beep and/or flashing the screen.
+<arg>beep-type</arg> is a keyword selecting among several different beeping noises;
+see <obj>beep</obj> (<ref definition-in-file="ios" key="beep-fun" title="Function beep" type="fun"></ref>) for a list of them.
+</description></definition></subsection>
+
+<subsection name="NIL" title="Cursor Positioning Stream Operations"><definition><define key="streams-read-cursorpos-method" name="streams" type="metamethod"><args><standard>&amp;optional</standard> (units <obj>:pixel</obj>)</args>
+</define>
+
+<description>This operation is supported by all windows and some other streams.
+
+It returns two values, the current <arg>x</arg> and <arg>y</arg> coordinates
+of the cursor.  It takes one optional argument, which is a symbol indicating
+in what units <arg>x</arg> and <arg>y</arg> should be; the symbols <obj>:pixel</obj>
+and <obj>:character</obj> are understood.  <obj>:pixel</obj> means that the coordinates
+are measured in display pixels (bits), while <obj>:character</obj> means that
+the coordinates are measured in characters horizontally and lines vertically.
+
+This operation and <obj>:increment-cursorpos</obj> are used by the <obj>format</obj> <obj>~T</obj>
+request (see <ref definition-in-file="fd-fio" key="format-t-operation" type="page"></ref>), which is why <obj>~T</obj> doesn't work on all
+streams.  Any stream that supports this operation should support
+<obj>:increment-cursorpos</obj> as well.
+
+Some streams return a meaningful value for the horizontal position
+but always return zero for the vertical position.  This is sufficient
+for <obj>~T</obj> to work.
+</description></definition><definition><define key="streams-increment-cursorpos-method" name="streams" type="metamethod"><args>x-increment y-increment <standard>&amp;optional</standard> (units <obj>:pixel</obj>)</args>
+</define>
+
+<description>Moves the stream's cursor left or down according to the specified increments,
+as if by outputting an appropriate number of space or return characters.
+<arg>x</arg> and <arg>y</arg>
+are like the values of <obj>:read-cursorpos</obj> and <arg>units</arg> is the same
+as the <arg>units</arg> argument to <obj>:read-cursorpos</obj>.
+
+Any stream which supports this operation should support
+<obj>:read-cursorpos</obj> as well, but it need not support <obj>:set-cursorpos</obj>.
+
+Moving the cursor with <obj>:increment-cursorpos</obj> differs from moving it
+to the same place with <obj>:set-cursorpos</obj> in that this operation is
+thought of as doing output and <obj>:set-cursorpos</obj> is not.  For example,
+moving a window's cursor down with <obj>:increment-cursorpos</obj> when it is
+near the bottom to begin with will wrap around, possibly doing a
+<obj>**MORE**</obj>.  <obj>:set-cursorpos</obj>, by comparison, cannot move the cursor
+``down'' if it is at the bottom of the window; it can move the cursor
+explicitly to the top of the window, but then no <obj>**MORE**</obj> will
+happen.
+
+Some streams, such as those created by <obj>with-output-to-string</obj>, cannot
+implement arbitrary cursor motion, but do implement this operation.
+</description></definition><definition><define key="streams-set-cursorpos-method" name="streams" type="metamethod"><args>x y <standard>&amp;optional</standard> (units <obj>:pixel</obj>)</args>
+</define>
+
+<description>This operation is supported by the same streams that support
+<obj>:read-cursorpos</obj>.  It sets the position of the cursor.  <arg>x</arg> and <arg>y</arg>
+are like the values of <obj>:read-cursorpos</obj> and <arg>units</arg> is the same
+as the <arg>units</arg> argument to <obj>:read-cursorpos</obj>.
+</description></definition><definition>
+<define key="streams-clear-screen-method" name="streams" type="metamethod"></define>
+
+<description>Erases the screen area on which this stream displays.
+Non-window streams don't support this operation.
+</description></definition>
+<p>There are many other special-purpose stream operations for graphics.  They are
+not documented here, but in the window-system documentation.  No claim that the
+above operations are the most useful subset should be implied.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Operations for Efficient Pretty-Printing"><p><obj>grindef</obj> runs much more efficiently on streams that implement
+the <obj>:untyo-mark</obj> and <obj>:untyo</obj> operations.
+</p>
+<definition>
+<define key="streams-untyo-mark-method" name="streams" type="metamethod"></define>
+
+<description>This is used by the grinder (see <ref definition-in-file="rdprt" key="grindef-fun" title="Macro grindef" type="mac"></ref>) if the output stream supports it.
+It takes no arguments.  The stream
+should return some object that indicates how far output has gotten up to in
+the stream.
+</description></definition><definition><define key="streams-untyo-method" name="streams" type="metamethod"><args>mark</args>
+</define>
+
+<description>This is used by the grinder (see <ref definition-in-file="rdprt" key="grindef-fun" title="Macro grindef" type="mac"></ref>) in conjunction with <obj>:untyo-mark</obj>.
+It takes one argument, which is something returned by the <obj>:untyo-mark</obj>
+operation of the stream.  The stream should back up output to the point
+at which the object was returned.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Random Access File Operations"><p>The following operations are implemented only by streams to random-access devices,
+principally files.
+</p>
+<definition>
+<define key="streams-read-pointer-method" name="streams" type="metamethod"></define>
+
+<description>Returns the current position within the file, in characters (bytes in fixnum
+mode).  For text files on ASCII file servers, this is the number of Lisp
+Machine characters, not ASCII characters.  The numbers are different because of
+character-set translation.
+</description></definition><definition><define key="streams-set-pointer-method" name="streams" type="metamethod"><args>new-pointer</args>
+</define>
+
+<description>Sets the reading position within the file to <arg>new-pointer</arg> (bytes in
+fixnum mode).  For text files on ASCII file servers, this does not do
+anything reasonable unless <arg>new-pointer</arg> is 0, because of
+character-set translation.  Some file systems support this operation
+for input streams only.
+</description></definition><definition>
+<define key="streams-rewind-method" name="streams" type="metamethod"></define>
+
+<description>This operation is obsolete.  It is the same as <obj>:set-pointer</obj> with
+argument zero.
+</description></definition></subsection>
+
+<subsection name="NIL" title="Buffered Stream Operations"><definition>
+<define key="streams-clear-input-method" name="streams" type="metamethod"></define>
+
+<description>Discards any buffered input the stream may have.
+It does nothing on streams for which it is not meaningful.
+</description></definition><definition>
+<define key="streams-clear-output-method" name="streams" type="metamethod"></define>
+
+<description>Discards any buffered output the stream may have.
+It does nothing on streams for which it is not meaningful.
+</description></definition><definition>
+<define key="streams-force-output-method" name="streams" type="metamethod"></define>
+
+<description>This is for output streams to buffered asynchronous devices, such as the
+Chaosnet.  <obj>:force-output</obj> causes any buffered output to be sent to the
+device.  It does not wait for it to complete; use <obj>:finish</obj> for that.  If a
+stream supports <obj>:force-output</obj>, then <obj>:tyo</obj>, <obj>:string-out</obj>, and
+<obj>:line-out</obj> may have no visible effect until a <obj>:force-output</obj> is done.
+
+This operation does nothing on streams for which it is not meaningful.
+</description></definition><definition>
+<define key="streams-finish-method" name="streams" type="metamethod"></define>
+
+<description>This is for output streams to buffered asynchronous devices, such as the
+Chaosnet.  <obj>:finish</obj> does a <obj>:force-output</obj>, then waits until the
+currently pending I/O operation has been completed.
+
+This operation does nothing on streams for which it is not meaningful.
+</description></definition>
+<p>The following operations are implemented only by buffered input streams.
+They allow increased efficiency by making the stream's internal buffer
+available to the user.
+</p>
+<definition><define key="streams-read-input-buffer-method" name="streams" type="metamethod"><args><standard>&amp;optional</standard> eof</args>
+</define>
+
+<description>Returns three values: a buffer array, the index in that array of the next input byte,
+and the index in that array just past the last available input byte.  These values
+are similar to the <arg>string</arg>, <arg>start</arg>, <arg>end</arg> arguments taken by many functions
+and stream operations.  If the end of the file
+has been reached and no input bytes are available,
+this operation returns <obj>nil</obj> or signals an error,
+based on the <arg>eof</arg> argument, just like the <obj>:tyi</obj> operation.
+After reading as many bytes from the array
+as you care to, you must use the <obj>:advance-input-buffer</obj> operation.
+</description></definition><definition><define key="streams-get-input-buffer-method" name="streams" type="metamethod"><args><standard>&amp;optional</standard> eof</args>
+</define>
+
+<description>This is an obsolete operation similar to <obj>:read-input-buffer</obj>.
+The only difference is that the third value is the number of significant
+elements in the buffer-array, rather than a final index.
+If found in programs, it should be replaced with <obj>:read-input-buffer</obj>.
+</description></definition><definition><define key="streams-advance-input-buffer-method" name="streams" type="metamethod"><args><standard>&amp;optional</standard> new-pointer</args>
+</define>
+
+<description>If <arg>new-pointer</arg> is non-<obj>nil</obj>, it is the index in the buffer array of the next
+byte to be read.  If <arg>new-pointer</arg> is <obj>nil</obj>, the entire buffer has been used up.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Obtaining Streams to Use"><p>Windows are one important class of streams.  Each window can be used as
+a stream.  Output is displayed on the window and input comes from the
+keyboard.  A window is created using <obj>make-instance</obj> on a window
+flavor.  Simple programs use windows implicitly through <obj>*terminal-io*</obj>
+and the other standard stream variables.
+</p>
+
+<p>Also important are <arg>file streams</arg>, which are produced by the function
+<obj>open</obj> (see <ref definition-in-file="files" key="open-fun" title="Function open" type="fun"></ref>).  These read or write the contents of a file.
+</p>
+
+<p><arg>Chaosnet streams</arg> are made from Chaosnet connections.  Data output to
+the stream goes out over the network; data coming in over the network is
+available as input from the stream.  File streams that deal with
+Chaosnet file servers are very similar to Chaosnet streams, but Chaosnet
+streams can be used for many purposes other than file access.
+</p>
+
+<p><arg>String streams</arg> read or write the contents of a string.  They are
+made by <obj>with-output-to-string</obj> or <obj>with-input-from-string</obj>
+(see <ref definition-in-file="stream" key="with-input-from-string-fun" title="Macro with-input-from-string" type="mac"></ref>), or by <obj>make-string-input-stream</obj>
+or <obj>make-string-output-stream</obj>, below.
+</p>
+
+<p><arg>Editor buffer streams</arg> read or write the contents of an editor
+buffer.
+</p>
+
+<p>The <arg>null stream</arg> may be passed to a program that asks for a stream
+as an argument.  It returns immediate end of file if used for input
+and throws away any output.  The null stream is the symbol
+<obj>si:null-stream</obj>.  This is to say, you do not call that function to
+get a stream or use the symbol's value as the stream; <arg>the symbol
+itself</arg> is the object that is the stream.
+</p>
+
+<p>The <arg>cold-load stream</arg> is able to do I/O to the keyboard and screen
+without using the window system.  It is what is used by the error
+handler, if you type <obj>Terminal Call</obj>, to handle a background error that the
+window system cannot deal with.  It is called the cold-load stream
+because it is what is used during system bootstrapping, before the
+window system has been loaded.
+</p>
+<definition><define key="si:null-stream-fun" name="si:null-stream" type="fun"><args>operation <standard>&amp;rest</standard> arguments</args>
+</define>
+
+<description>This function is the null stream.  Like any stream, it supports various
+operations.  Output operations are ignored and input operations report
+end of file immediately, with no data.  Usage example:
+
+<lisp>(let ((*standard-output* 'si:null-stream))
+  (function-whose-output-I-dont-want))
+</lisp></description></definition><definition>
+<define key="si:cold-load-stream-var" name="si:cold-load-stream" type="const"></define>
+
+<description>The one and only cold-load stream.  Usage example:
+
+<lisp>(let ((*query-io* si:cold-load-stream))
+  (yes-or-no-p &quot;Clear all window system locks? &quot;))
+</lisp></description></definition><definition><define key="with-open-stream-fun" name="with-open-stream" type="mac"><args>(variable expression) body...</args>
+</define>
+
+<description><arg>body</arg> is executed with <arg>variable</arg> bound to the value of
+<arg>expression</arg>, which ought to be a stream.  On exit, whether normal
+or by throwing, a <obj>:close</obj> message with argument <obj>:abort</obj> is sent
+to the stream.
+
+This is a generalization of <obj>with-open-file</obj>, which is equivalent
+to using <obj>with-open-stream</obj> with a call to <obj>open</obj> as the
+<arg>expression</arg>.
+</description></definition><definition><define key="with-open-stream-case-fun" name="with-open-stream-case" type="mac"><args>(variable expression) clauses...</args>
+</define>
+
+<description>Like <obj>with-open-stream</obj> as far as opening and closing the stream are
+concerned, but instead of a simple body, it has clauses like those of a
+<obj>condition-case</obj> that say what to do if <arg>expression</arg> does or does
+not get an error.  See <obj>with-open-file-case</obj>, <ref definition-in-file="files" key="with-open-file-case-fun" title="Macro with-open-file-case" type="mac"></ref>.
+</description></definition><definition><define key="make-synonym-stream-fun" name="make-synonym-stream" type="fun"><args>symbol-or-locative</args>
+</define><define key="make-syn-stream-fun" name="make-syn-stream" type="fun"><args>symbol-or-locative</args>
+</define>
+
+<description>Creates and returns a <arg>synonym</arg> stream (`syn' for
+short).  Any operations sent to this stream are redirected to the stream
+that is the value of the argument (if it is a symbol) or the contents of
+it (if it is a locative).
+
+A synonym stream is actually an uninterned symbol whose function
+defnition is forwarded to the function cell of the argument or
+to the contents of the argument as appropriate.  If the argument is a
+symbol, the synonym stream's print-name is <arg>symbol</arg><obj>-syn-stream</obj>;
+otherwise the name is just <obj>syn-stream</obj>.  Once a synonym stream is
+made for a symbol, it is recorded, and the same one is handed out
+again if there is another request for it.
+
+The two names for this function are synonyms too.
+</description></definition><definition><define key="make-concatenated-stream-fun" name="make-concatenated-stream" type="fun"><args><standard>&amp;rest</standard> streams</args>
+</define>
+
+<description>Returns an input stream which will read its input from the first of <arg>streams</arg> until
+that reaches its eof, then read input from the second of <arg>streams</arg>, and so on until
+the last of <arg>streams</arg> has reached end of file.
+</description></definition><definition><define key="make-two-way-stream-fun" name="make-two-way-stream" type="fun"><args>input-stream output-stream</args>
+</define>
+
+<description>Returns a bidirectional stream which passes input operations to
+<arg>input-stream</arg> and passes output operations to <arg>output-stream</arg>.
+This works by attempting to recognize all standard input operations;
+anything not recognized is passed to <arg>output-stream</arg>.
+</description></definition><definition><define key="make-echo-stream-fun" name="make-echo-stream" type="fun"><args>input-stream output-stream</args>
+</define>
+
+<description>Like <obj>make-two-way-stream</obj> except that each input character read via
+<arg>input-stream</arg> is output to <arg>output-stream</arg> before it is returned to
+the caller.
+</description></definition><definition><define key="make-broadcast-stream-fun" name="make-broadcast-stream" type="fun"><args><standard>&amp;rest</standard> streams</args>
+</define>
+
+<description>Returns a stream that only works in the output direction.  Any output sent to
+this stream is forwarded to all of the streams given.  The <obj>:which-operations</obj>
+is the intersection of the <obj>:which-operations</obj> of all of the streams.  The value(s)
+returned by a stream operation are the values returned by the last stream in <arg>streams</arg>.
+</description></definition><definition><define key="zwei:interval-stream-fun" name="zwei:interval-stream" type="fun"><args>interval-or-from-bp <standard>&amp;optional</standard> to-bp in-order-p hack-fonts</args>
+</define>
+
+<description>Returns a bidirectional stream that reads or writes all or part of an
+editor buffer.  Note that editor buffer streams can also be obtained
+from <obj>open</obj> by using a pathname whose host is <obj>ED</obj>, <obj>ED-BUFFER</obj> or
+<obj>ED-FILE</obj> (see <ref chapter="25" definition-in-file="pathnm" key="editor-hosts" section="7" title="Host File Systems Supported" type="section"></ref>).
+
+The first three arguments specify the buffer or portion to be read or
+written.  Either the first argument is an <arg>interval</arg> (a buffer is one
+kind of interval), and all the text of that interval is read or written,
+or the first two arguments are two buffer pointers delimiting the range
+to be read or written.  The third argument is used only in the latter
+case; if non-<obj>nil</obj>, it tells the function to assume that the second
+buffer pointer comes later in the buffer than the first and not to take
+the time to verify the assumption.
+
+The stream has only one pointer inside it, used for both input and
+output.  As you do input, the pointer advances through the text.
+When you do output, it is inserted in the buffer at the place where the
+pointer has reached.  The pointer starts at the beginning of the
+specified range.
+
+<arg>hack-fonts</arg> tells what to do about fonts.  Its possible values are
+
+
+<table><tbody><tr><td><obj>t</obj></td><td>The character <obj>ε</obj> is recognized as special when you output to the
+stream; sequences such as <obj>ε2</obj> are interpreted as font-changes.  They
+do not get inserted into the buffer; instead, they change the font in
+which following output will be inserted.  On input, font change
+sequences are included to indicate faithfully what was in the buffer.
+
+</td></tr><tr><td><obj>:tyo</obj></td><td>You are expected to read and write
+16-bit characters containing font numbers.
+
+</td></tr><tr><td><obj>nil</obj></td><td>All output is inserted in font zero and font information is discarded in
+the input you receive.  This is the best mode to use if you are
+reading or otherwise parsing the contents of an editor buffer.
+</td></tr></tbody></table></description></definition><definition><define key="sys:with-help-stream-fun" name="sys:with-help-stream" type="mac"><args>(stream options...) body...</args>
+</define>
+
+<description>Executes the <arg>body</arg> with the variable <arg>stream</arg> bound to a suitable
+stream for printing a large help message.  If <obj>*standard-output*</obj> is a
+window, then <arg>stream</arg> is also a window; a temporary window which fills
+the screen.  Otherwise, <arg>stream</arg> is just the same as
+<obj>*standard-output*</obj>.
+
+The purpose of this is to spare the user the need to read a large help
+printout in a small window, or have his data overwritten by it
+permanently.  This is the mechanism used if you type the <obj>Control-Help</obj>
+key while in the rubout handler.
+
+<arg>options</arg> is a list of alternating keywords and values.
+
+<table><tbody><tr><td><obj>:label</obj></td><td>The value (which is evaluated) is used as the label of the temporary
+window, if one is used.
+
+</td></tr><tr><td><obj>:width</obj></td><td>The value, which is not evaluated, is a symbol.  While <arg>body</arg> is
+executed, this symbol is bound to the width, in characters, available
+for the message.
+
+</td></tr><tr><td><obj>:height</obj></td><td>The value is a symbol, like the value after <obj>:width</obj>, and it is bound
+to the height in lines of the area available for the help message.
+
+</td></tr><tr><td><obj>:superior</obj></td><td>The value, which is evaluated, specifies the original stream to use in
+deciding where to print the help message.  The default is
+<obj>*standard-output*</obj>.
+</td></tr></tbody></table></description></definition></subsection>
+
+
+<subsection name="NIL" title="String I/O Streams"><p>The functions and special forms in this section allow you to create I/O
+streams that input from or output to the contents of a string.
+</p>
+<definition><define key="make-string-input-stream-fun" name="make-string-input-stream" type="fun"><args>string <standard>&amp;optional</standard> (start <obj>0</obj>) end</args>
+</define>
+
+<description>Returns a stream which can be used to read the contents of <arg>string</arg>
+(or the portion of it from index <arg>start</arg> to index <arg>end</arg>) as input.
+End of file occurs on reading past position <arg>end</arg> or the end of
+string.
+</description></definition><definition><define key="make-string-output-stream-fun" name="make-string-output-stream" type="fun"><args><standard>&amp;optional</standard> string</args>
+</define>
+
+<description>Returns an output stream which will accumulate all output in a string.
+If <arg>string</arg> is non-<obj>nil</obj>, output is added to it with <obj>string-nconc</obj>
+(<ref definition-in-file="fd-str" key="string-nconc-fun" title="Function string-nconc" type="fun"></ref>).  Otherwise, a new string is created and used to
+hold the output.
+</description></definition><definition><define key="get-output-stream-string-fun" name="get-output-stream-string" type="fun"><args>string-output-stream</args>
+</define>
+
+<description>Returns the string of output accumulated so far by a stream which was
+made by <obj>make-string-output-stream</obj>.  The accumulated output is
+cleared out, so it will not be obtained again if
+<obj>get-output-stream-string</obj> is called another time on the same stream.
+</description></definition><definition><define key="with-input-from-string-fun" name="with-input-from-string" type="mac"><args>(var string <standard>&amp;key</standard> start end index) body...</args>
+</define>
+
+<description>The form
+
+<lisp>(with-input-from-string (<arg>var</arg> <arg>string</arg>)
+    <arg>body</arg>)
+</lisp>evaluates the forms in <arg>body</arg> with the variable <arg>var</arg> bound to a stream
+which reads characters from the string which is the value of the form
+<arg>string</arg>.  The value of the construct is the value of the last
+form in its body.
+
+If the <arg>start</arg> and <arg>end</arg> arguments are specified, they should be
+forms.  They are evaluated at run time to produce the indices starting and
+ending the portion of <arg>string</arg> to be read.
+
+If the <arg>index</arg> argument is specified, it should be something <obj>setf</obj>
+can store in.  When <arg>body</arg> is finished, the index in the string at
+which reading stopped is stored there.  This is the index of the first
+character not read.  If the entire string was read, it is the length of
+the string.  The value of <arg>index</arg> is not updated until
+<obj>with-input-from-string</obj> is exited, so you can't use its value within
+the body to see how far the reading has gotten.  Example:
+
+<lisp>(with-input-from-string
+     (foo &quot;This is a test.&quot; :start (+ 2 2) :end 8 :index bar)
+  (readline))
+</lisp>returns <obj>&quot; is &quot;</obj> and sets <obj>bar</obj> to eight.
+
+An older calling sequence which used positional rather than keyword
+arguments is still accepted:
+
+<lisp>(with-input-from-string (<arg>var</arg> <arg>string</arg> <arg>index</arg> <arg>end</arg>)
+    <arg>body</arg>)
+</lisp>
+The functions <obj>read-from-string</obj> and <obj>cli:read-from-string</obj>
+are convenient special cases of what <obj>with-input-from-string</obj> can do.
+See <ref definition-in-file="rdprt" key="read-from-string-fun" title="Function read-from-string" type="fun"></ref>.
+</description></definition><definition><define key="with-output-to-string-fun" name="with-output-to-string" type="mac"><args>(var [string [index]]) body...</args>
+</define>
+
+<description>This special form provides a variety of ways to send output to a string
+through an I/O stream.
+
+<lisp>(with-output-to-string (<arg>var</arg>)
+  <arg>body</arg>)
+</lisp>evaluates the forms in <arg>body</arg> with <arg>var</arg> bound to a stream
+which saves the characters output to it in a string.  The value of
+the special form is the string.
+
+
+<lisp>(with-output-to-string (<arg>var</arg> <arg>string</arg>)
+  <arg>body</arg>)
+</lisp>appends its output to the string which is the value of the form <arg>string</arg>.
+(This is like the <obj>string-nconc</obj> function; see <ref definition-in-file="fd-str" key="string-nconc-fun" title="Function string-nconc" type="fun"></ref>.)
+The value returned is the value of the last form in the body, rather than the string.
+Multiple values are not returned.  <arg>string</arg> must have a fill pointer.
+If <arg>string</arg>
+is too small to contain all the output, <obj>adjust-array-size</obj> is used to
+make it bigger.
+
+
+<lisp>(with-output-to-string (<arg>var</arg> <arg>string</arg> <arg>index</arg>)
+  <arg>body</arg>)
+</lisp>is similar to the above except that <arg>index</arg> is a variable or <obj>setf</obj>-able
+reference which contains the index of the next character to be stored into.
+It must be initialized before the <obj>with-output-to-string</obj> and it is updated
+upon normal exit.
+The value of <arg>index</arg> is not updated until <obj>with-output-to-string</obj>
+returns, so you can't use its value within the body to see how far
+the writing has gotten.  The presence of <arg>index</arg> means that <arg>string</arg>
+is not required to have a fill-pointer; if there is one, it is updated on exit.
+</description></definition>
+<p>Another way of doing output to a string is to use the <obj>format</obj> facility
+(see <ref definition-in-file="fd-fio" key="format-fun" title="Function format" type="fun"></ref>).
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Implementing Streams"><p>There are two ways to implement a stream: using <obj>defun</obj> or using flavors.
+</p>
+
+<p>Using flavors is best when you can take advantage of the predefined
+stream mixins, including those which perform buffering, or when you wish
+to define several similar kinds of streams that can inherit methods from
+each other.
+</p>
+
+<p><obj>defun</obj> (or <obj>defselect</obj>, which is a minor variation of the
+technique) may have an advantage if you are dividing operations into
+broad groups and handling them by passing them off to one or more other
+streams.  In this case, the automatic operation decoding provided by
+flavors may get in the way.  A number of streams in the system are
+implemented using <obj>defun</obj> or <obj>defselect</obj> for historical reasons.  It
+isn't yet clear whether there is any reason not to convert most of them
+to use flavors.
+</p>
+
+<p>If you use <obj>defun</obj>, you can use the <arg>stream default handler</arg> to
+implement some of the standard operations for you in a default manner.
+If you use flavors, there are predefined mixins to do this for you.
+</p>
+
+<p>A few streams are individual objects, one of a kind.  For example, there
+is only one null stream, and no need for more, since two null streams
+would behave identically.  But most streams are elements of a general
+class.  For example, there can be many file streams for different files,
+even though all behave the same way.  There can also be multiple streams
+reading from different points in the same file.
+</p>
+
+<p>If you implement a class of streams with <obj>defun</obj>, then the actual
+streams must be closures of the function you define, made with
+<obj>closure</obj>.
+</p>
+
+<p>If you use flavors to implement the streams, having a class of similar
+streams comes naturally: each instance of the flavor is a stream, and
+the instance variables distinguish one stream of the class from another.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Implementing Streams with Flavors"><p>To define a stream using flavors, define a flavor which incorporates the
+appropriate predefined stream flavor, and then redefine those operations
+which are peculiar to your own type of stream.
+</p>
+
+<p>Flavors for defining unbuffered streams:
+</p>
+<definition>
+<define key="si:stream-flavor" name="si:stream" type="flavor"></define>
+
+<description>This flavor provides default definitions for a few standard operations such as
+<obj>:direction</obj> and <obj>:characters</obj>.  Usually you do not have to mention
+this explicitly; instead you use the higher level flavors below, which
+are built on this one.
+</description></definition><definition>
+<define key="si:input-stream-flavor" name="si:input-stream" type="flavor"></define>
+
+<description>This flavor provides default definitions of all the mandatory input
+operations except <obj>:tyi</obj> and <obj>:untyi</obj>, in terms of those two.  You
+can make a simple non-character input stream by defining a flavor
+incorporating this one and giving it methods for <obj>:tyi</obj> and
+<obj>:untyi</obj>.
+</description></definition><definition>
+<define key="si:output-stream-flavor" name="si:output-stream" type="flavor"></define>
+
+<description>This flavor provides default definitions of all the mandatory output
+operations except <obj>:tyo</obj>, in terms of <obj>:tyo</obj>.  All you need to do to
+define a simple unbuffered non-character output stream is to define a
+flavor incorporating this one and give it a method for the
+<obj>:tyo</obj> operation.
+</description></definition><definition>
+<define key="si:bidirectional-stream-flavor" name="si:bidirectional-stream" type="flavor"></define>
+
+<description>This is a combination of <obj>si:input-stream</obj> and <obj>si:output-stream</obj>.
+It defines <obj>:direction</obj> to return <obj>:bidirectional</obj>.  To define a
+simple unbuffered non-character bidirectional stream, build on this
+flavor and define <obj>:tyi</obj>, <obj>:untyi</obj> and <obj>:tyo</obj>.
+</description></definition>
+<p>The unbuffered streams implement operations such as <obj>:string-out</obj> and
+<obj>:string-in</obj> by repeated use of <obj>:tyo</obj> or <obj>:tyi</obj>.
+</p>
+
+<p>For greater efficiency, if the stream's data is available in blocks, it
+is better to define a buffered stream.  You start with the predefined
+buffered stream flavors, which define <obj>:tyi</obj> or <obj>:tyo</obj> themselves
+and manage the buffers for you.  You must provide other operations that
+the system uses to obtain the next input buffer or to write or discard
+an output buffer.
+</p>
+<need amount="1800"></need>
+<p>Flavors for defining buffered streams:
+</p>
+<definition>
+<define key="si:buffered-input-stream-flavor" name="si:buffered-input-stream" type="flavor"></define>
+
+<description>This flavor is the basis for a non-character buffered input stream.
+It defines <obj>:tyi</obj> as well as all the other standard input operations,
+but you must define the two operations <obj>:next-input-buffer</obj> and
+<obj>:discard-input-buffer</obj>, which the buffer management routines use.
+</description></definition><definition>
+<define key="si:buffered-input-stream-next-input-buffer-method" name="si:buffered-input-stream" type="method"></define>
+
+<description>In a buffered input stream, this operation is used as a subroutine of
+the standard input operations, such as <obj>:tyi</obj>, to get the next
+bufferful of input data.  It should return three values: an array
+containing the data, a starting index in the array, and an ending index.
+For example, in a Chaosnet stream, this operation would get the next
+packet of input data and return pointers delimiting the actual data in
+the packet.
+</description></definition><definition><define key="si:buffered-input-stream-discard-input-buffer-method" name="si:buffered-input-stream" type="method"><args>buffer-array</args>
+</define>
+
+<description>In a buffered input stream, this operation is used as a subroutine of
+the standard input operations such as <obj>:tyi</obj>.  It says that the buffer
+management routines have used or thrown away all the input in a buffer,
+and the buffer is no longer needed.
+
+In a Chaosnet stream, this operation would return the packet buffer
+to the pool of free packets.
+</description></definition><definition>
+<define key="si:buffered-output-stream-flavor" name="si:buffered-output-stream" type="flavor"></define>
+
+<description>This flavor is the basis for a non-character buffered output stream.  It
+defines <obj>:tyo</obj> as well as all the other standard output operations, but
+you must define the operations <obj>:new-output-buffer</obj>,
+<obj>:send-output-buffer</obj> and <obj>:discard-output-buffer</obj>, which the buffer
+management routines use.
+</description></definition><definition>
+<define key="si:buffered-output-stream-new-output-buffer-method" name="si:buffered-output-stream" type="method"></define>
+
+<description>In a buffered output stream, this operation is used as a subroutine of
+the
+standard output operations, such as <obj>:tyo</obj>, to get an empty buffer for
+storing more output data.  How the buffer is obtained depends on the
+kind of stream, but in any case this operation should return an array
+(the buffer), a starting index, and an ending index.  The two indices
+delimit the part of the array that is to be used as a buffer.
+
+For example, a Chaosnet stream would get a packet from the free pool
+and return indices delimiting the part of the packet array which can
+hold data bytes.
+</description></definition><definition><define key="si:buffered-output-stream-send-output-buffer-method" name="si:buffered-output-stream" type="method"><args>buffer-array ending-index</args>
+</define>
+
+<description>In a buffered output stream, this operation is used as a subroutine of
+the standard output operations, such as <obj>:tyo</obj>, to send the data in a
+buffer that has been completely or partially filled.
+
+<arg>ending-index</arg> is the first index in the buffer that has not actually
+been stored.  This may not be the same as the ending index that was
+returned by the <obj>:new-output-buffer</obj> operation that was used to
+obtain this buffer; if a <obj>:force-output</obj> is being handled, <arg>ending-index</arg>
+indicates how much of the buffer is currently full.
+
+The method for this operation should process the buffer's data and, if
+necessary, return the buffer to a free pool.
+</description></definition><definition><define key="si:buffered-output-stream-discard-output-buffer-method" name="si:buffered-output-stream" type="method"><args>buffer-array</args>
+</define>
+
+<description>In a buffered output stream, this operation is used as a subroutine
+of the standard output operations, such as <obj>:clear-output</obj>, to free an
+output buffer and say that the data in it should be ignored.
+
+It should simply return <arg>buffer-array</arg> to a free pool, if appropriate.
+</description></definition>
+<p>Some buffered output streams simply have one buffer array which they use
+over and over.  For such streams, <obj>:new-output-buffer</obj> can simply
+return that particular array each time; <obj>:send-output-buffer</obj> and
+<obj>:discard-output-buffer</obj> do not have to do anything about returning
+the buffer to a free pool.  In fact, <obj>:discard-output-buffer</obj> can
+probably do nothing.
+</p>
+<definition>
+<define key="si:buffered-stream-flavor" name="si:buffered-stream" type="flavor"></define>
+
+<description>This is a combination of <obj>si:buffered-input-stream</obj> and
+<obj>si:buffered-output-stream</obj>, used to make a buffered bidirectional
+stream.  The input and output buffering are completely independent of
+each other.  You must define all five of the low level operations:
+<obj>:new-output-buffer</obj>, <obj>:send-output-buffer</obj> and
+<obj>:discard-output-buffer</obj> for output, and <obj>:next-input-buffer</obj> and
+<obj>:discard-input-buffer</obj> for input.
+</description></definition>
+<p>The data in most streams are characters.  Character streams should support
+either <obj>:line-in</obj> or <obj>:line-out</obj> in addition to the other standard
+operations.
+</p>
+<definition>
+<define key="si:unbuffered-line-input-stream-flavor" name="si:unbuffered-line-input-stream" type="flavor"></define>
+
+<description>This flavor is the basis for unbuffered character input streams.
+You need only define <obj>:tyi</obj> and <obj>:untyi</obj>.
+</description></definition><definition>
+<define key="si:line-output-stream-mixin-flavor" name="si:line-output-stream-mixin" type="flavor"></define>
+
+<description>To make an unbuffered character output stream, mix this flavor into the
+one you define, together with <obj>si:output-stream</obj>.  In addition, you
+must define <obj>:tyo</obj>, as for unbuffered non-character streams.
+</description></definition><definition>
+<define key="si:buffered-input-character-stream-flavor" name="si:buffered-input-character-stream" type="flavor"></define>
+
+<description>This is used just like <obj>si:buffered-input-stream</obj>, but it also
+provides the <obj>:line-in</obj> operation and makes <obj>:characters</obj> return
+<obj>t</obj>.
+</description></definition><definition>
+<define key="si:buffered-output-character-stream-flavor" name="si:buffered-output-character-stream" type="flavor"></define>
+
+<description>This is used just like <obj>si:buffered-output-stream</obj>, but it also
+provides the <obj>:line-out</obj> operation and makes <obj>:characters</obj> return
+<obj>t</obj>.
+</description></definition><definition>
+<define key="si:buffered-character-stream-flavor" name="si:buffered-character-stream" type="flavor"></define>
+
+<description>This is used just like <obj>si:buffered-stream</obj>, but it also
+provides the <obj>:line-in</obj> and <obj>:line-out</obj> operations and makes
+<obj>:characters</obj> return <obj>t</obj>.
+</description></definition>
+<p>To make an unbuffered random-access stream, you need only define the
+<obj>:read-pointer</obj> and <obj>:set-pointer</obj> operations as appropriate.
+Since you provide the <obj>:tyi</obj> or <obj>:tyo</obj> handler yourself, the system
+cannot help you.
+</p>
+
+<p>In a buffered random-access stream, the random access operations must
+interact with the buffer management.  The system provides for this.
+</p>
+<definition>
+<define key="si:input-pointer-remembering-mixin-flavor" name="si:input-pointer-remembering-mixin" type="flavor"></define>
+
+<description>Incorporate this into a buffered input stream to
+support random access.  This flavor defines the <obj>:read-pointer</obj> and
+<obj>:set-pointer</obj> operations.  If you wish <obj>:set-pointer</obj> to work, you
+must provide a definition for the <obj>:set-buffer-pointer</obj> operation.
+You need not do so if you wish to support only <obj>:read-pointer</obj>.
+</description></definition><definition><define key="si:input-pointer-remembering-mixin-set-buffer-pointer-method" name="si:input-pointer-remembering-mixin" type="method"><args>new-pointer</args>
+</define>
+
+<description>You must define this operation if you use
+<obj>si:input-pointer-remembering-mixin</obj> and want the <obj>:set-pointer</obj>
+operation to work.
+
+This operation should arrange for the next <obj>:next-input-buffer</obj>
+operation to provide a bufferful of data that includes the specified
+character or byte position somewhere inside it.
+
+The value returned should be the file pointer corresponding to the first
+character or byte of that next bufferful.
+</description></definition><definition>
+<define key="si:output-pointer-remembering-mixin-flavor" name="si:output-pointer-remembering-mixin" type="flavor"></define>
+
+<description>Incorporate this into a buffered output stream to
+support random access.  This mixin defines the <obj>:read-pointer</obj> and
+<obj>:set-pointer</obj> operations.  If you wish <obj>:set-pointer</obj> to work, you
+must provide definitions for the <obj>:set-buffer-pointer</obj> and
+<obj>:get-old-data</obj> operations.  You need not do so if you wish to support
+only <obj>:read-pointer</obj>.
+</description></definition><definition><define key="si:output-pointer-remembering-mixin-set-buffer-pointer-method" name="si:output-pointer-remembering-mixin" type="method"><args>new-pointer</args>
+</define>
+
+<description>This is the same as in <obj>si:input-pointer-remembering-mixin</obj>.
+</description></definition><definition><define key="si:output-pointer-remembering-mixin-get-old-data-method" name="si:output-pointer-remembering-mixin" type="method"><args>buffer-array lower-output-limit</args>
+</define>
+
+<description>The buffer management routines perform this operation when you do a
+<obj>:set-pointer</obj> that is outside the range of pointers that fit in the
+current output buffer.  They first send the old buffer, then do
+<obj>:set-buffer-pointer</obj> as described above to say where in the file the
+next output buffer should come, then do <obj>:new-output-buffer</obj> to get the
+new buffer.  Then the <obj>:get-old-data</obj> operation is performed.
+
+It should fill current buffer (<arg>buffer-array</arg>) with the <arg>old</arg>
+contents of the file at the corresponding addresses, so that when the
+buffer is eventually written, any bytes skipped over by random access
+will retain their old values.
+
+The instance variable <obj>si:stream-output-lower-limit</obj> is the starting
+index in the buffer of the part that is supposed to be used for output.
+<obj>si:stream-output-limit</obj> is the ending index.
+The instance variable <obj>si:output-pointer-base</obj> is the file pointer
+corresponding to the starting index in the buffer. 
+</description></definition><definition>
+<define key="si:file-stream-mixin-flavor" name="si:file-stream-mixin" type="flavor"></define>
+
+<description>Incorporate this mixin together with <obj>si:stream</obj> to make a <arg>file probe stream</arg>,
+which cannot do input or output but records the answers to an enquiry
+about a file.  You should specify the init option <obj>:pathname</obj> when you
+instantiate the flavor.
+
+You must provide definitions for the <obj>:plist</obj> and <obj>:truename</obj>
+operations; in terms of them, this mixin defines the operations
+<obj>:get</obj>, <obj>:creation-date</obj>, and <obj>:info</obj>.
+</description></definition><definition>
+<define key="si:input-file-stream-mixin-flavor" name="si:input-file-stream-mixin" type="flavor"></define>
+
+<description>Incorporate this mixin into input streams that are used to read files.
+You should specify the file's pathname with the <obj>:pathname</obj> init option
+when you instantiate the flavor.
+
+In addition to the services and requirements of
+<obj>si:file-stream-mixin</obj>, this mixin takes care of mentioning the file
+in the who-line.  It also includes
+<obj>si:input-pointer-remembering-mixin</obj> so that the <obj>:read-pointer</obj>
+operation, at least, will be available.
+</description></definition><definition>
+<define key="si:output-file-stream-mixin-flavor" name="si:output-file-stream-mixin" type="flavor"></define>
+
+<description>This is the analogue of <obj>si:input-file-stream-mixin</obj> for output
+streams.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Implementing Streams Without Flavors"><p>You do not need to use flavors to implement a stream.
+Any object that can be used as a function, and decodes its first
+argument appropriately as an operation name, can serve as a stream.
+Although in practice using flavors is as easy as any other way,
+it is educational to see how to define streams ``from scratch''.
+</p>
+
+<p>We could begin to define a simple output stream, which accepts
+characters and conses them onto a list, as follows:
+</p>
+
+<lisp>(defvar the-list nil)
+
+(defun list-output-stream (op &amp;optional arg1 &amp;rest rest)
+  (ecase op
+    (:tyo
+     (setq the-list (cons arg1 the-list)))
+    (:which-operations '(:tyo))))
+</lisp>
+<p>This is an output stream, and so it supports the <obj>:tyo</obj> operation.
+All streams must support <obj>:which-operations</obj>.
+</p>
+
+<p>The lambda-list for a stream defined with a <obj>defun</obj> must always have
+one required parameter (<arg>op</arg>), one optional parameter (<arg>arg1</arg>), and
+a rest parameter (<arg>rest</arg>).
+</p>
+
+<p>This definition is not satisfactory, however.  It handles <obj>:tyo</obj>
+properly, but it does not handle <obj>:string-out</obj>, <obj>:direction</obj>,
+<obj>:send-if-handles</obj>, and other standard operations.
+</p>
+
+<p>The function <obj>stream-default-handler</obj> exists to spare us the trouble
+of defining all those operations from scratch in simple streams like
+this.  By adding one additional clause, we let the default handler take
+care of all other operations, if it can.
+</p>
+
+<lisp>(defun list-output-stream (op &amp;optional arg1 &amp;rest rest)
+    (selectq op
+        (:tyo
+         (setq the-list (cons arg1 the-list)))
+        (:which-operations '(:tyo))
+        (otherwise
+          (stream-default-handler #'list-output-stream
+                                  op arg1 rest))))
+</lisp>
+<p>If the operation is not one that the stream understands (e.g. <obj>:string-out</obj>),
+it calls <obj>stream-default-handler</obj>.  Note how the rest argument is
+passed to it.  This is why the argument list must look the way it does.
+<obj>stream-default-handler</obj> can be thought of as a restricted analogue of
+flavor inheritance.
+</p>
+
+<p>If we want to have only one stream of this sort, the symbol
+<obj>list-output-stream</obj> can be used as the stream.  The data output to it
+will appear in the global value of <obj>the-list</obj>.  One more step is
+required, though:
+
+<lisp>(defprop list-output-stream t si:io-stream-p)
+</lisp>This tells certain functions including <obj>read</obj> to treat the symbol
+<obj>list-output-stream</obj> as a stream rather than as an end of file option.
+</p>
+
+<p>If we wish to be able to create any number of list output
+streams, each accumulating its own list, we must use closures:
+</p>
+
+<lisp>(defvar the-stream nil
+  &quot;Inside a list output stream, holds the stream itself.&quot;)
+(defvar the-list nil
+  &quot;Inside a list output stream,
+holds the list of characters being accumulated.&quot;)
+
+(defun list-output-stream (op &amp;optional arg1 &amp;rest rest)
+    (selectq op
+        (:tyo
+         (push arg1 the-list)))
+        (:withdrawal (prog1 the-list (setq the-list nil)))
+        (:which-operations '(:tyo :withdrawal))
+        (otherwise
+          (stream-default-handler the-stream
+                                  op arg1 rest))))
+
+(defun make-list-output-stream ()
+  (let ((the-stream the-list))
+    (setq the-stream
+          (closure '(the-stream the-list)
+                   'list-output-stream))))
+</lisp>
+<p>We have added a new operation <obj>:withdrawal</obj> that can be used to find
+out what data has been accumulated by a stream.  This is necessary
+because we can no longer simply look at or set the global value of
+<obj>the-list</obj>; that is not the same as the value closed into the stream.
+</p>
+
+<p>In addition, we have a new variable <obj>the-stream</obj> which allows the
+function <obj>list-output-stream</obj> to know which stream it is serving at
+any time.  This variable is passed to <obj>stream-default-handler</obj> so that
+when it simulates <obj>:string-out</obj> by means of <obj>:tyo</obj>, it can do the
+<obj>:tyo</obj>'s to the same stream that the <obj>:string-out</obj> was done to.
+</p>
+
+<p>The same stream could be defined with <obj>defselect</obj> instead of
+<obj>defun</obj>.  It actually makes only a small difference.  The <obj>defun</obj>
+for <obj>list-output-stream</obj> could be replaced with this code:
+</p>
+
+<lisp>(defselect (list-output-stream list-output-d-h)
+  (:tyo (arg1)
+    (push arg1 the-list))
+  (:withdrawal ()
+    (prog1 the-list (setq the-list nil))))
+
+(defun list-output-d-h (op &amp;optional arg1 &amp;rest rest)
+  (stream-default-handler the-stream op arg1 rest))
+</lisp>
+<p><obj>defselect</obj> takes care of decoding the operations, provides a
+definition for <obj>:which-operations</obj>, and allows you to write a separate
+lambda list for each operation.
+</p>
+
+<p>By comparison, the same stream defined using flavors looks like this:
+</p>
+
+<lisp>(defflavor list-output-stream ((the-list nil))
+           (si:line-output-stream-mixin si:output-stream))
+
+(defmethod (list-output-stream :tyo) (character)
+  (push character the-list))
+
+(defmethod (list-outut-stream :withdrawal) ()
+  (prog1 the-list (setq the-list nil)))
+
+(defun make-list-output-stream ()
+  (make-instance 'list-output-stream))
+</lisp><need amount="1800"></need>
+<p>Here is a simple input stream, which generates successive characters of a list.
+</p>
+
+<lisp>(defvar the-list)       ;Put your input list here
+(defvar the-stream)
+(defvar untyied-char nil)
+
+(defun list-input-stream (op &amp;optional arg1 &amp;rest rest)
+  (selectq op
+    (:tyi
+     (cond ((not (null untyied-char))
+            (prog1 untyied-char (setq untyied-char nil)))
+           ((null the-list)
+            (and arg1 (error arg1)))
+           (t (pop the-list))))
+    (:untyi
+     (setq untyied-char arg1))
+    (:which-operations '(:tyi :untyi))
+    (otherwise
+      (stream-default-handler the-stream
+                              op arg1 rest))))
+
+(defun make-list-input-stream (the-list)
+  (let (the-stream untyied-char)
+    (setq the-stream
+          (closure '(the-list the-stream untyied-char)
+                   'list-input-stream))))
+</lisp>
+<p indent="1">        The important things to note are that <obj>:untyi</obj> must be supported,
+and that the stream must check for having reached the end of the information
+and do the right thing with the argument to the <obj>:tyi</obj> operation.
+</p>
+<definition><define key="stream-default-handler-fun" name="stream-default-handler" type="fun"><args>stream op arg1 rest</args>
+</define>
+
+<description>Tries to handle the <arg>op</arg> operation on <arg>stream</arg>, given arguments of
+<arg>arg1</arg> and the elements of <arg>rest</arg>.  The exact action taken for each
+of the defined operations is explained with the documentation on that
+operation, above.
+</description></definition></subsection></section>
+</document-part>

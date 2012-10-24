@@ -1,0 +1,546 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="process"></a>
+
+
+<section chapter-number="29" name="process" number="8" title="The Patch Facility"><index-entry index="concepts" title="patch"></index-entry>
+
+<index-entry index="concepts" title="system maintenance"></index-entry>
+
+<p>The patch facility allows a system maintainer to manage new releases of a
+large system and issue patches to correct bugs.  It is designed to be
+used to maintain both the Lisp Machine system itself and applications
+systems that are large enough to be loaded up and saved on a disk
+partition.
+</p>
+
+<p>When a system of programs is very large, it needs to be maintained.
+Often problems are found and need to be fixed, or other little changes
+need to be made.  However, it takes a long time to load up all of the
+files that make up such a system, and so rather than having every user
+load up all the files every time he wants to use the system, usually the
+files just get loaded once into a Lisp world, which is then saved away
+on a disk partition.  Users then use this disk partition, copies of
+which may appear on many machines.  The problem is that since the users
+don't load up the system every time they want to use it, they don't get
+all the latest changes.
+</p>
+
+<p>The purpose of the patch system is to solve this problem.  A <arg>patch</arg> file
+is a little file that, when you load it, updates
+the old version of the system into the new version of the system.  Most
+often, patch files just contain new function definitions; old functions
+are redefined to do their new thing.  When you want to use a system, you
+first use the Lisp environment saved on the disk, and then you load all
+the latest patches.  Patch files are very small, so loading them doesn't
+take much time.  You can even load the saved environment, load up the
+latest patches, and then save it away, to save future users the trouble
+of even loading the patches.  (Of course, new patches may be made
+later, and then these will have to be loaded if you want to get the
+very latest version.)
+</p>
+
+<p>For every system, there is a series of patches that have been made to
+that system.  To get the latest version of the system, you load each
+patch file in the series, in order.  Sooner or later, the maintainer of a
+system wants to stop building more and more patches, and recompile
+everything, starting afresh.  A complete recompilation is also necessary when
+a system is changed in a far-reaching way, that can't be done with a
+small patch; for example, if you completely reorganize a program, or
+change a lot of names or conventions, you might need to completely
+recompile it to make it work again.  After a complete recompilation has
+been done, the old patch files are no longer suitable to use; loading
+them in might even break things.
+</p>
+
+<p>The way all this is kept track of is by labelling each version of a
+system with a two-part number.  The two parts are called the <arg>major
+version number</arg> and the <arg>minor version number</arg>.  The minor version
+number is increased every time a new patch is made; the patch is
+identified by the major and minor version number together.  The major
+version number is increased when the program is completely recompiled,
+and at that time the minor version number is reset to zero.  A complete
+system version is identified by the major version number, followed by
+a dot, followed by the minor version number.  Thus, patch <obj>93.9</obj>
+is for major version 93 and minor version 9; it is followed by patch
+<obj>93.10</obj>.
+</p>
+
+<p>To clarify this, here is a typical scenario.  A new system is created;
+its initial version number is <obj>1.0</obj>.  Then a patch file is created;
+the version of the program that results from loading the first patch
+file into version <obj>1.0</obj> is called <obj>1.1</obj>.  Then another patch file
+might be created, and loading that patch file into system <obj>1.1</obj>
+creates version <obj>1.2</obj>.  Then the entire system is recompiled, creating
+version <obj>2.0</obj> from scratch.  Now the two patch files are irrelevant,
+because they fix old software; the changes that they reflect are
+integrated into system <obj>2.0</obj>.
+</p>
+
+<p>Note that the second patch file should only be loaded into system
+<obj>1.1</obj> in order to create system <obj>1.2</obj>; you shouldn't load it into
+<obj>1.0</obj> or any other system besides <obj>1.1</obj>.  It is important that all
+the patch files be loaded in the proper order, for two reasons.  First,
+it is very useful that any system numbered <obj>1.1</obj> be exactly the same
+software as any other system numbered <obj>1.1</obj>, so that if somebody
+reports a bug in version <obj>1.1</obj>, it is clear just which software is
+being complained about.  Secondly, one patch might patch another patch;
+loading them in some other order might have the wrong effect.
+</p>
+
+<p>The patch facility keeps track of all the patch
+files that exist, remembering which version each one creates.  There
+is a separate numbered sequence of patch files for each major version
+of each system.  All of them are stored in the file system, and the
+patch facility keeps track of where they all are.  In addition to the
+patch files themselves, there are <arg>patch directory</arg> files that contain
+the patch facility's data base by which it keeps track of what minor
+versions exist for a major version, and what the last major version
+of a system is.  These files and how to make them are described below.
+</p>
+
+<p>In order to use the patch facility, you must define your system with
+<obj>defsystem</obj> (see <ref chapter="29" definition-in-file="maksys" key="system-system" section="0" title="Maintaining Large Systems" type="section"></ref>) and declare it as patchable with the
+<obj>:patchable</obj> option.  When you load your system (with <obj>make-system</obj>,
+see <ref definition-in-file="maksys" key="make-system-fun" title="Function make-system" type="fun"></ref>), it is added to the list of all systems present in
+the world.  The patch facility keeps track of which version of each
+patchable system is present and where the data about that system reside in
+the file system.  This information can be used to update the Lisp world
+automatically to the latest versions of all the systems it contains.  Once
+a system is present, you can ask for the latest patches to be loaded, ask
+which patches are already loaded, and add new patches.
+</p>
+
+<p>You can also load in patches or whole new systems and then save the
+entire Lisp environment away in a disk partition.  This is explained on
+<ref chapter="36" definition-in-file="fd-hac" key="disk-partition" section="11" title="Booting and Disk Partitions" type="section"></ref>.
+</p>
+
+<p>When a Lisp Machine is booted, it prints out a line of information
+for each patchable system present in the booted Lisp world, saying
+which major and minor versions are loaded.  This is done by
+<obj>print-herald</obj> (see <ref definition-in-file="patch" key="print-herald-fun" title="Function print-herald" type="fun"></ref>).
+</p>
+<definition><define key="print-system-modifications-fun" name="print-system-modifications" type="fun"><args><standard>&amp;rest</standard> system-names</args>
+</define>
+
+<description>With no arguments, this lists all the systems present in this world and, for
+each system, all the patches that have been loaded into this world.  For each patch
+it shows the major version number (which is always the same since
+a world can only contain one major version), the minor version number,
+and an explanation of what the patch does, as typed in by the person who
+made the patch.
+
+If <obj>print-system-modifications</obj> is called with arguments, only the
+modifications to the systems named are listed.
+</description></definition><definition><define key="print-herald-fun" name="print-herald" type="fun"><args><standard>&amp;optional</standard> format-dest</args>
+</define>
+
+<description>Prints the names and loaded version numbers of all patchable systems
+loaded, and the microcode.  Also printed are the number of the band you
+booted, the amount of physical and virtual memory you have, the host
+name of the machine, and its associated machine name.  Example:
+
+<lisp>MIT System, band 7 of CADR-1.
+640K physical memory, 16127K virtual memory.
+ System        98.43
+ CADR          3.6
+ ZMail         53.10
+ MIT-Specific  22.0
+ Microcode     309
+MIT Lisp Machine One, with associated machine OZ.
+</lisp><arg>format-dest</arg> defaults to <obj>t</obj>; if it is <obj>nil</obj> the answer is
+returned as a string rather than printed out.  <arg>format-dest</arg> can also
+be a stream to print on.
+</description></definition><definition><define key="si:get-system-version-fun" name="si:get-system-version" type="fun"><args><standard>&amp;optional</standard> system</args>
+</define>
+
+<description>Returns two values, the major and minor version numbers of the version
+of <arg>system</arg> currently loaded into the machine, or <obj>nil</obj> if that
+system is not present.  <arg>system</arg> defaults to <obj>&quot;System&quot;</obj>.
+</description></definition><definition><define key="si:system-version-info-fun" name="si:system-version-info" type="fun"><args><standard>&amp;optional</standard> (brief-p <obj>nil</obj>)</args>
+</define>
+
+<description>Returns a string giving information about which systems and what
+versions of the systems are loaded into the machine, and what microcode
+version is running.  A typical string for it to produce is:
+
+<lisp>&quot;System 98.48, CADR 3.6, MIT-Specific 22.0, microcode 309&quot;
+</lisp>If <arg>brief-p</arg> is <obj>t</obj>, it uses short names, suppresses the microcode
+version, any systems which should not appear in the disk label comment,
+the name <obj>System</obj>, and the commas:
+
+<lisp>&quot;98.48&quot;
+</lisp></description></definition>
+
+
+<subsection name="NIL" title="Defining a System"><p>In order to use the patch facility, you must declare your system as
+patchable by giving the <obj>:patchable</obj> option to <obj>defsystem</obj> (see
+<ref chapter="29" definition-in-file="maksys" key="system-system" section="0" title="Maintaining Large Systems" type="section"></ref>).  The major version of your system in the file system
+is incremented whenever <obj>make-system</obj> is used to compile it.
+Thus a major version is associated with a set of QFASL files.
+The major version of your system that is remembered as having been loaded into the
+Lisp environment is set to the major version in the file system
+whenever <obj>make-system</obj> is used to load your system and the
+major version in the file system is greater than what you had loaded before.
+</p>
+
+<p>After loading your system, you can save it with the <obj>disk-save</obj>
+function (see <ref definition-in-file="fd-hac" key="disk-save-fun" title="Function disk-save" type="fun"></ref>).  <obj>disk-save</obj> asks you for any
+additional information you want printed as part of the greeting when the
+machine is booted.  This is in addition to the names and versions of all
+the systems present in this world.  If the system version does not fit
+in the partition comment field allocated in the disk label, <obj>disk-save</obj>
+asks you to type in an abbreviated form.
+</p>
+</subsection>
+
+<subsection name="NIL" title="Loading Patches"><definition><define key="load-patches-fun" name="load-patches" type="fun"><args><standard>&amp;rest</standard> options</args>
+</define>
+
+<description>This function is used to bring the current world up to the latest minor
+version of whichever major version it is, for all systems present, or
+for certain specified systems.  If there are any patches
+available, <obj>load-patches</obj> offers to read them in. 
+With no arguments, <obj>load-patches</obj> updates all the systems present in
+this world.  If you do not specify the systems to operate on, <obj>load-patches</obj> also reloads
+the site files if they have changed (<ref chapter="36" definition-in-file="fd-hac" key="site-files" section="12" title="Site Options and Host Table" type="section"></ref>), and reloads the files defining
+logical host translations if they have changed (<ref definition-in-file="pathnm" key="fs:make-logical-pathname-host-fun" title="Function fs:make-logical-pathname-host" type="fun"></ref>).
+
+<arg>options</arg> is a list of keywords.  Some keywords are followed by an argument.
+The following options are accepted:
+
+<table><tbody><tr><td><obj>:systems <arg>list</arg></obj></td>
+<td><index-entry index="keywords" title=":systems load-patches"></index-entry>
+<arg>list</arg> is a list of names of systems to be brought up to date.  If this
+option is not specified, all patchable systems loaded are processed.
+
+</td></tr><tr><td><obj>:unreleased</obj></td><td>Loads unreleased patches with no special querying.  These patches
+should be loaded for experimental use if you wish the benefit of the
+latest bug fixes, but should not be loaded if you plan to save a band.
+
+</td></tr><tr><td><obj>:site</obj></td><td>Loads the latest site files if they have been changed since last loaded.
+This is the default if you do not specify explicitly which systems to process.
+
+</td></tr><tr><td><obj>:nosite</obj></td><td>Prevents loading of site files.  This is the default when you specify the
+systems to process.
+
+</td></tr><tr><td><obj>:hosts</obj></td><td>Reloads the files defining logical host translations if they have been
+changed since last loaded.  This is the default if you do not specify
+explicitly which systems to process.
+
+</td></tr><tr><td><obj>:nohosts</obj></td><td>Prevents loading of logical host translation files.  This is the default
+when you specify the systems to process.
+
+</td></tr><tr><td><obj>:verbose</obj></td><td>Prints an explanation of what is being done.  This is the default.
+
+</td></tr><tr><td><obj>:selective</obj></td><td>For each patch, says what it is and then ask the user whether or not to
+load it.  This is the default.  If the user answers <obj>P</obj> (for
+`Proceed'), selective mode is turned off for any remaining patches to
+the current system.
+
+</td></tr><tr><td><obj>:noselective</obj></td><td>Turns off <obj>:selective</obj>.
+
+</td></tr><tr><td><obj>:silent</obj></td><td>Turns off both <obj>:selective</obj> and <obj>:verbose</obj>.  In <obj>:silent</obj> mode all necessary
+patches are loaded without printing anything and without querying the user.
+
+</td></tr><tr><td><obj>:force-unfinished</obj></td><td>Loads patches that have not been finished yet, if they have been
+compiled.
+</td></tr></tbody></table>
+<obj>load-patches</obj> returns <obj>t</obj> if any patches were loaded.
+</description></definition>
+<p>When you load a patchable system with <obj>make-system</obj>,
+<obj>load-patches</obj> is called automatically on that system.
+</p>
+<definition><define key="si:patch-loaded-p-fun" name="si:patch-loaded-p" type="fun"><args>major-version minor-version <standard>&amp;optional</standard> (system-name <obj>&quot;SYSTEM&quot;</obj>)</args>
+</define>
+
+<description>Returns <obj>t</obj> if the changes in patch
+<arg>major-version</arg>.<arg>minor-version</arg> of system <arg>system-name</arg> are
+loaded.  If <arg>major-version</arg> is the major version of that system which
+is currently loaded, then the changes in that patch are loaded if the
+current minor version is greater than or equal to <arg>minor-version</arg>.  If
+the currently loaded major version is greater than <arg>major-version</arg>
+then it is assumed that the newer system version contains all the
+improvements patched into earlier versions, so the value is <obj>t</obj>.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Making Patches"><p>There are two editor commands that are used to create patch files.
+During a typical maintenance session on a system you will make several
+edits to its source files.  The patch system can be used to copy these
+edits into a patch file so that they can be automatically incorporated
+into the system to create a new minor version.  Edits in a patch file
+can be modified function definitions, new functions, modified
+<obj>defvar</obj>'s and <obj>defconst</obj>'s, or arbitrary forms to be evaluated, even including
+<obj>load</obj>'s of new files.
+</p>
+
+<p>The first step in making a patch is to <arg>start</arg> it.  At this stage you
+must specify which patchable system you are making a patch for.  Then you <arg>add</arg>
+one or more pieces of code from other source files to the patch.
+Finally you <arg>finish</arg> the patch.  This is when you fill in the description
+of what the patch does; this description is what <obj>load-patches</obj> prints
+when it offers to load the patch.  If you have any doubts about whether
+the patch will load and work properly, you finish it <arg>unreleased</arg>;
+then you can load it to test it but no bands can be saved containing the
+patch until you explicitly release it later.
+</p>
+
+<p>It is important that any change you patch should go in a patch for the
+patchable system to which the changed source file belongs.  This makes
+sure that nobody loads the change into a Lisp world which does not
+contain the file you were changing--something that might cause trouble.
+Also, it ensures that you never patch changes to the same piece of
+code in two different patchable systems' patches.  This would lead to
+disaster because there is no constraint on the order in which patches to
+two different systems are loaded.
+</p>
+
+<p>Starting a patch can be done with <obj>Meta-X Start Patch</obj>.  It reads the
+name of the system to patch with the minibuffer.  <obj>Meta-X Add Patch</obj>
+can also start a patch, so an explicit <obj>Meta-X Start Patch</obj> is needed
+only infrequently.
+</p>
+
+<p><obj>Meta-X Add Patch</obj> adds the region (if there is one) or the current
+``defun'' to the patch file currently being constructed.  If you change a
+function, you should recompile it, test it, then once it works use <obj>Add
+Patch</obj> to put it in the patch file.  If no patch is being constructed,
+one is started for you; you must type in the name of the system to patch.
+</p>
+
+<p>A convenient way to add all your changes to a patch file is to use
+<obj>Meta-X Add Patch Changed Sections</obj> or <obj>Meta-X Add Patch Buffer
+Changed Sections</obj>.  These commands ask you, for each changed function
+(or each changed function in the current buffer), whether to add it to
+the patch being constructed.  If you use these commands more than once,
+a function which has been added to the patch and has not been changed
+since is considered ``unchanged''.
+</p>
+
+<p>The patch file being constructed is in an ordinary editor buffer.  If
+you mistakenly <obj>Add Patch</obj> something that doesn't work, you can select
+the buffer containing the patch file and delete it.  Then later you can
+<obj>Add Patch</obj> the corrected version.
+</p>
+
+<p>While you are making your patch file, the minor version number that has
+been allocated for you is reserved so that nobody else can use it.  This
+way if two people are patching a system at the same time, they do not
+both get the same minor version number.
+</p>
+
+<p>After testing and patching all of your changes, use <obj>Meta-X Finish Patch</obj> to
+install the patch file so that other users can load it.  This compiles
+the patch file if you have not done so yourself (patches are always compiled).
+It also asks you for a comment describing the reason for the patch; <obj>load-patches</obj>
+and <obj>print-system-modifications</obj> print these comments.  If the patch is
+complex or it has a good chance of causing new problems, you should not use
+<obj>Meta-X Finish Patch</obj>; instead, you should make an unreleased patch.
+</p>
+
+<index-entry index="concepts" title="unreleased patches"></index-entry>
+
+<p>A finished patch can be <arg>released</arg> or <arg>unreleased</arg>.  If a patch is
+unreleased, it can be loaded in the usual manner if the user says `yes' to
+a special query, but once it has been loaded the user will be strongly
+discouraged from saving a band.  Therefore, you still have a chance to
+edit the patch file and recompile it if there is something wrong with
+it.  You can be sure that the old broken patch will not remain
+permanently in saved bands.
+</p>
+
+<p>To finish a patch without releasing it, use the command <obj>Meta-X Finish
+Patch Unreleased</obj>.  Then the patch can be tested by loading it.
+After a sufficient period for testing, you can release the patch with
+<obj>Meta-X Release Patch</obj>.  If you discover a bug in the patch after this
+point, it is not sufficient to correct it in this patch file; you must
+put the fix in a new patch to correct any bands already saved with the
+broken version of this patch.
+</p>
+
+<p>It is a good principle not to add any new features or fix any additional
+bugs in a patch once that patch is released; change it only to correct
+problems with that patch.  New fixes to other bugs should go in new
+patches.
+</p>
+
+<p>You can only be constructing one patch at any time.  <obj>Meta-X Add Patch</obj>
+automatically adds to the patch you are constructing.  But you can start
+constructing a different patch without finishing the first.  If you use
+the command <obj>Meta-X Start Patch</obj> while constructing a patch, you are
+given the option of starting a new patch.  The old patch ceases to be
+the one you are constructing but the patch file remains in its editor buffer.
+Later, or in another session, you can go back to constructing the first
+patch with the command <obj>Meta-X Resume Patch</obj>.  This commands asks for
+both a patchable system name and the patch version to resume constructing.
+You can simply save the editor buffer of a patch file and resume
+constructing that patch in a later session.  You can even resume constructing a finished
+patch; though it rarely makes sense to do this unless the patch is
+unreleased.
+</p>
+
+<p>If you start to make a patch and change your mind, use the command
+<obj>Meta-X Cancel Patch</obj>.  This deletes the record that says that
+this patch is being worked on.  It also tells the editor that you
+are no longer constructing any patch.  You can undo a finished (but unreleased)
+patch by using <obj>Resume Patch</obj> and then <obj>Cancel Patch</obj>.  If a patch
+is released, you cannot remove it from saved bands, so it is not
+reasonable to cancel it at that stage.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Private Patches"><p>A private patch is a file of changes which is not installed to be loaded
+automatically in sequence by all users.  It is loaded only by explicit
+request (using the function <obj>load</obj>).  A private patch is not
+associated with any particular patchable system, and has no version
+number.
+</p>
+
+<p>To make a private patch, use the editor command <obj>Meta-X Start Private
+Patch</obj>.  Instead of a patchable system name, you must specify a
+filename to use for the patch file; since the patch is not to be
+installed, there is no standard naming convention for it to follow.  Add
+text to the patch using <obj>Meta-X Add Patch</obj> and finish it using
+<obj>Meta-X Finish Patch</obj>.  There is no concept of release for private
+patches so there is no point in using <obj>Meta-X Finish Patch
+Unreleased</obj>.  There is also no data base recording all private patches,
+so <obj>Meta-X Start Private Patch</obj> will resume an existing patch, or even
+a finished patch.  In fact, finishing a private patch is merely a way
+to write a comment into it and compile it.
+</p>
+
+<p>Once the private patch file is made, you can load it like any other file.
+</p>
+
+<p>The private patch facility is just an easy way to copy code from various
+files into one new file with <obj>Patch-File: T</obj> in its attribute list (to
+prevent warnings about redefining functions defined in other files) and
+compile that file.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="System Status"><index-entry index="concepts" title="status, of a patchable system"></index-entry>
+
+<p>The patch system has the concept of the <arg>status</arg> of a major version of a
+system.  A status keyword is recorded in the Lisp world for each
+patchable system that is loaded.  There is also a current status for
+each major version of each system, recorded in the patch directory file
+for that major version.  Loading patches updates the status in the Lisp
+world to match the current status stored in the patch directory.  The
+status in the patch directory is changed with <obj>si:set-system-status</obj>.
+</p>
+
+<p>The status is displayed when the system version is displayed, in places
+such as the system greeting message (<obj>print-herald</obj>) and the disk
+partition comment.
+</p>
+
+<p>The status is one of the following keywords:
+
+<table><tbody><tr><td><obj>:experimental</obj></td><td>The system has been built but has not yet been fully debugged and released to users.
+This is the default status when a new major version is created, unless it is
+overridden with the <obj>:initial-status</obj> option to <obj>defsystem</obj>.
+
+</td></tr><tr><td><obj>:released</obj></td><td>The system is released for general use.  This status produces no extra text
+in the system greeting and the disk partition comment.
+
+</td></tr><tr><td><obj>:obsolete</obj></td><td>The system is no longer supported.
+
+</td></tr><tr><td><obj>:broken</obj></td><td>This is like <obj>:experimental</obj>, but is used when the system was thought incorrectly
+to have been debugged, and hence was <obj>:released</obj> for a while.
+
+</td></tr><tr><td><obj>:inconsistent</obj></td><td>Unreleased patches to this system have been loaded.
+If any patchable system is in this status, <obj>disk-save</obj> demands extra
+confirmation, and the resulting saved band is identified as ``Bad'' in its
+disk partition comment.
+</td></tr></tbody></table></p>
+<definition><define key="si:set-system-status-fun" name="si:set-system-status" type="fun"><args>system status <standard>&amp;optional</standard> major-version</args>
+</define>
+
+<description>Changes the current status of a system, as recorded in the patch
+directory file.  <arg>system</arg> is the name of the system.
+<arg>major-version</arg> is the number of the major version to be changed; if
+unsupplied it defaults to the version currently loaded into the Lisp
+world.  <arg>status</arg> should be one of the keywords above.
+
+Do not set the current system status to <obj>:inconsistent</obj>.  A status of
+<obj>:inconsistent</obj> is set up in the Lisp world when an unreleased patch
+is loaded, and once set that way it never changes in that Lisp world.
+The status recorded in the system's patch directory file should describe
+the situation where all currently released patches are loaded.
+It should never be <obj>:inconsistent</obj>.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Patch Files"><p>The patch system maintains several different types of files in
+the directory associated with your system.  This directory is specified
+to <obj>defsystem</obj> via either the <obj>:patchable</obj> option or the <obj>:pathname-default</obj>
+option.  These files are maintained automatically, but they are described here
+so that you can know what they are and when they are obsolete and can be deleted. 
+</p>
+
+<p>If the <obj>:patchable</obj> option to <obj>defsystem</obj> had no argument, then the
+patch data files are stored on the host, device and directory specified as
+the system's pathname default.  The names and types of the filenames
+are all standard and do not include the name of the system in any way.
+</p>
+
+<p>If the <obj>:patchable</obj> option to <obj>defsystem</obj> is given an argument, this
+argument is a file namestring specifying the host, device and directory
+to use for storing the patch data files.  In addition, the system's short name
+is used in constructing the names of the files.  This allows you to store
+the patch data files for several systems in the same directory.
+</p>
+
+<p>There are three kinds of files that record patch information:
+
+<table><tbody><tr><td><standard><example>*</example>  the system patch directory</standard></td><td>
+This file records the current major version number,
+so that when the system is recompiled a new number can be allocated.
+
+On Tops-20, this file has, by default, a name like <obj>OZ:PS:&lt;MYDIR&gt;PATCH.DIRECTORY</obj>,
+where the host, device, and directory (<obj>OZ:PS:&lt;MYDIR&gt;</obj>) come
+from the system's <obj>:pathname-default</obj> as explained above.
+
+If <obj>:patchable</obj> is given an argument, this file for system <obj>FOO</obj> has
+a name like <obj>OZ:PS:&lt;PATDIR&gt;FOO.PATCH-DIRECTORY</obj>, where the host, device and directory
+come from <obj>:patchable</obj>'s argument.
+
+</td></tr><tr><td><standard><example>*</example>  the patch directory of a major version</standard></td><td>
+There is a file of this kind for each major version of the system.
+It records the patches that have been made for that major version:
+the minor version, author, description and release status of each one.
+
+The data in this file are in the form of a printed representation of a
+Lisp list with two elements.  The first is the system status of this
+major version (<obj>:experimental</obj>, <obj>:released</obj>, <obj>:broken</obj> or
+<obj>:obsolete</obj>).  The second is another list with an element for each
+patch.  The element for a patch is a list of length four: the minor
+version, the patch description (a string) or <obj>nil</obj> for an unfinished
+patch, the author's name (a string), and a flag that is <obj>t</obj> if the
+patch is unreleased.
+
+On a Tops-20, for major version 259, this file has, by default, a name like
+<obj>OZ:PS:&lt;MYDIR&gt;PATCH-259.DIRECTORY</obj>.
+
+If <obj>:patchable</obj> is given an argument, this file for system <obj>FOO</obj> has a name like
+<obj>OZ:PS:&lt;PATDIR&gt;FOO-259.PATCH-DIRECTORY</obj>.
+
+</td></tr><tr><td><standard><example>*</example>  the individual patch</standard></td><td>
+For each patch made, there is a Lisp source file and a QFASL file.
+
+On a Tops-20, for version 259.12, these files have, by default, names like
+<obj>OZ:PS:&lt;MYDIR&gt;PATCH-259-12.LISP</obj> and <obj>OZ:PS:&lt;MYDIR&gt;PATCH-259-12.QFASL</obj>.
+
+If <obj>:patchable</obj> is given an argument, this file for system <obj>FOO</obj> has a name like
+<obj>OZ:PS:&lt;PATDIR&gt;FOO-259-12.PATCH-DIRECTORY</obj>.
+</td></tr></tbody></table></p>
+
+<p>On certain types of file systems, slightly different naming conventions
+are used to keep the names short enough to be legal.
+</p>
+</subsection></section>
+</document-part>

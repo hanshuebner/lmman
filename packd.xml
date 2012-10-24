@@ -1,0 +1,1550 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="package-chapter"></a>
+<chapter name="package-chapter" number="28" title="Packages"><index-entry index="concepts" title="package"></index-entry>
+
+<index-entry index="concepts" title="name spaces"></index-entry>
+
+<p indent="1">        A Lisp program is a collection of function definitions.
+The functions are known by their names, and so each must have its
+own name to identify it.  Clearly a programmer must not use the same
+name for two different functions.
+</p>
+
+<p indent="1">        The Lisp Machine consists of a huge Lisp environment, in which many
+programs must coexist. All of the operating system, the compiler, the
+editor, and a wide variety of programs are provided in the initial
+environment.  Furthermore, every program that you use during
+a session must be loaded into the same environment.  Each of these
+programs is composed of a group of functions; apparently each function
+must have its own distinct name to avoid conflicts.  For example, if
+the compiler had a function named <obj>pull</obj>, and you loaded a program
+which had its own function named <obj>pull</obj>, the compiler's <obj>pull</obj> would be
+redefined, probably breaking the compiler.
+</p>
+
+<p indent="1">        It would not really be possible to prevent these conflicts,
+since the programs are written by many different people who could
+never get together to hash out who gets the privilege of using
+a specific name such as <obj>pull</obj>.
+</p>
+
+<p indent="1">        Now, if we are to enable two programs to coexist in the Lisp
+world, each with its own function <obj>pull</obj>, then each program must have
+its own symbol named <obj>pull</obj>, because there can't be two function
+definitions on the same symbol.  This means that separate <arg>name
+spaces</arg>--mappings between names and symbols--must be provided for
+the two programs.  The package system is designed to do just that.
+</p>
+
+<p indent="1">        Under the package system, the author of a program or a group
+of closely related programs identifies them together as a <arg>package</arg>.
+The package system associates a distinct name space with each package.
+</p>
+
+<p indent="1">        Here is an example: suppose there are two programs named <obj>chaos</obj>
+and <obj>arpa</obj>, for handling the Chaosnet and Arpanet respectively.  The
+author of each program wants to have a function called <obj>get-packet</obj>,
+which reads in a packet from the network (or something).  Also, each
+wants to have a function called <obj>allocate-pbuf</obj>, which allocates the
+packet buffer.  Each ``get'' routine first allocates a packet buffer,
+and then reads bits into the buffer; therefore, each version of
+<obj>get-packet</obj> should call the respective version of <obj>allocate-pbuf</obj>.
+</p>
+
+<p indent="1">        Without the package system, the two programs could not coexist
+in the same Lisp environment.  But the package feature can be used to
+provide a separate name space for each program.  What is required is
+to define a package named <obj>chaos</obj> to contain the Chaosnet program, and
+another package <obj>arpa</obj> to hold the Arpanet program.  When the Chaosnet
+program is read into the machine, its symbols would be entered in the
+<obj>chaos</obj> package's name space.  So when the Chaosnet program's
+<obj>get-packet</obj> referred to <obj>allocate-pbuf</obj>, the <obj>allocate-pbuf</obj> in the <obj>chaos</obj>
+name space would be found, which would be the <obj>allocate-pbuf</obj> of the
+Chaosnet program--the right one.  Similarly, the Arpanet program's
+<obj>get-packet</obj> would be read in using the <obj>arpa</obj> package and
+would refer to the Arpanet program's <obj>allocate-pbuf</obj>.
+</p>
+
+<p>In order to have multiple name spaces, the function <obj>intern</obj>, which
+searches for a name, must allow the name space to be specified.
+<obj>intern</obj> accepts an optional second argument which is the package
+to search.
+</p>
+
+<p indent="1">        It's obvious that every file has to be loaded into the right package
+to serve its purpose.  It may not be so obvious that every file must be
+compiled in the right package, but it's just as true.  Luckily, this
+usually happens automatically.
+</p>
+
+<p indent="1">        The system can get the package of a source file from its <example>-*-</example>
+line.  For instance, you can put at the front of your file a line such
+as
+
+<lisp>; -*- Mode:Lisp; Package:System-Internals -*-
+</lisp>The compiler puts the package name into the QFASL file for use when it
+is loaded.  If a file doesn't have such a package specification in it,
+the system loads it into the current package and tells you what it did.
+</p>
+<a name="The Current Package"></a>
+
+
+<section chapter-number="28" name="The Current Package" number="1" title="The Current Package"><p>At any time, one package is the <arg>current package</arg>.  By default,
+symbol lookup happens in the current package.
+</p>
+<definition>
+<define key="package-var" name="package" type="var"></define>
+<define key="*package*-var" name="*package*" type="var"></define>
+
+<description>The value of the this variable is the current package.  <obj>intern</obj>
+searches this package if it is not given a second argument.
+Many other functions for operating on packages also use this as the default.
+
+Setting or binding the variable changes the current package.
+May the Goddess help you if you set it to something that isn't a package!
+
+The two names are synonymous.
+</description></definition>
+<p>Each process or stack group can have its own setting for the current
+package by binding <obj>*package*</obj> with <obj>let</obj>.  The actual current package
+at any time is the value bound by the process which is running.  The bindings
+of another process are irrelevant until the process runs.
+</p>
+<definition><define key="pkg-bind-fun" name="pkg-bind" type="mac"><args>pkg body...</args>
+</define>
+
+<description><arg>pkg</arg> may be a package or a package name.  The forms of the <arg>body</arg>
+are evaluated sequentially with the variable <obj>*package*</obj> bound to the
+package named by <arg>pkg</arg>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(pkg-bind &quot;ZWEI&quot;
+  (read-from-string function-name))
+</exdent></lisp></description></definition>
+<p>When a file is loaded, <obj>*package*</obj> is bound to the correct package for
+the file (the one named in the file's <example>-*-</example> line).  The Chaosnet program
+file has <obj>Package: Chaos;</obj> in the <example>-*-</example> line, and therefore its symbols
+are looked up in the <obj>chaos</obj> package.  A QFASL file has an encoded representation
+of the <example>-*-</example> line of the source file; it looks different, but it serves the
+same purpose.
+</p>
+
+<p>The current package is also relevant when you type Lisp expressions on
+the keyboard; it controls the reading of the symbols that you type.
+Initially it is the package <obj>user</obj>.  You can select a different
+package using <obj>pkg-goto</obj>, or even by <obj>setq</obj>ing <obj>*package*</obj>.  If you
+are working with the Chaosnet program, it might be useful to type
+<obj>(pkg-goto 'chaos)</obj> so that your symbols are found in the <obj>chaos</obj>
+package by default.  The Lisp listen loop binds <obj>*package*</obj> so that
+<obj>pkg-goto</obj> in one Lisp listener does not affect others, or any
+other processes whatever.
+</p>
+<definition><define key="pkg-goto-fun" name="pkg-goto" type="fun"><args>package <standard>&amp;optional</standard> globally</args>
+</define>
+
+<description>Sets <obj>*package*</obj> to <arg>package</arg>, if <arg>package</arg> is suitable.
+(Autoexporting packages used by other packages are not suitable
+because it you could cause great troubles by interning new symbols in them).
+<arg>package</arg> may be specified as a package object or the name of one.
+If <obj>globally</obj> is non-<obj>nil</obj>, then this function also calls
+<obj>pkg-goto-globally</obj> (see below)
+</description></definition>
+<p>The Zmacs editor records the correct package for each buffer; it is
+determined from the file's <example>-*-</example> line.  This package is used whenever
+expressions are read from the buffer.  So if you edit the definition of
+the Chaosnet <obj>get-packet</obj> and recompile it, the new definition is read in the
+<obj>chaos</obj> package.  The current buffer's package is also used for all
+expressions or symbols typed by the user.  Thus, if you type <obj>Meta-.
+allocate-pbuf</obj> while looking at the Chaosnet program, you get the
+definition of the <obj>allocate-pbuf</obj> function in the <obj>chaos</obj> package.
+</p>
+
+<p>The variable <obj>*package*</obj> also has a global binding, which is in
+effect in any process or stack group which does not rebind the variable.
+New processes that do bind <obj>*package*</obj> generally use the global
+binding to initialize their own bindings, doing <obj>(let ((*package*
+*package*)) ...)</obj>.  Therefore, it can be useful to set the global
+binding.  But you cannot do this with <obj>setq</obj> or <obj>pkg-goto</obj> from a
+Lisp listener, or in a file, because that will set the local binding of
+<obj>*package*</obj> instead.  Therefore you must use <obj>setq-globally</obj>
+(<ref definition-in-file="fd-eva" key="setq-globally-fun" title="Macro setq-globally" type="mac"></ref>) or <obj>pkg-goto-globally</obj>.
+</p>
+<definition><define key="pkg-goto-globally-fun" name="pkg-goto-globally" type="fun"><args>package</args>
+</define>
+
+<description>Sets the global binding of <obj>*package*</obj> to <arg>package</arg>.
+An error is signaled if <arg>package</arg> is not suitable.
+Bindings of <arg>package</arg> other than the the global one are not changed,
+including the current binding if it is not the global one.
+</description></definition>
+<p>The name of the current package is always displayed in the middle of the
+who line, with a colon following it.  This describes the process which
+the who line in general is describing; normally, the process of the
+selected window.  No matter how the current package is changed, the who
+line will eventually show it (at one-second intervals).  Thus, while a
+file is being loaded, the who line displays that file's package; in the
+editor, the who line displays the package of the selected buffer.
+</p>
+</section><a name="package-prefixes"></a>
+
+
+<section chapter-number="28" name="package-prefixes" number="2" title="Package Prefixes"><index-entry index="concepts" title="package prefixes"></index-entry>
+
+<p>The separation of name spaces is not an uncrossable gulf.  Consider a
+program for accessing files, using the Chaosnet.  It may be useful to
+put it in a distinct package <obj>file-access</obj>, not <obj>chaos</obj>, so that the
+programs are protected from accidental name conflicts.  But the file
+program cannot exist without referring to the functions of the Chaosnet
+program.
+</p>
+
+<p>The colon character (`<obj>:</obj>') has a special meaning to the Lisp reader.
+When the reader sees a colon preceded by the name of a package, it
+reads the next Lisp object with <obj>*package*</obj> bound to that package.
+Thus, to refer to the symbol <obj>connect</obj> in package <obj>chaos</obj>, we write
+<obj>chaos:connect</obj>.  Some symbols documented in this manual require
+package prefixes to refer to them; they are always written with an
+appropriate prefix.
+</p>
+
+<p>Similarly, if the <obj>chaos</obj> program wanted to refer to the <obj>arpa</obj>
+program's <obj>allocate-pbuf</obj> function (for some reason), it could use
+<obj>arpa:allocate-pbuf</obj>.
+</p>
+
+<p>Package prefixes are printed on output also.  If you would need a
+package prefix to refer to a symbol on input, then the symbol is printed
+with a suitable package prefix if it supposed to be printed readably
+(<obj>prin1</obj>, as opposed to <obj>princ</obj>).
+Just as the current package affects how a symbol is read, it also
+affects how the symbol is printed.  A symbol available in the
+current package is never printed with a package prefix.
+</p>
+
+<p>The printing of package prefixes makes it possible to print list
+structure containing symbols from many packages and read the text to
+produce an equal list with the same symbols in it--provided the
+current package when the text is read is the same one that was current
+when the text was printed.
+</p>
+
+<p>The package name in a package prefix is read just like a symbol name.
+This means that escape characters can be used to include special
+characters in the package name.  Thus, <obj>foo/:bar:test</obj> refers to the
+symbol <obj>test</obj> in the package whose name is ``FOO:BAR'', and so does
+<obj>|FOO:BAR|:test</obj>.  Also, letters are converted to upper case unless
+they are escaped.  For this reason, the actual name of a package is
+normally all upper case, but you can use either case when you write a
+package prefix.
+</p>
+
+<p>In Common Lisp programs, simple colon prefixes are supposed to be used
+only for referring to external symbols (see <ref definition-in-file="packd" key="external-symbols" type="page"></ref>).
+To refer to other symbols, one is supposed to use two colons, as in
+<obj>chaos::lose-it-later</obj>.
+The Lisp machine tradition is to allow reference to any symbol with
+a single colon.  Since this is upward compatible with what is allowed
+in Common Lisp, single-colon references are always allowed.
+However, double-colon prefixes are printed for internal symbols
+when Common Lisp syntax is in use, so that data printed on a Lisp Machine
+can be read by other Common Lisp implementations.
+</p>
+</section><a name="Home Packages of Symbols"></a>
+
+
+<section chapter-number="28" name="Home Packages of Symbols" number="3" title="Home Packages of Symbols"><p>Each symbol remembers one package which it belongs to: normally, the
+first one it was ever interned in.  This package is available as
+<obj>(symbol-package <arg>symbol</arg>)</obj>.
+</p>
+
+<p>With <obj>make-symbol</obj> (see <ref definition-in-file="fd-sym" key="make-symbol-fun" title="Function make-symbol" type="fun"></ref>) it is possible to create a
+symbol that has never been interned in any package.  It is called an
+<arg>uninterned symbol</arg>, and it remains one as long as nobody interns it.
+The package cell of an uninterned symbol contains <obj>nil</obj>.  Uninterned
+symbols print with <obj>#:</obj> as a prefix, as in <obj>#:foo</obj>.  This syntax can
+be used as input to create an uninterned symbol with a specific name;
+but a new symbol is created each time you type it, since the mechanism
+which normally makes symbols unique is interning in a package.
+Thus, <obj>(eq #:foo #:foo)</obj> returns <obj>nil</obj>.
+</p>
+<definition><define key="symbol-package-fun" name="symbol-package" type="fun"><args>symbol</args>
+</define>
+
+<description>Returns the contents of <arg>symbol</arg>'s package cell, which is the
+package which owns <arg>symbol</arg>, or <obj>nil</obj> if <arg>symbol</arg> is uninterned.
+</description></definition><definition><define key="package-cell-location-fun" name="package-cell-location" type="fun"><args>symbol</args>
+</define>
+
+<description>Returns a locative pointer to <arg>symbol</arg>'s package cell.  It is preferable to write
+
+<lisp>(locf (symbol-package <arg>symbol</arg>))
+</lisp>rather than calling this function explicitly.
+</description></definition>
+<p>Printing of package prefixes is based on the contents of the symbol's
+package cell.  If the cell contains the <obj>chaos</obj> package, then
+<obj>chaos:</obj> is printed as the prefix when a prefix is necessary.
+As a result of obscure actions involving interning and uninterning in multiple
+packages, the symbol may not actually be present in <obj>chaos</obj> any more.
+Then the printed prefix is inaccurate.  This cannot be helped.
+If the symbol is not where it claims to be, there is no easy way to
+find wherever it might be.
+</p>
+</section><a name="Keywords"></a>
+
+
+<section chapter-number="28" name="Keywords" number="4" title="Keywords"><p>Distinct name spaces are useful for symbols which have function definitions
+or values, to enable them to be used independently by different programs.
+</p>
+
+<p>Another way to use a symbol is to check for it with <obj>eq</obj>.  Then there
+is no possibility of name conflict.  For example, the function <obj>open</obj>,
+part of the file system, checks for the symbol <obj>:error</obj> in its input
+using <obj>eq</obj>.  A user function might do the same thing.  Then the symbol
+<obj>:error</obj> is meaningful in two contexts, but these meanings do not
+affect each other.  The fact that a user program contains the code <obj>(eq
+sym :error)</obj> does not interfere with the function of system code which
+contains a similar expression.
+</p>
+
+<p>There is no need to separate name spaces for symbols used in this way.
+In fact, it would be a disadvantage.  If both the Chaosnet program and
+the Arpanet program wish to recognize a keyword named ``address'', for
+similar purposes (naturally), it is very useful for programs that can
+call either one if it is the <arg>same</arg> keyword for either program.  But
+which should it be?  <obj>chaos:address</obj>?  <obj>arpa:address</obj>?
+</p>
+
+<p>To avoid this uncertainty, one package called <obj>keyword</obj> has been set
+aside for the keywords of all programs.  The Chaosnet and Arpanet
+programs would both look for <obj>keyword:address</obj>, normally written
+as just <obj>:address</obj>.
+</p>
+
+<p>Symbols in <obj>keyword</obj> are the normal choice for names of keyword
+arguments; if you use <obj>&amp;key</obj> to process them, code is automatically
+generated to look for for symbols in <obj>keyword</obj>.  They are also
+the normal choice for flavor operation names, and for any set of
+named options meaningful in a specific context.
+</p>
+
+<p><obj>keyword</obj> and the symbols belonging to it are treated
+differently from other packages in a couple of ways designed to make
+them more convenient for this usage.
+
+<table><tbody><tr><td><standard>*</standard></td><td>Symbols belonging to <obj>keyword</obj> are constants; they always
+evaluate to themselves.  (This is brought about by storing
+the symbol in its own value cell when the symbol is placed in the package).
+So you can write just <obj>:error</obj> rather than <obj>':error</obj>.
+The nature of the application of keywords is such that they
+would always be quoted if they were not constant.
+</td></tr><tr><td><standard>*</standard></td><td>A colon by itself is a sufficient package prefix for <obj>keyword</obj>.
+This is because keywords are the most frequent application of package
+prefixes.
+</td></tr></tbody></table></p>
+<definition><define key="keywordp-fun" name="keywordp" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is a symbol which belongs to the keyword package.
+</description></definition>
+<p>There are certain cases when a keyword should <arg>not</arg> be used for a
+symbol to be checked for with <obj>eq</obj>.  Usually this is when the symbol
+1) does not need to be known outside of a single program, and 2) is to
+be placed in shared data bases such as property lists of symbols which
+may sometimes be in <obj>global</obj> or <obj>keyword</obj>.  For example, if the
+Chaosnet program were to record the existence of a host named CAR by
+placing an <obj>:address</obj> property on the symbol <obj>:car</obj>, or the symbol
+<obj>car</obj> (notice that <obj>chaos:car</obj> <arg>is</arg> <obj>car</obj>), it would risk
+conflicts with other programs that might wish to use the <obj>:address</obj>
+property of symbols in general.  It is better to call the property
+<obj>chaos:address</obj>.
+</p>
+</section><a name="Inheritance between Name Spaces"></a>
+
+
+<section chapter-number="28" name="Inheritance between Name Spaces" number="5" title="Inheritance between Name Spaces"><index-entry index="concepts" title="inheritance between packages"></index-entry>
+
+<p>In the simplest (but not the default) case, a package is independent
+of all other packages.  This is not the default because it is not
+usually useful.  Consider the standard Lisp function and variables names,
+such as <obj>car</obj>: how can the Chaosnet program, using the <obj>chaos</obj> package,
+access them?  One way would be to install all of them in the <obj>chaos</obj>
+package, and every other package.  But it is better to have one table
+of the standard Lisp symbols and refer to it where necessary.  This is
+called <arg>inheritance</arg>.  The single package <obj>global</obj> is the only one
+which actually contains the standard Lisp symbols; other packages such
+as <obj>chaos</obj> contain directions to ``search <obj>global</obj> too''.
+</p>
+
+<p>Each package has a hash table of the symbols.  The symbols in this table
+are said to be <arg>present</arg> (more explicitly, <arg>present directly</arg>) in
+the package, or <arg>interned</arg> in it.  In addition, each package has a
+list of other packages to inherit from.  By default, this list contains
+the package <obj>global</obj> and no others; but packages can be added and
+removed at any time with the functions <obj>use-package</obj> and
+<obj>unuse-package</obj>.  We say that a package <arg>uses</arg> the packages it
+inherits from.  Both the symbols present directly in the package and the
+symbols it inherits are said to be <arg>available</arg> in the package.
+</p>
+
+<p>Here's how this works in the above example.  When the Chaosnet program
+is read into the Lisp world, the current package would be the <obj>chaos</obj>
+package.  Thus all of the symbols in the Chaosnet program would be
+interned in the <obj>chaos</obj> package.  If there is a reference to a
+standard Lisp symbol such as <obj>append</obj>, nothing is found in the
+<obj>chaos</obj> package's own table; no symbol of that name is present
+directly in <obj>chaos</obj>.  Therefore the packages used by <obj>chaos</obj> are
+searched, including <obj>global</obj>.  Since <obj>global</obj> contains a symbol
+named <obj>append</obj>, that symbol is found.  If, however, there is a
+reference to a symbol that is not standard, such as <obj>get-packet</obj>, the
+first time it is used it is not found in either <obj>chaos</obj> or <obj>global</obj>.
+So <obj>intern</obj> makes a new symbol named <obj>get-packet</obj>, and installs it
+in the <obj>chaos</obj> package.  When <obj>get-packet</obj> is referred to later in
+the Chaosnet program, <obj>intern</obj> finds <obj>get-packet</obj> immediately in the
+<obj>chaos</obj> package.  <obj>global</obj> does not need to be searched.
+</p>
+
+<p>When the Arpanet program is read in, the current package is
+<obj>arpa</obj> instead of <obj>chaos</obj>.  When the Arpanet program refers
+to <obj>append</obj>, it gets the <obj>global</obj> one; that is, it shares the same one
+that the Chaosnet program got.  However, if it refers to <obj>get-packet</obj>,
+it does <arg>not</arg> get the same one the Chaosnet program got, because
+the <obj>chaos</obj> package is presumably not used by <obj>arpa</obj>.  The <obj>get-packet</obj>
+in <obj>chaos</obj> not being available, no symbol is found, so a new one is
+created and placed in the <obj>arpa</obj> package.  Further references in the
+Arpanet program find that <obj>get-packet</obj>.  This is the desired
+result: the packages share the standard Lisp symbols only.
+</p>
+
+<p>Inheritance between other packages can also be useful, but it must
+be restricted: inheriting only some of the symbols of the used package.
+If the file access program refers frequently to the advertised symbols
+of the Chaosnet program--the connection states, such as <obj>open-state</obj>,
+functions such as <obj>connect</obj>, <obj>listen</obj> and <obj>open-stream</obj>, and
+others--it might be convenient to be able to refer to these symbols from
+the <obj>file-access</obj> package without need for package prefixes.
+</p>
+
+<index-entry index="concepts" title="importation of symbols"></index-entry>
+
+<p>One way to do this is to place the appropriate symbols of the <obj>chaos</obj>
+package into the <obj>file-access</obj> package as well.  Then they can be
+accessed by the file access program just like its own symbols.  Such
+sharing of symbols between packages never happens from the ordinary
+operation of packages, but it can be requested explicitly using
+<obj>import</obj>.
+</p>
+<definition><define key="import-fun" name="import" type="fun"><args>symbols <standard>&amp;optional</standard> (package <obj>*package*</obj>)</args>
+</define>
+
+<description>Is the standard Common Lisp way to insert a specific symbol or symbols
+into a package.  <arg>symbols</arg> is a symbol or a list of symbols.  Each of
+the specified symbols becomes present directly in <arg>package</arg>.
+
+If a symbol with the same name is already present (directly or by
+inheritance) in <arg>package</arg>, an error is signaled.  On proceeding, you
+can say whether to leave the old symbol there or replace it with the one
+specified in <obj>import</obj>.
+</description></definition>
+<p>But importing may not be the best solution.  All callers of the Chaosnet
+program probably want to refer to the same set of symbols: the symbols
+described in the documentation of the Chaosnet program.  It is simplest
+if the Chaosnet program, rather than each caller, says which symbols
+they are.
+</p>
+
+<p>Restricted inheritance allows the <obj>chaos</obj> package to specify which
+of its symbols should be inheritable.  Then <obj>file-access</obj> can use
+package <obj>chaos</obj> and the desired symbols are available in it.
+</p>
+
+<index-entry index="concepts" title="external symbols"></index-entry>
+
+<index-entry index="concepts" title="internal symbols"></index-entry>
+
+<index-entry index="concepts" title="exportation of symbols"></index-entry>
+
+<index-entry index="concepts" title="autoexporting packages"></index-entry>
+
+<p>The inheritable symbols of a package such as <obj>chaos</obj> in this example
+are called <arg>external</arg>; the other symbols are <arg>internal</arg>.  Symbols
+are internal by default.  The function <obj>export</obj> is how symbols are
+made external.  Only the external symbols of a package are inherited by
+other packages which use it.  This is true of <obj>global</obj> as well; Only
+external symbols in <obj>global</obj> are inherited.  Since <obj>global</obj> exists
+only for inheritance, every symbol in it is external; in fact, any
+symbol placed in <obj>global</obj> is automatically made external.  <obj>global</obj>
+is said to be <arg>autoexporting</arg>.  A few other packages with special
+uses, such as <obj>keyword</obj> and <obj>fonts</obj>, are autoexporting.  Ordinary
+packages such as <obj>chaos</obj>, which programs are loaded in, should not be.
+</p>
+
+<p>If a request is made to find a name in a package, first the symbols
+present directly in that package are searched.  If the name is not found
+that way, then all the packages in the used-list are searched; but only
+external symbols are accepted.  Internal symbols found in the used
+packages are ignored.  If a new symbol needs to be created and put into
+the name space, it is placed directly in the specified package.  New
+symbols are never put into the inherited packages.
+</p>
+
+<p>The used packages of a package are not in any particular order.
+It does not make any difference which one is searched first,
+because they are <arg>not allowed</arg> to have any conflicts among them.
+If you attempt to set up an inheritance situation where a conflict
+would exist, you get an error immediately.  You can then specify
+explicitly how to resolve the conflict.  See <ref chapter="28" definition-in-file="packd" key="name-conflict" section="7" title="Shadowing and Name Conflicts" type="section"></ref>.
+</p>
+
+<p>The packages used by the packages used are <arg>not</arg> searched.  If package
+<obj>file-access</obj> uses package <obj>chaos</obj> and file <obj>mypackage</obj> uses
+package <obj>file-access</obj>, this does not cause <obj>mypackage</obj> to inherit
+anything from <obj>chaos</obj>.  This is desirable; the Chaosnet functions for whose sake
+<obj>file-access</obj> uses <obj>chaos</obj> are not needed in the programs in <obj>mypackage</obj>
+simply to enable them to communicate with <obj>file-access</obj>.  If it is desirable
+for <obj>mypackage</obj> to inherit from <obj>chaos</obj>, that can be requested explicitly.
+</p>
+
+<p>These functions are used to set up and control package inheritance.
+</p>
+<definition><define key="use-package-fun" name="use-package" type="fun"><args>packages <standard>&amp;optional</standard> (in-package <obj>*package*</obj>)</args>
+</define>
+
+<description>Makes <arg>in-package</arg> inherit symbols from <arg>packages</arg>, which should be
+either a single package or name for a package, or a list of packages and/or
+names for packages.
+
+This can cause a name conflict, if any of <arg>packages</arg> has a symbol
+whose name matches a symbol in <arg>in-package</arg>.  In this case,
+an error is signaled, and you must resolve the conflict or abort.
+</description></definition><definition><define key="unuse-package-fun" name="unuse-package" type="fun"><args>packages <standard>&amp;optional</standard> (in-package <obj>*package*</obj>)</args>
+</define>
+
+<description>Makes <arg>in-package</arg> cease to inherit symbols from <arg>packages</arg>.
+</description></definition><definition><define key="package-use-list-fun" name="package-use-list" type="fun"><args>package</args>
+</define>
+
+<description>Returns the list of packages used by <arg>package</arg>.
+</description></definition><definition><define key="package-used-by-list-fun" name="package-used-by-list" type="fun"><args>package</args>
+</define>
+
+<description>Returns the list of packages which use <arg>package</arg>.
+</description></definition>
+<p>You can add or remove inheritance paths at any time, no matter what else
+you have done with the package.
+</p>
+
+<p>These functions are used to make symbols external or internal in a package.
+By default, they operate on the current package.
+</p>
+<definition><define key="export-fun" name="export" type="fun"><args>symbols <standard>&amp;optional</standard> (package <obj>*package*</obj>)</args>
+</define>
+
+<description>Makes <arg>symbols</arg> external in <arg>package</arg>.  <arg>symbols</arg> should be a symbol or string
+or a list of symbols and/or strings.  The specified symbols or strings are
+interned in <arg>package</arg>, and the symbols found are marked external in
+<arg>package</arg>.
+
+If one of the specified symbols is found by inheritance from a used package,
+it is made directly present in <arg>package</arg> and then marked external there.
+(We know it was already external in the package it was inherited from.)
+
+Note that if a symbol is present directly in several packages, it can be
+marked external or internal in each package independently.  Thus, it is
+the symbol's presence in a particular package which is external or not,
+rather than the symbol itself.  <obj>export</obj> makes symbols external
+in whichever package you specify; if the same symbols are present directly
+in any other package, their status as external or internal in the other package
+is not affected.
+</description></definition><definition><define key="unexport-fun" name="unexport" type="fun"><args>symbols <standard>&amp;optional</standard> (package <obj>*package*</obj>)</args>
+</define>
+
+<description>Makes <arg>symbols</arg> not be external in <arg>package</arg>.  An error occurs if
+any of the symbols fails to be directly present in <arg>package</arg>.
+</description></definition><definition><define key="package-external-symbols-fun" name="package-external-symbols" type="fun"><args>package</args>
+</define>
+
+<description>Returns a list of all the external symbols of <arg>package</arg>.
+</description></definition><definition><define key="globalize-fun" name="globalize" type="fun"><args>name-or-symbol <standard>&amp;optional</standard> (into-package <obj>&quot;GLOBAL&quot;</obj>)</args>
+</define>
+
+<description></description></definition>
+<p>Sometimes it will be discovered that a symbol which ought to be in
+<obj>global</obj> is not there, and the file defining it has already been
+loaded, thus mistakenly creating a symbol with that name in some other
+package.  Creating a symbol in <obj>global</obj> would not fix the problem,
+since pointers to the misbegotten symbol already exist.  Even worse,
+similarly named symbols may have been created mistakenly in other
+packages by code attempting to refer to the global symbol, and those
+symbols also are already pointed to.  <obj>globalize</obj> is designed for
+use in correcting such a situation.
+</p>
+<definition><define key="globalize-fun" name="globalize" type="fun"><args>symbol-or-string <standard>&amp;optional</standard> (package <obj>&quot;GLOBAL&quot;</obj>)</args>
+</define>
+
+<description>If <arg>name-or-symbol</arg> is a name (a string), interns the name in
+<arg>into-package</arg> and then forwards together all symbols with the same
+name in all the packages that use <arg>into-package</arg> as well as in
+<arg>into-package</arg> itself.  These
+symbols are forwarded together so that they become effectively one
+symbol as far as the value, function definition and properties are
+concerned.  The value of the composite is taken from whichever
+of the symbols had a value; a proceedable error is signaled if
+multiple, distinct values were found.  The function definition is treated
+similarly, and so is each property that any of the symbols has.
+
+If <arg>name-or-symbol</arg> is a symbol, <obj>globalize</obj> interns that symbol
+in <arg>into-package</arg> and then forwards the other symbols to that one.
+
+The symbol which ultimately is present in <arg>into-package</arg> is also exported.
+</description></definition></section><a name="Packages and Interning"></a>
+
+
+<section chapter-number="28" name="Packages and Interning" number="6" title="Packages and Interning"><index-entry index="concepts" title="interning"></index-entry>
+
+<p>The most important service of the package system is to look up a name in
+a package and return the symbol which has that name in the package's
+name space.  This is done by the function <obj>intern</obj>, and is called
+<arg>interning</arg>.  When you type a symbol as input, <obj>read</obj> converts your
+characters to the actual symbol by calling <obj>intern</obj>.
+</p>
+
+<p>The function <obj>intern</obj> allows you to specify a package as the
+second argument.  It can be specified by giving either the package
+object itself or a string or symbol that is a name for the package.
+<obj>intern</obj> returns three values.  The first is the interned symbol.  The
+second is a keyword that says how the symbol was found.  The third is
+the package in which the symbol was actually found.  This can be either
+the specified package or one of its used packages.
+</p>
+
+<p>When you don't specify the second argument to <obj>intern</obj>, the
+current package, which is the value of the symbol <obj>*package*</obj>, is used.
+This happens, in particular, when you call <obj>read</obj> and <obj>read</obj>
+calls <obj>intern</obj>.  To specify the
+package for such functions to use, bind the symbol <obj>*package*</obj>
+temporarily to the desired package with <obj>pkg-bind</obj>.
+</p>
+
+<p>There are actually four forms of the <obj>intern</obj> function: regular
+<obj>intern</obj>, <obj>intern-soft</obj>, <obj>intern-local</obj>, and
+<obj>intern-local-soft</obj>.  <obj>-soft</obj> means that the symbol should not be
+added to the package if there isn't already one; in that case, all three
+values are <obj>nil</obj>.  <obj>-local</obj> turns off inheritance; it means that the
+used packages should not be searched.  Thus, <obj>intern-local</obj> can be
+used to cause shadowing.  <obj>intern-local-soft</obj> is right when you want
+complete control over what packages to search and when to add symbols.
+All four forms of <obj>intern</obj> return the same three values, except that
+the <obj>soft</obj> forms return <obj>nil nil nil</obj> when the symbol isn't found.
+</p>
+<definition><define key="intern-fun" name="intern" type="fun"><args>string-or-symbol <standard>&amp;optional</standard> (pkg <obj>*package*</obj>)</args>
+</define>
+
+<description>The simplest case of <obj>intern</obj> is where <arg>string-or-symbol</arg> is a string.
+(It makes a big difference which one you use.)
+<obj>intern</obj> searches <arg>pkg</arg> and its used packages sequentially, looking
+for a symbol whose print-name is equal to <arg>string-or-symbol</arg>.  If one is found,
+it is returned.  Otherwise, a new symbol with <arg>string-or-symbol</arg> as print name
+is created, placed in package <arg>pkg</arg>, and returned.
+
+The first value of <obj>intern</obj> is always the symbol found or created.
+The second value tells whether an existing symbol was found, and how.
+It is one of these four values:
+
+<table><tbody><tr><td><obj>:internal</obj></td><td>A symbol was found present directly in <arg>pkg</arg>, and it was internal in <arg>pkg</arg>.
+</td></tr><tr><td><obj>:external</obj></td><td>A symbol was found present directly in <arg>pkg</arg>, and it was external in <arg>pkg</arg>.
+</td></tr><tr><td><obj>:inherited</obj></td><td>A symbol was found by inheritance from a package used by <arg>pkg</arg>.
+You can deduce that the symbol is external in that package.
+</td></tr><tr><td><obj>nil</obj></td><td>A new symbol was created
+</td></tr></tbody></table>
+The third value returned by <obj>intern</obj> says which package the symbol found
+or created is present directly in.  This is different from <arg>pkg</arg> if and only if
+if the second value is <obj>:inherited</obj>.
+
+If <arg>string-or-symbol</arg> is a symbol, the search goes on just the same,
+using the print-name of <arg>string-or-symbol</arg> as the string to search
+for.  But if no existing symbol is found, <arg>string-or-symbol</arg> itself is
+placed directly into <arg>pkg</arg>, just as <obj>import</obj> would do.  No new
+symbol is created; <arg>string-or-symbol</arg> <arg>itself</arg> is the ``new'' symbol.
+This is done even if <arg>string-or-symbol</arg> is already present in another
+package.  You can create arbitrary arrangements of sharing of symbols
+between packages this way.
+
+Note: <obj>intern</obj> is sensitive to case; that is, it will consider two
+character strings different even if the only difference is one of
+upper-case versus lower-case.  The reason that symbols get converted
+to upper-case when you type them in is that the reader converts
+the case of characters in symbols; the characters are converted to
+upper-case before <obj>intern</obj> is ever called.  So if you call <obj>intern</obj>
+with a lower-case <obj>&quot;foo&quot;</obj> and then with an upper-case <obj>&quot;FOO&quot;</obj>, you
+won't get the same symbol.
+</description></definition><definition><define key="intern-local-fun" name="intern-local" type="fun"><args>string-or-symbol <standard>&amp;optional</standard> (pkg <obj>*package*</obj>)</args>
+</define>
+
+<description>Like <obj>intern</obj> but ignores inheritance.  If a symbol whose name
+matches <arg>string-or-symbol</arg> is present directly in <arg>pkg</arg>,
+it is returned; otherwise <arg>string-or-symbol</arg> (if it is a symbol)
+or a new symbol (if <arg>string-or-symbol</arg> is a string) is placed
+directly in <arg>pkg</arg>.
+
+<obj>intern-local</obj> returns second and third values with the same meaning
+as those of <obj>intern</obj>.  However, the second value can never be
+<obj>:inherited</obj>, and the third value is always <arg>pkg</arg>.
+
+The function <obj>import</obj> is implemented by passing the symbol
+to be imported to <obj>intern-local</obj>.
+</description></definition><definition><define key="intern-soft-fun" name="intern-soft" type="fun"><args>string <standard>&amp;optional</standard> (pkg <obj>*package*</obj>)</args>
+</define><define key="find-symbol-fun" name="find-symbol" type="fun"><args>string <standard>&amp;optional</standard> (pkg <obj>*package*</obj>)</args>
+</define>
+
+<description>Like <obj>intern</obj> but never creates a symbol or modifies <arg>pkg</arg>.
+If no existing symbol is found, <obj>nil</obj> is returned for all
+three values.  It makes no important difference if you
+pass a symbol instead of a string.
+
+<obj>intern-soft</obj> returns second and third values with the same meaning
+as those of <obj>intern</obj>.  However, if the second value is <obj>nil</obj>,
+it does not mean that a symbol was created, only that none was found.
+In this case, the third value is <obj>nil</obj> rather than a package.
+
+<obj>find-symbol</obj> is the Common Lisp name for this function.
+The two names are synonymous.
+</description></definition><definition><define key="intern-local-soft-fun" name="intern-local-soft" type="fun"><args>string <standard>&amp;optional</standard> (pkg <obj>*package*</obj>)</args>
+</define>
+
+<description>Like <obj>intern-soft</obj> but without inheritance.  If a matching symbol
+is found directly present in <arg>pkg</arg>, it is returned;
+otherwise, the value is <obj>nil</obj>.
+
+<obj>intern-local-soft</obj> returns second and third values with the same meaning
+as those of <obj>intern</obj>.  However, if the second value is <obj>nil</obj>,
+it does not mean that a symbol was created, only that none was found.
+Also, it can never be <obj>:inherited</obj>.  The third value is rather useless
+as it is either <arg>pkg</arg>, or <obj>nil</obj> if the second value is <obj>nil</obj>.
+</description></definition><definition><define key="remob-fun" name="remob" type="fun"><args>symbol <standard>&amp;optional</standard> (package <obj>(symbol-package <arg>symbol</arg> )</obj>)</args>
+</define><define key="unintern-fun" name="unintern" type="fun"><args>symbol <standard>&amp;optional</standard> (package <obj>*package*</obj>)</args>
+</define>
+
+<description>Both remove <arg>symbol</arg> from <arg>package</arg>.
+<arg>symbol</arg> itself is unaffected, but <obj>intern</obj> will no longer find
+it in <arg>package</arg>.  <arg>symbol</arg> is not removed from any other package,
+even packages used by <arg>package</arg>, if it should be present in them.
+If <arg>symbol</arg> was present in <arg>package</arg> (and therefore, was removed)
+then the value is <obj>t</obj>; otherwise, the value is <obj>nil</obj>.
+
+In <obj>remob</obj>, <arg>package</arg> defaults to the contents of the symbol's
+package cell, the package it belongs to.  In <obj>unintern</obj>, <arg>package</arg>
+defaults to the current package.  <obj>unintern</obj> is the Common Lisp
+version and <obj>remob</obj> is the traditional version.
+
+If <arg>package</arg> is the package that <arg>symbol</arg> belongs to, then
+<arg>symbol</arg> is marked as uninterned: <obj>nil</obj> is stored in its package
+cell.
+
+If a shadowing symbol is removed, a previously-hidden name conflict
+between distinct symbols with the same name in two used packages can
+suddenly be exposed, like a discovered check in chess.  If this happens,
+an error is signaled.
+</description></definition></section><a name="name-conflict"></a>
+
+
+<section chapter-number="28" name="name-conflict" number="7" title="Shadowing and Name Conflicts"><index-entry index="concepts" title="shadowing of symbols"></index-entry>
+
+<p>In a package that uses <obj>global</obj>, it may be desirable to avoid
+inheriting a few standard Lisp symbols.  Perhaps the user has defined a function
+<obj>copy-list</obj>, knowing that this symbol was not in <obj>global</obj>, and then
+a system function <obj>copy-list</obj> was created as part of supporting Common
+Lisp.  Rather than changing the name in his program, he can <arg>shadow</arg>
+<obj>copy-list</obj> in the program's package.  Shadowing a symbol in a package
+means putting a symbol in that package which hides any symbols with the
+same name which could otherwise have been inherited there.  The symbol
+is explicitly marked as a <arg>shadowing symbol</arg> so that the name conflict
+does not result in an error.
+</p>
+
+<p>Shadowing of symbols and shadowing of bindings are quite
+distinct.  The same word is used for them because they are both examples
+of the general abstract concept of shadowing, which is meaningful
+whenever there is inheritance.
+</p>
+
+<p>Shadowing can be done in the definition of a package (see
+<ref definition-in-file="packd" key="defpackage-fun" title="Macro defpackage" type="mac"></ref>) or by calling the function <obj>shadow</obj>.  <obj>(shadow
+&quot;COPY-LIST&quot;)</obj> creates a new symbol named <obj>copy-list</obj> in the current
+package, regardless of any symbols with that name already available
+through inheritance.  Once the new symbol is present directly in the
+package and marked as a shadowing symbol, the potentially inherited
+symbols are irrelevant.
+</p>
+<definition><define key="shadow-fun" name="shadow" type="fun"><args>names <standard>&amp;optional</standard> (package <obj>*package*</obj>)</args>
+</define>
+
+<description>Makes sure that shadowing symbols with the specified names exist in
+<arg>package</arg>.  <arg>names</arg> is either a string or symbol or a list of such.
+If symbols are used, only their names matter; they are equivalent to
+strings.  Each name specified is handled independently as follows:
+
+If there is a symbol of that name present directly in <arg>package</arg>, it is
+marked as a shadowing symbol, to avoid any complaints about name conflicts.
+
+Otherwise, a new symbol of that name is created and interned in
+<arg>package</arg>, and marked as a shadowing symbol.
+</description></definition>
+<p>Shadowing must be done before programs are loaded into the package,
+since if the programs are loaded without shadowing first they will
+contain pointers to the undesired inherited symbol.  Merely shadowing
+the symbol at this point does not alter those pointers; only reloading
+the program and rebuilding its data structures from scratch can do that.
+</p>
+
+<p>If it is necessary to refer to a shadowed symbol, it can be done
+using a package prefix, as in <obj>global:copy-list</obj>.
+</p>
+
+<p>Shadowing is not only for symbols inherited from <obj>global</obj>; it can be
+used to reject inheritance of any symbol.  Shadowing is the primary means
+of resolving <arg>name conflicts</arg> in which there multiple symbols with the
+same name are available, due to inheritance, in one package.
+</p>
+
+<p>Name conflicts are not permitted to exist unless a resolution for the
+conflict has been stated in advance by specifying explicitly which
+symbol is actually to be seen in package.  If no resolution has been
+specified, any command which would create a name conflict signals an
+error instead.
+</p>
+
+<p>For example, a name conflict can be created by <obj>use-package</obj> if it adds a new
+used package with its own symbol <obj>foo</obj> to a package which already has or inherits
+a different symbol with the same name <obj>foo</obj>.  <obj>export</obj> can cause a name conflict
+if the symbol becoming external is now supposed to be inherited by another
+package which already has a conflicting symbol.  On either occasion, if shadowing
+has not already been performed to control the outcome, an error is signaled
+and the useage or exportation does not occur.
+</p>
+
+<p>The conflict is resolved--in advance, always--by placing the preferred
+choice of symbol in the package directly, and marking it as a shadowing
+symbol.  This can be done with the function <obj>shadowing-import</obj>.
+(Actually, you can proceed from the error and specify a resolution, but
+this works by shadowing and retrying.  From the point of view of the
+retried operation, the resolution has been done in advance.)
+</p>
+<definition><define key="shadowing-import-fun" name="shadowing-import" type="fun"><args>symbols <standard>&amp;optional</standard> (package <obj>*package*</obj>)</args>
+</define>
+
+<description>Interns the specified symbols in <arg>package</arg> and marks them as shadowing symbols.
+<arg>symbols</arg> must be a list of symbols or a single symbol; strings are not allowed.
+
+Each symbol specified is placed directly into <arg>package</arg>, after first removing any
+symbol with the same name already interned in <arg>package</arg>.  This is rather drastic,
+so it is best to use <obj>shadowing-import</obj> right after creating a package, when
+it is still empty.
+
+<obj>shadowing-import</obj> is primarily useful for choosing one of several conflicting
+external symbols present in packages to be used.
+</description></definition>
+<p>Once a package has a shadowing symbol named <obj>foo</obj> in it, any other potentially
+conflicting external symbols with name <obj>foo</obj> can come and go in the inherited
+packages with no effect.  It is therefore possible to perform the
+<obj>use-package</obj> of another package containing another <obj>foo</obj>, or to export
+the <obj>foo</obj> in one of the used packages, without getting an error.
+</p>
+
+<p>In fact, <obj>shadow</obj> also marks the symbol it creates as a shadowing
+symbol.  If it did not do so, it would be creating a name conflict and
+would always get an error.
+</p>
+<definition><define key="package-shadowing-symbols-fun" name="package-shadowing-symbols" type="fun"><args>package</args>
+</define>
+
+<description>Returns the list of shadowing symbols of <arg>package</arg>.  Each of these is
+a symbol present directly in <arg>package</arg>.  When a symbol is present
+directly in more than one package, it can be a shadowing symbol in one
+and not in another.
+</description></definition></section><a name="Styles of Using Packages"></a>
+
+
+<section chapter-number="28" name="Styles of Using Packages" number="8" title="Styles of Using Packages"><p>The unsophisticated user need never be aware of the existence of
+packages when writing his programs.  His files are loaded into package
+<obj>user</obj> by default, and keyboard input is also read in <obj>user</obj> by
+default.  Since all the functions that unsophisticated users are likely
+to need are provided in the <obj>global</obj> package, which <obj>user</obj> inherits
+from, they are all available without special effort.  In this manual,
+functions that are not in the <obj>global</obj> package are documented with
+colons in their names, and they are all external, so typing the name the way
+it is documented does work in both traditional and Common Lisp syntax.
+</p>
+
+<p>However, if you are writing a generally useful tool, you should
+put it in some package other than <obj>user</obj>, so that its internal
+functions will not conflict with names other users use.  If your program
+contains more than a few files, it probably should have its own
+package just on the chance that someone else will use it someday
+along with other programs.
+</p>
+
+<p>If your program is large, you can use multiple packages to help keep
+its modules independent.  Use one package for each module, and export
+from it those of the module's symbols which are reasonable for other
+modules to refer to.  Each package can use the packages of other modules
+that it refers to frequently.
+</p>
+</section><a name="Package Naming"></a>
+
+
+<section chapter-number="28" name="Package Naming" number="9" title="Package Naming"><index-entry index="concepts" title="names (of packages)"></index-entry>
+
+<index-entry index="concepts" title="nicknames (of packages)"></index-entry>
+
+<p>A package has one name, also called the <arg>primary name</arg> for extra clarity, and can
+have in addition any number of <arg>nicknames</arg>.  All of these names are defined
+globally, and all must be unique.  An attempt to define a package with a name or
+nickname that is already in use is an error.
+</p>
+
+<p>Either the name of a package or one of its nicknames counts as a <arg>name for</arg> the
+package.  All of the functions described below that accept a package as an
+argument also accept a name for a package (either as a string, or as a symbol
+whose print-name is the name).  Arguments that are lists of packages may also contain
+names among the elements.
+</p>
+
+<p>When the package object is printed, its primary name is used.  The name is
+also used by default when printing package prefixes of symbols.  However, when
+you create the package you can specify that one of the nicknames should be
+used instead for this purpose.  The name to be used for this is called the
+<arg>prefix name</arg>.
+</p>
+
+<p>Case is significant in package name lookup.   Usually package names should be
+all upper case.  <obj>read</obj> converts package prefixes to upper case except for quoted
+characters, just as it does to symbol names, so the package prefix will match
+the package name no matter what case you type it in, as long as the actual name
+is upper case: <obj>TV:FOO</obj> and <obj>tv:foo</obj> refer to the same symbol.
+<obj>|tv|:foo</obj> is different from them, and normally erroneous since there is no
+package initially whose name is `tv' in lower case.
+</p>
+
+<p>In the functions <obj>find-package</obj> and <obj>pkg-find-package</obj>, and others which accept
+package names in place of packages, if you specify the name as a string you
+must give it in the correct case:
+
+<lisp>(find-package &quot;TV&quot;) =&gt; <standard>the <obj>tv</obj> package</standard>
+(find-package &quot;tv&quot;) =&gt; nil
+</lisp>You can alternatively specify the name as a symbol; then the symbol's pname is
+used.  Since <obj>read</obj> converts the symbol's name to upper case, you can type the
+symbol in either upper or lower case:
+
+<lisp>(find-package 'TV) =&gt; <standard>the <obj>tv</obj> package</standard>
+(find-package 'tv) =&gt; <standard>the <obj>tv</obj> package</standard>
+<exdent amount="96"><caption>since both use the symbol whose pname is <obj>&quot;TV&quot;</obj>. </caption></exdent></lisp></p>
+
+<p>Relevant functions:
+</p>
+<definition><define key="package-name-fun" name="package-name" type="fun"><args>package</args>
+</define>
+
+<description>Returns the name of <arg>package</arg> (as a string).
+</description></definition><definition><define key="package-nicknames-fun" name="package-nicknames" type="fun"><args>package</args>
+</define>
+
+<description>Returns the list of nicknames (strings) of <arg>package</arg>.
+This does not include the name itself.
+</description></definition><definition><define key="package-prefix-print-name-fun" name="package-prefix-print-name" type="fun"><args>package</args>
+</define>
+
+<description>Returns the name to be used for printing package prefixes that refer to <arg>package</arg>.
+</description></definition><definition><define key="rename-package-fun" name="rename-package" type="fun"><args>package new-name <standard>&amp;optional</standard> new-nicknames</args>
+</define>
+
+<description>Makes <arg>new-name</arg> be the name for <arg>package</arg>, and makes
+<arg>new-nicknames</arg> (a list of strings, possibly <obj>nil</obj>) be its nicknames.
+An error is signaled if the new name or any of the new nicknames is
+already in use for some other package.
+</description></definition><definition><define key="find-package-fun" name="find-package" type="fun"><args>name <standard>&amp;optional</standard> use-local-names-package</args>
+</define>
+
+<description>Returns the package which <arg>name</arg> is a name for, or <obj>nil</obj> if there is none.
+If <arg>use-local-names-package</arg> is non-<obj>nil</obj>, the local nicknames of that package
+are checked first.  Otherwise only actual names and nicknames are accepted.
+<arg>use-local-names-package</arg> should be supplied only when interpreting
+package prefixes.
+
+If <arg>name</arg> is a package, it is simply returned.
+
+If a list is supplied as <arg>name</arg>, it is interpreted as a specification of a package
+name and how to create it.  The list should look like
+
+<lisp>(<arg>name</arg> <arg>super-or-use</arg> <arg>size</arg>)
+<exdent amount="96"><caption>or </caption>(<arg>name</arg> <arg>options</arg>)
+</exdent></lisp>If <arg>name</arg> names a package, it is returned.  Otherwise a package is created by passing
+<arg>name</arg> and the <arg>options</arg> to <obj>make-package</obj>.
+</description></definition><definition><define key="pkg-find-package-fun" name="pkg-find-package" type="fun"><args>name <standard>&amp;optional</standard> create-p use-local-names-package</args>
+</define>
+
+<description>Invokes <obj>find-package</obj> on <arg>name</arg> and returns the package that finds, if any.
+Otherwise, a package may be created, depending on <arg>create-p</arg> and possibly
+on how the user answers.  These values of <arg>create-p</arg> are meaningful:
+
+<table><tbody><tr><td><obj>nil</obj></td><td>An error is signaled if an existing package is not found.
+</td></tr><tr><td><obj>t</obj></td><td>A package is created, and returned.
+</td></tr><tr><td><obj>:find</obj></td><td><obj>nil</obj> is returned.
+</td></tr><tr><td><obj>:ask</obj></td><td>The user is asked whether to create a package.
+If he answers <obj>Yes</obj>, a package is created and returned.
+If he answers <obj>No</obj>, <obj>nil</obj> is returned.
+</td></tr></tbody></table>
+If a package is created, it is done by calling <obj>make-package</obj>
+with <arg>name</arg> as the only argument.
+
+This function is not quite for historical compatibility only, since
+certain values of <arg>create-p</arg> provide useful features.
+</description></definition><definition><define key="sys:package-not-found-condition" name="sys:package-not-found" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>is signaled by <obj>pkg-find-package</obj> with second argument
+<obj>:error</obj>, <obj>nil</obj> or omitted, when the package does not exist.
+
+The condition instance supports the operations <obj>:name</obj> and
+<obj>:relative-to</obj>; these return whatever was passed as the first and
+third arguments to <obj>pkg-find-package</obj> (the package name, and the
+package whose local nicknames should be searched).
+
+The proceed types that may be available include
+
+<table><tbody><tr><td><obj>:retry</obj></td><td>says to search again for the specified name
+in case it has become defined; if it is still undefined, the error occurs again.
+</td></tr><tr><td><obj>:create-package</obj></td><td>says to search again for the specified name, and create
+a package with that name (and default characteristics) if none exists yet.
+</td></tr><tr><td><obj>:new-name</obj></td><td>is accompanied by a name (a string) as an argument.  That name
+is used instead, ignoring any local nicknames.  If that name too is not found,
+another error occurs.
+</td></tr><tr><td><obj>:no-action</obj></td><td>(available on errors from within <obj>read</obj>) says to continue with the
+entire <obj>read</obj> as well as is possible without having a valid package.
+</td></tr></tbody></table></description></definition>
+
+
+<subsection name="NIL" title="Local Nicknames for Packages"><index-entry index="concepts" title="local nicknames of packages"></index-entry>
+
+<p>Suppose you wish to test new versions of the Chaosnet
+and file access programs.  You could create new packages <obj>test-chaos</obj>
+and <obj>test-file-access</obj>, and use them for loading the new versions of the programs.
+Then the old, installed versions would not be affected; you could still
+use them to edit and save the files of the new versions.  But one problem
+must be solved: when the new file access program says &quot;<obj>chaos:connect</obj>&quot;
+it must get <obj>test-chaos:connect</obj> rather than the actual <obj>chaos:connect</obj>.
+</p>
+
+<p>This is accomplished by making <obj>&quot;CHAOS&quot;</obj> a local nickname for
+<obj>&quot;TEST-CHAOS&quot;</obj> in the context of the package <obj>test-file-access</obj>.
+This means that the when a <obj>chaos:</obj> prefix is encountered while
+reading in package <obj>test-file-access</obj>, it refers to <obj>test-chaos</obj>
+rather than <obj>chaos</obj>.
+</p>
+
+<p>Local nicknames are allowed to conflict with global names and nicknames;
+in fact, they are rarely useful unless they conflict.  The local nickname
+takes precedence over the global name.
+</p>
+
+<index-entry index="concepts" title="package prefixes"></index-entry>
+
+<p>It is necessary to have a way to override local nicknames.  If you
+<obj>(pkg-goto 'test-file-access)</obj>, you may wish to call a function
+in <obj>chaos</obj> (to make use of the old, working Chaosnet program).
+This can be done using <obj>#:</obj> as the package prefix instead of just <obj>:</obj>.
+<obj>#:</obj> inhibits the use of local nicknames when it is processed.
+It always refers to the package which is globally the owner of
+the name that is specified.
+</p>
+
+<p><obj>#:</obj> prefixes are printed whenever the package name printed is
+also a local nickname in the current package; that is, whenever
+an ordinary colon prefix would be misunderstood when read back
+</p>
+
+<p>These are the functions which manage local nicknames.
+</p>
+<definition><define key="pkg-add-relative-name-fun" name="pkg-add-relative-name" type="fun"><args>in-pkg name for-pkg</args>
+</define>
+
+<description>Defines <arg>name</arg> as a local nickname in <arg>in-pkg</arg> for <arg>for-pkg</arg>.
+<arg>in-pkg</arg> and <arg>for-pkg</arg> may be packages, symbols or strings.
+</description></definition><definition><define key="pkg-delete-relative-name-fun" name="pkg-delete-relative-name" type="fun"><args>in-pkg name</args>
+</define>
+
+<description>Eliminates <arg>name</arg> as a local nickname in <arg>in-pkg</arg>.
+</description></definition>
+<p>Looking up local nicknames is done with <obj>find-package</obj>, by
+providing a non-<obj>nil</obj> <arg>use-local-names-package</arg> argument.
+</p>
+</subsection></section><a name="defining-packages"></a>
+
+
+<section chapter-number="28" name="defining-packages" number="10" title="Defining Packages"><index-entry index="concepts" title="defining packages"></index-entry>
+
+<index-entry index="concepts" title="package declarations"></index-entry>
+
+<p>Before any package can be referred to or made current, it must be defined.
+This is done with the special form <obj>defpackage</obj>, which tells the package system
+all sorts of things, including the name of the package, what packages it should use,
+its estimated size, and some of the symbols which belong in it.  The <obj>defpackage</obj>
+form is recognized by Zmacs as a definition of the package name.
+</p>
+<definition><define key="defpackage-fun" name="defpackage" type="mac"><args>name <standard>&amp;key</standard> ...</args>
+</define>
+
+<description>Defines a package named <arg>name</arg>.  The alternating keywords
+and values are passed, unevaluated, to <arg>make-package</arg> to specify
+the rest of the information about how to construct the package.
+
+If a package named <arg>name</arg> already exists, it is modified
+insofar as this is possible to correspond to the new definition.
+
+Here are the possible options and their meanings
+
+<table><tbody><tr><td><arg>nicknames</arg></td><td>A list of nicknames for the new package.  The nicknames should be specified
+as strings.
+
+</td></tr><tr><td><arg>size</arg></td><td>A number; the new package is initially made large enough to hold at least
+this many symbols before a rehash is needed.
+
+</td></tr><tr><td><arg>use</arg></td><td>A list of packages or names for packages which the new package should
+inherit from, or a single name or package.  It defaults to just the
+<obj>global</obj> package.
+
+</td></tr><tr><td><arg>prefix-name</arg></td><td>Specifies the name to use for printing package prefixes that refer to
+this package.  It must be equal to either the package name or one of the
+nicknames.  The default is to use the name.
+
+</td></tr><tr><td><arg>invisible</arg></td><td>If non-<obj>nil</obj>, means that this package should not be put on the list
+<obj>*all-packages*</obj>.  As a result, <obj>find-package</obj> will not find this
+package, not by its name and not by any of its nicknames.  You can make
+normal use of the package in all other respects (passing it as the
+second argument to <obj>intern</obj>, passing it to <obj>use-package</obj> to make
+other packages inherit from it or it from others, and so on).
+
+</td></tr><tr><td><arg>export</arg></td><td></td></tr><tr><td><arg>import defpackage</arg></td><td></td></tr><tr><td><arg>shadow defpackage</arg></td><td></td></tr><tr><td><arg>shadowing-import defpackage</arg></td><td>If any of these arguments is non-<obj>nil</obj>, it is passed to the function
+of the same name, to operate on the package.
+Thus, if <arg>shadow</arg> is <obj>(&quot;FOO&quot; &quot;BAR&quot;)</obj>, then
+
+<lisp>(shadow <arg>this-package</arg> '(&quot;FOO&quot; &quot;BAR&quot;))
+</lisp>is done.
+
+You could accomplish as much by calling <obj>export</obj>, <obj>import</obj>,
+<obj>shadow</obj> or <obj>shadowing-import</obj> yourself, but it is clearer to
+specify all such things in one central place, the <obj>defpackage</obj>.
+
+</td></tr><tr><td><arg>import-from</arg></td><td>If non-<obj>nil</obj>, is a list containing a package (or package name)
+followed by names of symbols to import from that package.  Specifying
+<arg>import-from</arg> as <obj>(chaos &quot;CONNECT&quot; &quot;LISTEN&quot;)</obj> is nearly the same as specifying
+<arg>import</arg> as <obj>(chaos:connect chaos:listen)</obj>, the difference being that with
+<arg>import-from</arg> the symbols <obj>connect</obj> and <obj>listen</obj> are not looked up in the <obj>chaos</obj>
+package until it is time to import them.
+
+</td></tr><tr><td><arg>super</arg></td><td>If non-<obj>nil</obj>, should be a package or name to be the superpackage
+of the new package.  This means that the new package should inherit from
+that package, and also from all the packages that package inherits from.
+In addition, the superpackage is marked as autoexporting.
+Superpackages are obsolete and are implemented for compatibility only.
+
+</td></tr><tr><td><arg>relative-names</arg></td><td>An alist specifying the local nicknames to have in this
+package for other packages.  Each element looks like <obj>(<arg>localname</arg> <arg>package</arg>)</obj>,
+where <arg>package</arg> is a package or a name for one, and <arg>localname</arg> is the
+desired local nickname.
+
+</td></tr><tr><td><arg>relative-names-for-me</arg></td><td>An alist specifying local nicknames by which this
+package can be referred to from other packages.  Each element looks like
+<obj>(<arg>package</arg> <arg>localname</arg>)</obj>, where <arg>package</arg> is a package name and <arg>localname</arg> is
+the name to refer to this package by from <arg>package</arg>.
+</td></tr></tbody></table>
+</description></definition>
+<p>For example, the system package <obj>eh</obj> could have been defined this way:
+
+<lisp>(defpackage &quot;EH&quot; :size 1200
+  :use (&quot;GLOBAL&quot; &quot;SYS&quot;) :nicknames (&quot;DBG&quot; &quot;DEBUGGER&quot;)
+  :shadow (&quot;ARG&quot;))
+</lisp>It has room initially for at least 1200. symbols,
+nicknames <obj>dbg</obj> and <obj>debugger</obj>, uses <obj>system</obj> as well as <obj>global</obj>,
+and contains a symbol named <obj>arg</obj> which is not the same as the <obj>arg</obj>
+in <obj>global</obj>.  You may note that the function <obj>eh:arg</obj> is documented in
+this manual (see <ref definition-in-file="debug" key="eh-arg-fun" title="Function eh-arg" type="fun"></ref>), as is the function <obj>arg</obj> (see <ref definition-in-file="fd-fun" key="arg-fun" title="Function arg" type="fun"></ref>).
+</p>
+
+<p>The packages of our inheritance example (<ref definition-in-file="packd" key="pkg-inheritance-example" type="page"></ref>)
+might have been defined by
+
+<lisp>(defpackage 'chaos :size 1000 :use '(sys global)
+   :export (&quot;CONNECT&quot; &quot;OPEN-STREAM&quot; &quot;LISTEN&quot; ...
+            &quot;OPEN-STATE&quot; &quot;RFC-RECEIVED-STATE&quot; ...))
+
+(defpackage 'file-access :size 1500
+   :use '(chaos global)
+   :export (&quot;OPEN-FILE&quot; &quot;CLOSE-FILE&quot; &quot;DELETE-FILE&quot; ...)
+   :import (chaos:connect chaos:open-state))
+
+(defpackage 'mypackage :size 400
+   :use '(file-access global))
+</lisp></p>
+
+<p>It is usually best to put the package definition in a separate file,
+which should be loaded into the <obj>user</obj> package.  (It cannot
+be loaded into the package it is defining, and no other package has
+any reason to be preferred.)  Often the files to be loaded into the
+package belong to one or a few systems; then it is often convenient
+to put the system definitions in the same file (see <ref chapter="29" definition-in-file="maksys" key="system-system" section="0" title="Maintaining Large Systems" type="section"></ref>).
+</p>
+
+<p>A package can also be defined by the package attribute in a file's
+<example>-*-</example> line.  Normally this specifies which (existing) package to
+load, compile or edit the file in.  But if the attribute value
+is a list, as in
+
+<lisp>-*-Package: (foo :size 300 :use (global system)); ...-*-
+</lisp>then loading, compiling or editing the file automatically
+creates package <obj>foo</obj>, if necessary with the specified options (just like
+<obj>defpackage</obj> options).  No <obj>defpackage</obj> is needed.
+It is wise to use this feature only when the package is used
+for just a single file.  For programs containing multiple files,
+it is good to make a system for them, and then convenient to
+put a <obj>defpackage</obj> near the <obj>defsystem</obj>.
+</p>
+<definition><define key="make-package-fun" name="make-package" type="fun"><args>name <standard>&amp;key</standard> nicknames size use prefix-name invisible export shadow import shadowing-import import-from super relative-names relative-names-for-me</args>
+</define>
+
+<description>Creates and returns new package with name <arg>name</arg>.
+
+The meanings of the keyword arguments are described under <obj>defpackage</obj>
+(<ref definition-in-file="packd" key="defpackage-fun" title="Macro defpackage" type="mac"></ref>).
+</description></definition><definition><define key="pkg-create-package-fun" name="pkg-create-package" type="fun"><args>name <standard>&amp;optional</standard> (super <obj>*package*</obj>) (size <obj>#o 200</obj>)</args>
+</define>
+
+<description>Creates a new package named <arg>name</arg> of size <arg>size</arg> with superpackage <arg>super</arg>.
+This function is obsolete.
+</description></definition><definition><define key="kill-package-fun" name="kill-package" type="fun"><args>name-or-package</args>
+</define>
+
+<description>Kills the package specified or named.  It is removed from
+the list which is searched when package names are looked up.
+</description></definition><definition>
+<define key="package-declare-fun" name="package-declare" type="mac"></define>
+
+<description><obj>package-declare</obj> is an older way of defining a package, obsolete
+but still used.
+
+<lisp>(package-declare <arg>name</arg> <arg>superpackage</arg> <arg>size</arg> nil
+                 <arg>option-1</arg> <arg>option-2</arg> ...)
+</lisp>creates a package named <arg>name</arg> with initial size <arg>size</arg>.
+
+<arg>super</arg> specifies the <arg>superpackage</arg> to use for this package.
+Superpackages were an old way of specifying inheritance; it was
+transitive, all symbols were inherited, and only one inheritance path
+could exist.  If <arg>super</arg> is <obj>global</obj>, nothing special needs to be
+done; otherwise, the old superpackage facility is simulated using the
+<arg>super</arg> argument to <obj>make-package</obj>.
+
+<arg>body</arg> is now allowed to contain only these types of elements:
+
+<table><tbody><tr><td><obj>(shadow <arg>names</arg>)</obj></td><td>Passes the names to the function <obj>SHADOW</obj>.
+</td></tr><tr><td><obj>(intern <arg>names</arg>)</obj></td><td>Converts each name to a string and interns it in the package.
+</td></tr><tr><td><obj>(refname <arg>refname</arg> <arg>packagename</arg>)</obj></td><td>Makes <arg>refname</arg> a local nickname in this package
+for the package named <arg>packagename</arg>.
+</td></tr><tr><td><obj>(myrefname <arg>packagename</arg> <arg>refname</arg>)</obj></td><td>Makes <arg>refname</arg> a local nickname in the package named <arg>packagename</arg>
+for this package.  If <arg>packagename</arg> is <obj>&quot;GLOBAL&quot;</obj>, makes <arg>refname</arg> a
+global nickname for this package.
+</td></tr><tr><td><obj>(external <arg>names</arg>)</obj></td><td>Does nothing.  This controlled an old feature that no longer exists.
+</td></tr></tbody></table></description></definition></section><a name="Operating on All the Symbols in a Package"></a>
+
+
+<section chapter-number="28" name="Operating on All the Symbols in a Package" number="11" title="Operating on All the Symbols in a Package"><p>To find and operate on every symbol present or available in a package,
+you can choose between iteration macros that resemble <obj>dolist</obj> and
+mapping functionals that resemble <obj>mapcar</obj>.
+</p>
+
+<p>Note that all constructs that include inherited symbols in the iteration
+can process a symbol more than once.  This is because a symbol can be
+directly present in more than one package.  If it is directly present in
+the specified package and in one or more of the used packages, the
+symbol is processed once each time it is encountered.  It is also
+possible for the iteration to include a symbol that is not actually
+available in the specified package.  If that package shadows symbols
+present in the packages it uses, the shadowed symbols are processed
+anyway.  If this is a problem, you can explicitly use <obj>intern-soft</obj> to
+see if the symbol handed to you is really available in the package.
+This test is not done by default because it is slow and rarely needed.
+</p>
+<definition><define key="do-symbols-fun" name="do-symbols" type="mac"><args>(var package result-form) body...</args>
+</define>
+
+<description>Executes <arg>body</arg> once for each symbol findable in <arg>package</arg> either
+directly or through inheritance.  On each iteration, the variable
+<arg>var</arg> is bound to the next such symbol.  Finally the <arg>result-form</arg>
+is executed and its values are returned.
+</description></definition><definition><define key="do-local-symbols-fun" name="do-local-symbols" type="mac"><args>(var package result-form) body...</args>
+</define>
+
+<description>Executes <arg>body</arg> once for each symbol present directly in <arg>package</arg>.
+Inherited symbols are not considered.  On each iteration, the variable
+<arg>var</arg> is bound to the next such symbol.  Finally the <arg>result-form</arg>
+is executed and its values are returned.
+</description></definition><definition><define key="do-external-symbols-fun" name="do-external-symbols" type="mac"><args>(var package result-form) body...</args>
+</define>
+
+<description>Executes <arg>body</arg> once for each external symbol findable in <arg>package</arg>
+either directly or through inheritance.  On each iteration, the variable
+<arg>var</arg> is bound to the next such symbol.  Finally the <arg>result-form</arg>
+is executed and its values are returned.
+</description></definition><definition><define key="do-local-external-symbols-fun" name="do-local-external-symbols" type="mac"><args>(var package result-form) body...</args>
+</define>
+
+<description>Executes <arg>body</arg> once for each external symbol present directly in
+<arg>package</arg>.  Inherited symbols are not considered.  On each iteration,
+the variable <arg>var</arg> is bound to the next such symbol.  Finally the
+<arg>result-form</arg> is executed and its values are returned.
+</description></definition><definition><define key="do-all-symbols-fun" name="do-all-symbols" type="mac"><args>(var result-form) body...</args>
+</define>
+
+<description>Executes <arg>body</arg> once for each symbol present in any package.
+On each iteration, the variable <arg>var</arg> is bound to the next such symbol.
+Finally the <arg>result-form</arg> is executed and its values are returned.
+
+Since a symbol can be directly present in more than one package,
+it is possible for the same symbol to be processed more than once.
+</description></definition><definition><define key="mapatoms-fun" name="mapatoms" type="fun"><args>function <standard>&amp;optional</standard> (package <obj>*package*</obj>) (inherited-p <obj>t</obj>)</args>
+</define>
+
+<description><arg>function</arg> should be a function of one argument.  <obj>mapatoms</obj> applies
+<arg>function</arg> to all of the symbols in <arg>package</arg>.  If <arg>inherited-p</arg> is
+non-<obj>nil</obj>, then the function is applied to all symbols available in <arg>package</arg>,
+including inherited symbols.
+</description></definition><definition><define key="mapatoms-all-fun" name="mapatoms-all" type="fun"><args>function <standard>&amp;optional</standard> (package <obj>&quot;GLOBAL&quot;</obj>)</args>
+</define>
+
+<description><arg>function</arg> should be a function of one argument.
+<obj>mapatoms-all</obj> applies <arg>function</arg> to all of the symbols
+in <arg>package</arg> and all other packages which use <arg>package</arg>.
+
+It is used by such functions as <obj>apropos</obj> and <obj>who-calls</obj> (see <ref definition-in-file="fd-hac" key="apropos-fun" title="Function apropos" type="fun"></ref>)
+
+<lisp><exdent amount="96"><caption>Example: </caption>(mapatoms-all
+  #'(lambda (x)
+      (and (alphalessp 'z x)
+           (print x))))
+</exdent></lisp></description></definition></section><a name="Packages as Lisp Objects"></a>
+
+
+<section chapter-number="28" name="Packages as Lisp Objects" number="12" title="Packages as Lisp Objects"><p>A package is a conceptual name space; it is also a Lisp object which
+serves to record the contents of that name space, and is passed to
+functions such as <obj>intern</obj> to identify a name space.  
+</p>
+<definition><define key="packagep-fun" name="packagep" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if object is a package.
+</description></definition><definition>
+<define key="*all-packages*-var" name="*all-packages*" type="var"></define>
+
+<description>The value is a list of all packages, except for invisible ones
+(see the <arg>invisble</arg> argument to <obj>make-package</obj>, <ref definition-in-file="packd" key="make-package-fun" title="Function make-package" type="fun"></ref>).
+</description></definition><definition>
+<define key="list-all-packages-fun" name="list-all-packages" type="fun"></define>
+
+<description>A Common Lisp function which returns <obj>*all-packages*</obj>.
+</description></definition><definition>
+<define key="pkg-global-package-var" name="pkg-global-package" type="const"></define>
+<define key="pkg-system-package-var" name="pkg-system-package" type="const"></define>
+<define key="pkg-keyword-package-var" name="pkg-keyword-package" type="const"></define>
+
+<description>Respectively, the packages named <obj>global</obj>, <obj>system</obj> and <obj>keyword</obj>.
+</description></definition><definition><define key="describe-package-fun" name="describe-package" type="fun"><args>package</args>
+</define>
+
+<description>Prints everything there is to know about <arg>package</arg>,
+except for all the symbols interned in it.
+<arg>package</arg> can be specified as a package or as the name of one.
+</description></definition>
+<p>To see all the symbols interned in a package, do
+
+<lisp>(mapatoms 'print <arg>package</arg>)
+</lisp></p>
+</section><a name="Common Lisp and Packages"></a>
+
+
+<section chapter-number="28" name="Common Lisp and Packages" number="13" title="Common Lisp and Packages"><p>Common Lisp does not have <obj>defpackage</obj> or <example>-*-</example> lines in files.
+One is supposed to use the function <obj>in-package</obj> to specify
+which package a file is loaded in.
+</p>
+<definition><define key="in-package-fun" name="in-package" type="fun"><args>name <standard>&amp;key</standard> nicknames use</args>
+</define>
+
+<description>Creates a package named <arg>name</arg>, with specified nicknames and used packages,
+or modifies an existing package named <arg>name</arg> to have those nicknames and
+used packages.
+
+Then <obj>*package*</obj> is set to this package.
+</description></definition>
+<p>Writing a call to <obj>in-package</obj> at the beginning of the file
+causes <obj>*package*</obj> to be set to that package for the rest of the file.
+</p>
+
+<p>If you wish to use this technique for the sake of portability,
+it is best to have a <example>-*-</example> line with a package attribute also.
+While <obj>in-package</obj> does work for loading and compilation of the file,
+Zmacs does not respond to it.
+</p>
+
+<p>In Common Lisp, the first argument to <obj>intern</obj> or <obj>find-symbol</obj>
+is required to be a symbol.
+</p>
+</section><a name="Initialization of the Package System"></a>
+
+
+<section chapter-number="28" name="Initialization of the Package System" number="14" title="Initialization of the Package System"><p indent="1">        This section describes how the package system is initialized
+when generating a new software release of the Lisp Machine system;
+none of this should affect users.
+</p>
+
+<p>The cold load, which contains the irreduceable minimum of the Lisp
+system needed for loading the rest, contains the code for packages, but
+no packages.  Before it begins to read from the keyboard, it creates all
+the standard packages based on information in <obj>si:initial-packages</obj>,
+applying <obj>make-package</obj> to each element of it.  At first all of the
+packages are empty.  The symbols which belong in the packages <obj>global</obj>
+and <obj>system</obj> are recorded on lists which are made from the files
+<obj>SYS: SYS2; GLOBAL LISP</obj> and <obj>SYS: SYS2; SYSTEM LISP</obj>.  Symbols
+referred to in the cold load which belong in packages other than <obj>si</obj>
+have strings (package names) in their package slots; scanning through
+the area which contains all the symbols, the package initializer puts
+each such symbol into the package it specifies, and all the rest into
+<obj>si</obj> unless they are already in <obj>global</obj> or <obj>system</obj>.
+</p>
+</section><a name="Initial Packages"></a>
+
+
+<section chapter-number="28" name="Initial Packages" number="15" title="Initial Packages"><p>The initially present packages include:
+</p>
+
+<table><tbody><tr><td><obj>global</obj></td><td>Contains advertised global functions.
+</td></tr><tr><td><obj>user</obj></td><td>The default current package for the user's type-in.
+</td></tr><tr><td><obj>sys <standard>or</standard> system</obj></td><td>Contains internal global symbols used by various system programs.
+Many system packages use <obj>system</obj>.
+</td></tr><tr><td><obj>si <standard>or</standard> system-internals</obj></td><td>Contains subroutines of many advertised
+system functions.  Many files of the Lisp system are loaded in <obj>si</obj>.
+</td></tr><tr><td><obj>compiler</obj></td><td>Contains the compiler.  <obj>compiler</obj> uses <obj>sys</obj>.
+</td></tr><tr><td><obj>fs <standard>or</standard> file-system</obj></td><td>Contains the code that deals with pathnames and accessing files.
+<obj>fs</obj> uses <obj>sys</obj>.
+</td></tr><tr><td><obj>eh <standard>or</standard> dbg</obj></td><td>Contains the error handler and the debugger.  Uses <obj>sys</obj>.
+</td></tr><tr><td><obj>cc <standard>or</standard> cadr</obj></td><td>Contains the program that is used for debugging another machine.  Uses <obj>sys</obj>.
+</td></tr><tr><td><obj>chaos</obj></td><td>Contains the Chaosnet controller.  Uses <obj>sys</obj>.
+</td></tr><tr><td><obj>tv</obj></td><td>Contains the window system.  Uses <obj>sys</obj>.
+</td></tr><tr><td><obj>zwei</obj></td><td>Contains the editor.
+</td></tr><tr><td><obj>format</obj></td><td>Contains the function <obj>format</obj> and its associated subfunctions.
+</td></tr><tr><td><obj>cli</obj></td><td>(Common Lisp Incompatible) contains symbols such as <obj>cli:member</obj> which
+the same pname as symbols in <obj>global</obj> but incompatible definitions.
+</td></tr></tbody></table>
+<p>There are quite a few others, but it would be pointless to list them all.
+</p>
+
+<p indent="1">        Packages that are used for special sorts of data:
+
+<table><tbody><tr><td><obj>fonts</obj></td><td>Contains the names of all fonts.
+</td></tr><tr><td><obj>format</obj></td><td>Contains the keywords for <obj>format</obj>, as well as the code.
+</td></tr><tr><td><obj>keyword</obj></td><td>Contains all keyword symbols, symbols always written with a plain colon as a prefix.
+These symbols are peculiar in that they are automatically given themselves as values.
+</td></tr></tbody></table></p>
+
+<p>Here is a picture depicting the initial package inheritance structure
+
+<lisp>                           global                     keyword
+                             |                          
+       /-----------------------------------\          fonts
+       |     |          |          |       |
+     user  zwei      system      format  (etc)        cli
+                        |
+                /----------------------------------\
+                |          |     |     |    |      |
+         system-internals  eh  chaos  cadr  fs  compiler
+</lisp></p>
+<disabled><a name="system-system"></a>
+
+
+<section chapter-number="28" name="system-system" number="16" title="Multiple Instantiations of a Program"><p indent="1">        This isn't finished yet, which is why we don't say how to do
+any of this.
+</p>
+
+<p indent="1">        Suppose a maintainer of ZWEI (the Lisp Machine editor) has
+made some changes to ZWEI, and would like to debug them.  He has a
+problem: if he reads in the new version, which presumably may be full
+of bugs, then he will not be able to do any editing!  This would be
+annoying, since the editor is very useful.
+</p>
+
+<p indent="1">        We would like both the regular and the experimental versions
+of the editor to <arg>both</arg> be loaded into the Lisp world.  In order for two
+definitions of each editor function to coexist, we need to load the
+new version into a separate package, which must have a different name
+(not named <obj>zwei</obj>, like the package the original editor is in).  If
+the test version's package is called <obj>test-zwei</obj>, then the user can
+try it by calling <obj>(test-zwei:ed)</obj>, and edit it using <obj>(ed)</obj>.
+</p>
+
+<p indent="1">        However, there is a problem to be faced.  The editor redefines
+a few entry-point functions (<obj>ed</obj>, <obj>edprop</obj>, etc) which reside in <obj>global</obj>.
+If the test editor redefined them, the whole point of the separate
+package would be lost.  So, the <obj>test-zwei</obj> package must <obj>shadow</obj> all these
+symbols.
+</p>
+
+<p indent="1">        Further complications are needed to make it possible to test
+one program using another instead of by hand.  Suppose that there is a
+program named <obj>random</obj> residing in its own package, and containing a
+function named <obj>number</obj>.  Suppose that we have a debugged program <obj>dp</obj>
+(Dissociated Press) which uses <obj>random:number</obj>.  And now, we have
+written a new version of <obj>random</obj> and want to test it using <obj>dp</obj>, without
+installing it and breaking system tools which use <obj>random</obj>.  What we
+want to do is to load in a test version of <obj>random</obj>, <obj>test-random</obj>, and
+also a <obj>test-dp</obj> which will refer to it, to test it with.
+</p>
+
+<p indent="1">        This can be done if we can make the <obj>test-dp</obj> package
+take references to <obj>random</obj> as references to the <obj>test-random</obj>
+package.  All this takes is
+an entry on <obj>test-dp</obj>'s refname-alist, associating the name <obj>random</obj>
+with the <obj>test-random</obj> package.  Then, when <obj>random:number</obj> is seen in the
+course of reading in the old <obj>dp</obj> program into <obj>test-dp</obj>,
+<obj>test-random:number</obj> will actually be used.  Note that normally <obj>test-dp</obj>
+wouldn't have an entry on its own refname-alist for <obj>random</obj>;  it
+would inherit the association from <obj>global</obj>.  We are actually
+shadowing in <obj>test-dp</obj> the definition of <obj>random</obj> as a package refname
+which is present in <obj>global</obj>.  Here is what we will get.
+
+<lisp>                            global  [random -&gt; random]
+                               |
+      /-----------------------------------------------\
+      |        |                      |               |
+     dp  =&gt;  random                test-dp  =&gt;      test-random
+                           [random -&gt; test-random]
+</lisp>(`=&gt;' indicates who calls whom;  `-&gt;' indicates a refname).
+</p>
+
+<p indent="1">        So far, every package has had its own name as a refname for
+itself.  A test package, however, shouldn't have its actual name as a
+refname for itself, but the name its program expects:  <obj>random</obj>, not
+<obj>test-random</obj>.  This is necessary to handle test packages with
+subpackages right, together with shadowing.  In fact every package has
+a ``program name'' as well as a ``name''.  For ordinary packages, they are
+the same, but for a test package, the program name is identical to
+that of the original package.
+</p>
+
+<p indent="1">        Suppose we have the Macsyma program with all of its sub-packages as
+described above. Further assume that the <obj>input</obj> sub-program's author
+has his own symbol named <obj>simp</obj>, and he calls <obj>macsyma:simp</obj>
+in various places to get the
+one in the <obj>macsyma</obj> package.  Now, say someone wants to load an
+experimental <obj>macsyma</obj> into the machine: he would name the new obarray
+<obj>test-macsyma</obj> or something.  In order to assure that the reference to
+<obj>macsyma:simp</obj> is properly resolved, the refname-alist of <obj>test-macsyma</obj>
+must contain <obj>test-macsyma</obj> under the name <obj>macsyma</obj>.  This, finally,
+is the reason why each package has a reference to itself on its refname-alist.
+</p>
+</section></disabled></section></chapter>
+</document-part>

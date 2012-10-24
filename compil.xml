@@ -1,0 +1,1184 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="compiler-chapter"></a>
+<chapter name="compiler-chapter" number="18" title="The Compiler"><index-entry index="concepts" title="compiler"></index-entry>
+<a name="The Basic Operations of the Compiler"></a>
+
+
+<section chapter-number="18" name="The Basic Operations of the Compiler" number="1" title="The Basic Operations of the Compiler"><p indent="1">        The purpose of the Lisp compiler is to convert Lisp functions
+into programs in the Lisp Machine's instruction set, so that they
+run more quickly and take up less storage.  Compiled functions
+are represented in Lisp by FEFs (Function
+Entry Frames), which contain machine code as well as various other information.
+The printed representation of a FEF is
+
+<lisp>#&lt;DTP-FEF-POINTER <arg>address</arg> <arg>name</arg>&gt;
+</lisp></p>
+
+<p indent="1">        If you want to understand the output of the compiler, refer
+to <ref chapter="32" definition-in-file="code" key="understanding-compiled-code" section="0" title="How to Read Assembly Language" type="section"></ref>.
+</p>
+
+<index-entry index="concepts" title="QFASL files"></index-entry>
+
+<p indent="1">        There are three ways to invoke the compiler from the Lisp
+Machine.  First, you may have an interpreted function in the Lisp
+environment that you would like to compile.  The function <obj>compile</obj> is
+used to do this.  Second, you may have code in an editor buffer that you
+would like to compile.  The Zmacs editor has commands to read code into
+Lisp and compile it.  Third, you may have a program (a group of function
+definitions and other forms) written in a file on the file system.  The
+function <obj>compile-file</obj> can translate this file into a <arg>QFASL</arg> file
+that describes the compiled functions and associated data.  The QFASL
+file format is capable of representing an arbitrary collection of Lisp
+objects, including shared structure.  The name derives from `Q', a
+prefix once used to mean ``for the Lisp Machine, not for Maclisp'', and
+`FASL', an abbreviation for ``fast loading''.
+</p>
+</section><a name="How to Invoke the Compiler"></a>
+
+<section chapter-number="18" name="How to Invoke the Compiler" number="2" title="How to Invoke the Compiler"><definition><define key="compile-fun" name="compile" type="fun"><args>function-spec <standard>&amp;optional</standard> definition</args>
+</define>
+
+<description>Compiles an individual interpreted function definition.  If
+<arg>definition</arg> is supplied, it is the definition to be compiled.
+Otherwise, the current definition of <arg>function-spec</arg> is used.  If
+<arg>function-spec</arg> is non-<obj>nil</obj>, the compiled function is stored as the
+definition of <arg>function-spec</arg>, and <arg>function-spec</arg> is returned.
+Otherwise, the compiled function object itself is returned.
+(However, it is preferable to use <obj>compile-lambda</obj> if your wish
+is to create a compiled function object without storing it anywhere.)
+
+The compiled function object created by <obj>compile</obj> records the
+interpreted definition it was made from on its debugging info alist (see
+<ref definition-in-file="fd-fun" key="debugging-info-fun" title="Function debugging-info" type="fun"></ref>).  This is useful in two ways: the function
+<obj>uncompile</obj> can be used to reinstall the interpreted definition, and
+<obj>compile</obj> invoked again on the same <arg>function-spec</arg> can find the
+interpreted definition used before and compile it again.  The latter is
+useful if you have changed some macros or subst functions which the
+definition refers to.
+</description></definition><definition><define key="uncompile-fun" name="uncompile" type="fun"><args>function-spec</args>
+</define>
+
+<description>If <arg>function-spec</arg> is defined as a compiled function that records the
+original definition that was compiled, then <arg>function-spec</arg> is redefined
+with that original definition.  This undoes the effect of calling
+<obj>compile</obj> on <arg>function-spec</arg>.
+</description></definition><definition><define key="compile-lambda-fun" name="compile-lambda" type="fun"><args>lambda-exp function-spec</args>
+</define>
+
+<description>Returns a compiled function object produced by compiling <arg>lambda-exp</arg>.
+The function name recorded by the compiled function object is
+<arg>function-spec</arg>, but that function spec is not defined
+by <obj>compile-lambda</obj>.  This function is preferable to
+<obj>compile</obj> with first argument <obj>nil</obj> in that it allows you to
+specify the name for the function to record internally.
+</description></definition><definition><define key="compile-encapsulations-fun" name="compile-encapsulations" type="fun"><args>function-spec</args>
+</define>
+
+<description>Compiles all encapsulations that <obj>function-spec</obj> currently has.
+Encapsulations (see <ref chapter="12" definition-in-file="fd-fun" key="encapsulate" section="9" title="Encapsulations" type="section"></ref>) include tracing, breakons and
+advice.  Compiling tracing or breakons makes it possible (or at least
+more possible) to trace or breakon certain functions that are used in
+the evaluator.  Compiling advice makes it less costly to advise
+functions that are used frequently.
+
+Any encapsulation that is changed will cease to be compiled; thus, if
+you add or remove advice, you must do <obj>compile-encapsulations</obj> again
+if you wish the advice to be compiled again.
+</description></definition><definition>
+<define key="compile-encapsulations-flag-var" name="compile-encapsulations-flag" type="var"></define>
+
+<description>If this is non-<obj>nil</obj>, all encapsulations that are created are compiled
+automatically.
+</description></definition><definition><define key="compile-file-fun" name="compile-file" type="fun"><args>input-file <standard>&amp;key</standard> output-file set-default-pathname package</args>
+</define>
+
+<description>Compiles the file specified by <arg>input-file</arg>, a pathname or namestring.
+The format for files input to the compiler is described on
+<ref chapter="18" definition-in-file="compil" key="compiler-input-section" section="3" title="Input to the Compiler" type="section"></ref>.
+
+If <arg>output-file</arg> is specified, it is a pathname used for the compiled file.
+Otherwise, the ouptut file name is computed from the input file name
+by specifying <obj>:qfasl</obj> as the type component.
+
+<arg>package</arg>, if non-<obj>nil</obj> specifies the package in which compilation
+should be performed.  Normally the system knows, or asks interactively,
+and you need not supply this argument.
+
+<arg>set-default-pathname</arg>, if non-<obj>nil</obj>, means that the defaults
+should be set to the input file's name.  <arg>set-default-pathname</arg> defaults to <obj>t</obj>.
+</description></definition><definition><define key="qc-file-fun" name="qc-file" type="fun"><args>filename <standard>&amp;optional</standard> output-file load-flag in-core-flag package file-local-declarations dont-set-default-p read-then-process-flag</args>
+</define>
+
+<description>An older, obsolete way of invoking the compiler on a file.
+
+<arg>file-local-declarations</arg> is for compiling multiple files as if they
+were one.  <arg>dont-set-default-p</arg> suppresses the changing of the default
+file name to <arg>filename</arg> that normally occurs.  The <arg>load-flag</arg> and
+<arg>in-core-flag</arg> arguments were not fully implemented and should not be
+used.  <arg>read-then-process-flag</arg> causes the entire file to be read and
+then the entire file to be compiled; this is no longer advantageous now
+that there is enough memory to avoid thrashing when forms are read and
+compiled one by one, and it prevents compile-time reader-macros
+defined in the file from working properly.
+</description></definition><definition><define key="qc-file-load-fun" name="qc-file-load" type="fun"><args>filename <standard>&amp;optional</standard> output-file load-flag in-core-flag package functions-defined file-local-declarations dont-set-default-p read-then-process-flag</args>
+</define>
+
+<description>Compiles a file and then loads in the resulting QFASL file.
+</description></definition><definition>
+<define key="compiler:compiler-verbose-var" name="compiler:compiler-verbose" type="var"></define>
+
+<description>If this variable is non-<obj>nil</obj>, the compiler prints the name of each
+function that it is about to compile.
+</description></definition><definition>
+<define key="compiler:peep-enable-var" name="compiler:peep-enable" type="var"></define>
+
+<description>The peephole optimizer is used if this variable is non-<obj>nil</obj>.
+The only reason to set it to <obj>nil</obj> is if there is a suspicion of a bug in the optimizer.
+</description></definition>
+<p>See also the <obj>disassemble</obj> function (<ref definition-in-file="fd-hac" key="disassemble-fun" title="Function disassemble" type="fun"></ref>), which lists the instructions
+of a compiled function in symbolic form.
+</p>
+</section><a name="compiler-input-section"></a>
+
+
+<section chapter-number="18" name="compiler-input-section" number="3" title="Input to the Compiler"><index-entry index="concepts" title="input to the compiler"></index-entry>
+
+<p indent="1">        The purpose of <obj>compile-file</obj> is to take a file and produce
+a translated version which does the same thing as the original except
+that the functions are compiled.  <obj>compile-file</obj> reads through the input
+file, processing the forms in it one by one.  For each form, suitable
+binary output is sent to the QFASL file so that when the QFASL file is
+loaded the effect of that source form will be reproduced.  The differences
+between source files and QFASL files are that QFASL files are in a compressed
+binary form, which reads much faster but cannot be edited, and that
+function definitions in QFASL files have been translated from Lisp forms
+to FEFs.
+</p>
+
+<p indent="1">        So, if the source contains a <obj>(defun ...)</obj> form at top level,
+then when the QFASL file is loaded the function will be defined as a
+compiled function.  If the source file contains a form that is not of a
+type known specially to the compiler, then that form (encoded in QFASL
+format) is output ``directly'' into the QFASL file, so that when the
+QFASL file is loaded that form will be evaluated.  Thus, if the source
+file contains <obj>(princ &quot;Hello&quot;)</obj> at top level, then the compiler puts
+in the QFASL file instructions to create the list <obj>(princ &quot;Hello&quot;)</obj>
+and then evaluate it.
+</p>
+
+<p indent="1">        The Lisp Machine editor Zmacs assumes that source files are
+formatted so that an open parenthesis at the left margin (that is, in
+column zero) indicates the beginning of a function definition or other top
+level list (with a few standard exceptions).  The compiler assumes that you
+follow this indentation convention, enabling it to tell when a
+close-parenthesis is missing from one function as soon as the beginning of
+the next function is reached.
+</p>
+
+<p indent="1">        If the compiler finds an open parenthesis in column zero in the middle
+of a list, it invents enough close parentheses to close off the list
+that is in progress.  A compiler warning is produced instead of an
+error.  After that list has been processed, the open parenthesis is read
+again.  The compilation of the list that was forcefully closed off is
+probably useless, but the compilation of the rest of the file is
+usually correct.  You can read the source file into the editor to fix and
+recompile the function that was unbalanced.
+</p>
+
+<p indent="1">        A similar thing happens on end of file in the middle of a list, so
+that you get to see any warnings for the function that was unbalanced.
+</p>
+
+<p indent="1">        Certain special forms including <obj>eval-when</obj>, <obj>progn</obj>,
+<obj>local-declare</obj>, <obj>declare-flavor-instance-variables</obj>, and <obj>comment</obj>
+are customarily used around lists that start in column zero.  These symbols
+have a non-<obj>nil</obj> <obj>si:may-surround-defun</obj> property that makes the
+compiler permit this.  You can add such properties to other symbols if you
+want.
+</p>
+<definition>
+<define key="compiler:qc-file-check-indentation-var" name="compiler:qc-file-check-indentation" type="var"></define>
+
+<description>If <obj>nil</obj>, inhibits the compiler from checking for open-parentheses in
+column zero.
+</description></definition>
+<p>Whan a macro definition (<obj>macro</obj> and <obj>defmacro</obj> forms) is
+encountered at top level in the file being compiled, the macro
+definition is recorded for the rest of the compilation so that the macro
+thus defined can be used in the same file following its definition.
+This is in addition to writing the compiled macro definition into the
+QFASL file.
+</p>
+
+<p>Flavor definitions (<obj>defflavor</obj> forms, see <ref definition-in-file="flavor" key="defflavor-fun" title="Macro defflavor" type="mac"></ref>) and
+global <obj>special</obj> declarations (made with <obj>proclaim</obj>,
+<ref definition-in-file="fd-eva" key="proclaim-fun" title="Function proclaim" type="fun"></ref>, or with <obj>defvar</obj>, <ref definition-in-file="fd-eva" key="defvar-fun" title="Macro defvar" type="mac"></ref>) are likewise
+recorded for the rest of the compilation, as well as written into the
+QFASL file so that they will be recorded permanently when the file is
+loaded.
+</p>
+<definition>
+<define key="sys:file-local-declarations-var" name="sys:file-local-declarations" type="var"></define>
+
+<description>During file-to-file compilation,
+the value of this variable is a list of all declarations that are in
+effect for the rest of the file.  Macro definitions, <obj>defdecl</obj>'s,
+<obj>proclaim</obj>'s
+and special declarations that come from <obj>defvar</obj>s are all recorded on
+this list.
+</description></definition>
+<p>Package-defining and altering functions such as <obj>defpackage</obj>,
+<obj>in-package</obj>, <obj>export</obj> and <obj>use-package</obj> are executed by the
+compiler in the ordinary, permanent fashion.  They are also written in
+the QFASL file so that the form is executed just the same when the file
+is loaded.  If you load the file later in the same session, the package
+altering form is executed twice.  This is normally harmless.
+<obj>require</obj> receives the same treatment.
+</p>
+
+<p>You can control explicitly whether a form is evaluated by the compiler,
+and whether it is written into the QFASL file to be executed when the
+file is loaded, using the <obj>eval-when</obj> construct.  You might want a
+form to be:
+
+<index-entry index="concepts" title="eval-when"></index-entry>
+
+<table><tbody><tr><td><standard>Put into the QFASL file (compiled, of course), or not.</standard></td><td></td></tr><tr><td><standard>Evaluated within the compiler, or not.</standard></td><td></td></tr><tr><td><standard>Evaluated if the source file loaded, or not.</standard></td><td></td></tr></tbody></table></p>
+
+<p>An <obj>eval-when</obj> form looks like
+
+<lisp>(eval-when <arg>times-list</arg>
+  <arg>form1</arg> <arg>form2</arg> ...)
+</lisp>The <arg>times-list</arg> may contain one or more of the symbols <obj>load</obj>, <obj>compile</obj>,
+or <obj>eval</obj>.
+If <obj>load</obj> is present, the <arg>forms</arg> are written into the QFASL file
+to be evaluated when the QFASL file is loaded (except that <obj>defun</obj> forms
+put the compiled definition into the QFASL file instead).
+If <obj>compile</obj> is present, the <arg>forms</arg> are evaluated in the compiler.
+If <obj>eval</obj> is present, the <arg>forms</arg> are evaluated when read into Lisp;
+this is because <obj>eval-when</obj> is defined as a special form in Lisp.  (The
+compiler ignores <obj>eval</obj> in the <arg>times-list</arg>.)
+For example,
+
+<lisp>(eval-when (compile eval) (macro foo (x) (cadr x)))
+</lisp>would define <obj>foo</obj> as a macro in the compiler and when the file
+is read in interpreted, but not when the QFASL file is fasloaded.
+</p>
+<definition><define key="eval-when-fun" name="eval-when" type="spec"><args>(time...) body...</args>
+</define>
+
+<description>When seen by the interpreter, if one of the <arg>times</arg> is the symbol <obj>eval</obj>
+then the <arg>body</arg> forms are evaluated; otherwise <obj>eval-when</obj> does nothing.
+
+But when seen by the compiler, this special form does the special things described above.
+</description></definition>
+<p>Nested use of <obj>eval-when</obj> is permitted but its meaning is tricky.
+If an inner <obj>eval-when</obj> form appears in an ordinary context
+where a general form would be written into the QFASL file but not
+executed at compile time, then it behaves in the usual fashion:
+the <arg>body</arg> forms are written into the QFASL file if
+<obj>load</obj> is one of the <arg>times</arg>, and they are evaluated at
+compile time if <obj>compile</obj> is one of the <arg>times</arg>.
+</p>
+
+<p>If the inner <obj>eval-when</obj> form appears in a context which says
+to evaluate at compile time only, then the <arg>body</arg> forms are
+evaluated if <obj>eval</obj> is one of the <arg>times</arg>.
+</p>
+
+<p>If the inner <obj>eval-when</obj> appears in a context which says to
+write into the QFASL file and evaluate at compile time,
+the the <arg>body</arg> forms are written into the QFASL file if
+<obj>load</obj> is one of the <arg>times</arg>, and they are evaluated at
+compile time if either <obj>compile</obj> or <obj>eval</obj> is one of the <arg>times</arg>.
+</p>
+
+<p indent="1">        For the rest of this section, we will use lists such as are
+given to <obj>eval-when</obj>, e.g. <obj>(load eval)</obj>, <obj>(load compile)</obj>, etc.,
+to describe when forms are evaluated.
+</p>
+
+<p indent="1">        If a form is not enclosed in an <obj>eval-when</obj>,
+then the times at which it is evaluated depend on the form.
+The following table summarizes at what times evaluation takes
+place for any given form seen at top level by the compiler.
+
+<table><tbody><tr><td><obj>(eval-when <arg>times-list</arg> <arg>form</arg> ...)</obj></td><td><arg>times-list</arg> specifies when the <arg>form</arg>... should be performed.
+
+</td></tr><tr><td><obj>(declare (special ...)) <standard>or</standard> (declare (unspecial ...))</obj></td><td>The <obj>special</obj> or <obj>unspecial</obj> is performed at
+<obj>(load compile)</obj> time.
+
+</td></tr><tr><td><obj>(declare <arg>anything-else</arg>)</obj></td><td><arg>anything-else</arg> is performed only at
+<obj>(compile)</obj> time.
+
+</td></tr><tr><td><obj>(proclaim ...)</obj></td><td>is performed at <obj>(load compile eval)</obj> time.
+
+
+<index-entry index="concepts" title="special variable"></index-entry>
+</td></tr><tr><td><obj>(special ...) <standard>or</standard> (unspecial ...)</obj></td><td><obj>(load compile eval)</obj>
+
+</td></tr><tr><td><obj>(macro ...) <standard>or</standard> (defmacro ...) <standard>or</standard> (defsubst ...)</obj></td><td></td></tr><tr><td><obj><standard>or</standard> (defflavor ...) <standard>or</standard> (defstruct ...)</obj></td><td><obj>(load eval)</obj>.  However, during file to file compilation, the
+definition is recorded temporarily and used for expanding calls
+to the macro, or macros defined by the <obj>defstruct</obj> for the
+rest of the file.
+
+</td></tr><tr><td><obj>(comment ...)</obj></td><td>Ignored at all times.
+
+</td></tr><tr><td><obj>(compiler-let ((<arg>var val</arg>) ...) <arg>body</arg>...)</obj></td><td>Processes the <arg>body</arg> in its normal fashion, but with the indicated
+variable bindings in effect.  These variables will typically
+affect the operation of the compiler or of macros.  See <ref chapter="19" definition-in-file="macros" key="compiler-let-discussion" section="5" title="Hints to Macro Writers" type="section"></ref>.
+
+</td></tr><tr><td><obj>(local-declare (<arg>decl decl ...</arg>) <arg>body</arg>...)</obj></td><td>Processes the <arg>body</arg> in its normal fashion, with the indicated
+declarations added to the front of the list which is the value
+of <obj>local-declarations</obj>.
+
+</td></tr><tr><td><obj>(defun ...) <standard>or</standard> (defmethod ...) <standard>or</standard> (defselect ...)</obj></td><td><obj>(load eval)</obj>, but at load time what is processed is not this form
+itself, but the result of compiling it.
+
+</td></tr><tr><td><obj>(require ...) <standard>or</standard> (in-package ...)</obj></td><td></td></tr><tr><td><obj><standard>or various other package functions</standard></obj></td><td><obj>(load compile eval)</obj>
+
+</td></tr><tr><td><obj><arg>anything-else</arg></obj></td><td><obj>(load eval)</obj>
+</td></tr></tbody></table></p>
+
+<p indent="1">        Sometimes a macro wants to return more than one form
+for the compiler top level to see (and to be evaluated).  The following
+facility is provided for such macros.  If a form
+
+<lisp>(progn <arg>form1</arg> <arg>form2</arg> ...)
+</lisp>is seen at the compiler top level, all of the <arg>forms</arg> are processed as if they had been at
+compiler top level.  (Of course, in the interpreter they
+are all evaluated.)
+</p>
+<need amount="4000"></need>
+<p>To prevent an expression from being optimized by the compiler,
+surround it with a call to <obj>dont-optimize</obj>.
+</p>
+<definition><define key="dont-optimize-fun" name="dont-optimize" type="spec"><args>form</args>
+</define>
+
+<description>In execution, this is equivalent to simply <arg>form</arg>.  However, any
+source-level optimizations that the compiler would normally perform on
+the top level of <arg>form</arg> are not done.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(dont-optimize (apply 'foo (list 'a 'b)))
+</exdent><exdent amount="96"><caption>actually makes a list and calls <obj>apply</obj>, rather than doing </caption>(foo 'a 'b)
+
+(dont-optimize (si:flavor-method-table flav))
+</exdent></lisp>actually calls <obj>si:flavor-method-table</obj> as a function, rather than
+substituting the definition of that <obj>defsubst</obj>.
+
+<obj>dont-optimize</obj> can even be used around a <obj>defsubst</obj> inside of
+<obj>setf</obj> or <obj>locf</obj>, to prevent open-coding of the <obj>defsubst</obj>.
+In this case, a function will be created at load time to do the
+setting or return the location.
+
+<lisp>(setf (dont-optimize (zwei:buffer-package buffer)) 
+      (pkg-find-package &quot;foo&quot;))
+</lisp>
+Subforms of <arg>form</arg>, such as arguments, are still optimized or open
+coded, unless additional <obj>dont-optimize</obj>'s appear around them.
+</description></definition></section><a name="Compile-Time Properties of Symbols"></a>
+
+
+<section chapter-number="18" name="Compile-Time Properties of Symbols" number="4" title="Compile-Time Properties of Symbols"><p>When symbol properties are referred to during macro expansion, it is
+desirable for properties defined in a file to be ``in effect'' for the
+the rest of the file if the file is compiled.  This does not happen if
+<obj>get</obj> and <obj>defprop</obj> are used, because the <obj>defprop</obj> will not be
+executed until the QFASL file is loaded.  Instead, you can use
+<obj>getdecl</obj> and <obj>defdecl</obj>.  These are normally the same as <obj>get</obj> and
+<obj>defprop</obj>, but during file-to-file compilation they also refer to and
+create declarations.
+</p>
+<definition><define key="getdecl-fun" name="getdecl" type="fun"><args>symbol property</args>
+</define>
+
+<description>This is a version of <obj>get</obj> that allows the properties of
+the <arg>symbol</arg> to be overridden by declarations.
+
+If a declaration of the form <obj>(<arg>property</arg> <arg>symbol</arg> <arg>value</arg>)</obj> is
+in effect, <obj>getdecl</obj> returns <arg>value</arg>.  Otherwise, <obj>getdecl</obj>
+returns the result of <obj>(get <arg>symbol</arg> <arg>property</arg>)</obj>.
+
+If you intend to create such declarations with <obj>proclaim</obj>
+or local use of <obj>declare</obj>, you must make sure that
+a <obj>declaration</obj> declaration is in effect for <arg>property</arg>.
+You can do this with <obj>(proclaim '(declaration <arg>property</arg>))</obj>.
+
+<obj>getdecl</obj> is typically used in macro definitions.
+For example, the <obj>setf</obj> macro uses <obj>getdecl</obj> to get the
+properties which say how to store in the specified place.
+See <ref definition-in-file="macros" key="getdecl-example" type="page"></ref> for an example of a macro
+that uses <obj>getdecl</obj>.
+</description></definition><definition><define key="putdecl-fun" name="putdecl" type="fun"><args>symbol property value</args>
+</define>
+
+<description>Causes <obj>(getdecl <arg>symbol</arg> <arg>property</arg>)</obj> to return
+<arg>value</arg>.
+
+<obj>putdecl</obj> usually simply does a <obj>putprop</obj>.  But if executed at
+compile time during file-to-file compilation, it instead makes an entry
+on <obj>file-local-declarations</obj> of the form <obj>(<arg>property</arg> <arg>symbol</arg>
+<arg>value</arg>)</obj>.
+
+In either case, this stores <arg>value</arg> where <obj>getdecl</obj> can find it;
+but if <obj>putdecl</obj> is done during compilation, it affects only the
+rest of that compilation.
+</description></definition><definition><define key="defdecl-fun" name="defdecl" type="spec"><args>symbol property value</args>
+</define>
+
+<description>When executed, this is like <obj>putdecl</obj> except that the arguments
+are not evaluated.  It is usually the same as <obj>defprop</obj>
+except for the order of the arguments.
+
+Unlike <obj>defprop</obj>, when <obj>defdecl</obj> is encountered during file-to-file
+compilation, a declaration is recorded which remains in
+effect for the rest of the compilation.  (The <obj>defdecl</obj> form also goes
+into the QFASL file to be executed when the file is loaded).
+<obj>defprop</obj> would have no effect whatever at compile time.
+
+<obj>defdecl</obj> is often useful as a part of the expansion of a macro.
+It is also useful as a top-level expression in a source file.
+
+
+<lisp><exdent amount="96"><caption>Example: </caption>(defdecl foo locf foo-location)
+</exdent></lisp>in a source file would allow <obj>(locf (foo <arg>args</arg>...))</obj>
+to be used in the rest of that source file; and, once the file was
+loaded, by anyone.
+
+Simple use <obj>defsetf</obj> expands into a <obj>defdecl</obj>.
+</description></definition></section><a name="Using Compiler Warnings"></a>
+
+
+<section chapter-number="18" name="Using Compiler Warnings" number="5" title="Using Compiler Warnings"><index-entry index="concepts" title="warnings from the compiler"></index-entry>
+
+<index-entry index="concepts" title="compiler warnings"></index-entry>
+
+<p>When the compiler prints warnings, it also records them in a data base,
+organized by file and by function within file.  Old warnings for
+previous compilations of the same function are thrown away, so the data
+base contains only warnings that are still applicable.  This data base
+can be
+used to visit, in the editor, the functions that got warnings.  You can
+also save the data base and restore it later.
+</p>
+
+<p>There are three editor commands that you can use to begin visiting the
+sites of the recorded warnings.  They differ only in how they decide
+which files to look through:
+</p>
+
+<table><tbody><tr><td><obj>Meta-X Edit Warnings</obj></td><td>For each file that has any warnings, asks whether to edit the warnings
+for that file.
+
+</td></tr><tr><td><obj>Meta-X Edit File Warnings</obj></td><td>Reads the name of a file and then edits the warnings for that file.
+
+</td></tr><tr><td><obj>Meta-X Edit System Warnings</obj></td><td>Reads the name of a system and then 
+edits the warnings for all files in that system (see <obj>defsystem</obj>,
+<ref definition-in-file="maksys" key="defsystem-fun" title="Macro defsystem" type="mac"></ref>).
+</td></tr></tbody></table>
+<p>While the warnings are being edited, the warnings themselves appear in a
+small window at the top of the editor frame, and the code appears in a
+large window which occupies the rest of the editor frame.
+</p>
+
+<p>As soon as you have finished specifying the file(s) or system to
+process, the editor proceeds to visit the code for the first
+warning.  From then on, to move to the next warning, use the command
+<obj>Control-Shift-W</obj>.  To move to the previous warning, use
+<obj>Meta-Shift-W</obj>.  You can also switch to the warnings window with
+<obj>Control-X O</obj> or with the mouse, and move around in that buffer.
+When you use <obj>Control-Shift-W</obj> and there are no more warnings after
+the cursor, you return to single-window mode.
+</p>
+
+<p>You can also insert the text of the warnings into any editor buffer:
+
+<table><tbody><tr><td><obj>Meta-X Insert File Warnings</obj></td><td>Reads the name of a file and inserts into the buffer after point the
+text for that file's warnings.  The mark is left after the warnings, but
+the region is not turned on.
+
+</td></tr><tr><td><obj>Meta-X Insert Warnings</obj></td><td>Inserts into the buffer after point the text for the warnings of all
+files that have warnings.  The mark is left after the warnings, but the
+region is not turned on.
+</td></tr></tbody></table></p>
+
+<p>You can also dump the warnings data base into a file and
+reload it
+later.  Then you can do <obj>Meta-X Edit Warnings</obj> again in the later
+session.  You dump the warnings with <obj>si:dump-warnings</obj> and load the
+file again with <obj>load</obj>.  In addition, <obj>make-system</obj> with the
+<obj>:batch</obj> option writes all the warnings into a file in this way.
+</p>
+<definition><define key="si:dump-warnings-fun" name="si:dump-warnings" type="fun"><args>output-file-pathname <standard>&amp;rest</standard> warnings-file-pathnames</args>
+</define>
+
+<description>Writes the warnings for the files named in <arg>warnings-file-pathnames</arg>
+(a list of pathnames or strings) into a file named
+<arg>output-file-pathname</arg>.
+</description></definition><definition>
+<define key="compiler:warn-on-errors-var" name="compiler:warn-on-errors" type="var"></define>
+
+<description>If this variable is non-<obj>nil</obj>, errors in reading code to be compiled,
+and errors in macro expansion within the compiler, produce only
+warnings; they do not enter the debugger.  The variable is normally
+<obj>t</obj>.
+
+The default setting is useful when you do not anticipate errors during
+compilation, because it allows the compilation to proceed past such
+errors.  If you have walked away from the machine, you do not come back
+to find that your compilation stopped in the first file and did not
+finish.
+
+If you find an inexplicable error in reading or macroexpansion, and wish
+to use the debugger to localize it, set <obj>compiler:warn-on-errors</obj>
+to <obj>nil</obj> and recompile.
+</description></definition>
+
+
+<subsection name="NIL" title="Controlling Compiler Warnings"><p>By controlling the compile-time values of the variables <obj>run-in-maclisp-switch</obj>,
+<obj>obsolete-function-warning-switch</obj>, and <obj>inhibit-style-warning-switch</obj> (explained
+above), you can enable or disable some of the warning messages of the compiler.
+The following special form is also useful:
+</p>
+<definition><define key="inhibit-style-warnings-fun" name="inhibit-style-warnings" type="mac"><args>form</args>
+</define>
+
+<description>Prevents the compiler from performing style-checking on the top level
+of <arg>form</arg>.  Style-checking is still done on the arguments of <arg>form</arg>.
+Both obsolete function warnings and won't-run-in-Maclisp warnings are
+done by means of the style-checking mechanism, so, for example,
+
+<lisp>(setq bar (inhibit-style-warnings (value-cell-location foo)))
+</lisp>does not warn that <obj>value-cell-location</obj> will not work in Maclisp,
+but
+
+<lisp>(inhibit-style-warnings (setq bar (value-cell-location foo)))
+</lisp>does warn, since <obj>inhibit-style-warnings</obj> applies only to the top
+level of the form inside it (in this case, to the <obj>setq</obj>).
+</description></definition>
+<p>Sometimes functions take arguments that they deliberately do not use.
+Normally the compiler warns you if your program binds a variable that it
+never references.  In order to disable this warning for variables that
+you know you are not going to use, there are three things you can do.
+</p>
+
+<index-entry index="variables" title="ignore"></index-entry>
+
+<index-entry index="concepts" title="ignored arguments"></index-entry>
+
+<p>The first thing is to name the variables <obj>ignore</obj> or <obj>ignored</obj>.  The
+compiler does not complain if a variable by one of these names is not
+used.  Furthermore, by special dispensation, it is all right to have
+more than one variable in a lambda-list that has one of these names.
+</p>
+
+<p>Another thing you can do is write an <obj>ignore</obj> declaration.  Example:
+
+<lisp>(defun the-function (list fraz-name fraz-size)
+  (declare (ignore fraz-size)))
+</lisp>This has the advantage that <obj>arglist</obj> (see <ref definition-in-file="fd-fun" key="arglist-fun" title="Function arglist" type="fun"></ref>) will return
+a more meaningful argument list for the function, rather than returning
+something with <obj>ignore</obj>'s in it.
+</p>
+
+<p>Finally, you can simply use the variable for effect
+(ignoring its value) at the front of the function.  Example:
+
+<lisp>(defun the-function (list fraz-name fraz-size)
+  fraz-size       ; This argument is not used.
+  ...)
+</lisp></p>
+
+<p>The following function is useful for requesting compiler warnings in
+certain esoteric cases.  Normally, the compiler notices whenever any
+function <arg>x</arg> uses (calls) any other function <arg>y</arg>; it makes notes of
+all these uses, and then warns you at the end of the compilation if the
+function <arg>y</arg> got called but no definition of it has been seen.  This
+usually does what you want, but sometimes there is no way the compiler
+can tell that a certain function is being used.  Suppose that instead of
+<arg>x</arg>'s containing any forms that call <arg>y</arg>, <arg>x</arg> simply stores <arg>y</arg>
+away in a data structure somewhere, and someplace else in the program
+that data structure is accessed and <obj>funcall</obj> is done on it.  There is
+no way that the compiler can see that this is going to happen, and so it
+can't notice the function usage, and so it can't create a warning
+message.  In order to make such warnings happen, you can explicitly call
+the following function at compile-time.
+</p>
+<definition><define key="compiler:function-referenced-fun" name="compiler:function-referenced" type="fun"><args>what by</args>
+</define>
+
+<description><arg>what</arg> is a symbol that is being used as a function.  <arg>by</arg> may be any function spec.  
+<obj>compiler:function-referenced</obj> must be
+called at compile-time while a compilation is in progress.  It tells the
+compiler that the function <arg>what</arg> is referenced by <arg>by</arg>.  When the compilation
+is finished, if the function <arg>what</arg> has not been defined, the compiler
+issues a warning to the effect that <arg>by</arg> referred to the function <arg>what</arg>,
+which was never defined.
+</description></definition>
+<p>You can also tell the compiler about any function it should consider
+``defined'':
+</p>
+<definition><define key="compiler:compilation-define-fun" name="compiler:compilation-define" type="fun"><args>function-spec</args>
+</define>
+
+<description><arg>function-spec</arg> is marked as ``defined'' for the sake of the compiler;
+future calls to this function will not produce warnings.
+</description></definition><definition><define key="compiler:make-obsolete-fun" name="compiler:make-obsolete" type="mac"><args>function reason</args>
+</define>
+
+<description>This special form declares a function to be obsolete; code that calls it
+will get a compiler warning, under the control of <obj>obsolete-function-warning-switch</obj>.
+This is used by the compiler to mark as obsolete some Maclisp functions which exist in
+Zetalisp but should not be used in new programs.  It can also
+be useful when maintaining a large system, as a reminder that a function has
+become obsolete and usage of it should be phased out.  An example of an
+obsolete-function declaration is:
+
+<lisp>(compiler:make-obsolete create-mumblefrotz
+        &quot;use MUMBLIFY with the :FROTZ option instead&quot;)
+</lisp></description></definition></subsection>
+
+
+<subsection name="NIL" title="Recording Warnings"><p>The warnings data base is not just for compilation.  It can record
+operations for any number of different operations on files or parts of
+files.  Compilation is merely the only operation in the system that uses it.
+</p>
+
+<p>Each operation about which warnings can be recorded should have a name,
+preferably in the keyword package.  This symbol should have four
+properties that tell the system how to print out the operation name
+as various parts of speech.  For compilation, the operation name is
+<obj>:compile</obj> and the properties are defined as follows:
+</p>
+
+<lisp>(defprop :compile &quot;compilation&quot; si:name-as-action)
+(defprop :compile &quot;compiling&quot; si:name-as-present-participle)
+(defprop :compile &quot;compiled&quot; si:name-as-past-participle)
+(defprop :compile &quot;compiler&quot; si:name-as-agent)
+</lisp>
+<p>The warnings system considers that these operations are normally
+performed on files that are composed of named objects.  Each warning is
+associated with a filename and then with an object within the file.
+It is also possible to record warnings about objects that are not within
+any file.
+</p>
+
+<p>To tell the warnings system that you are starting to process all or part
+of a file, use the macro <obj>si:file-operation-with-warnings</obj>.
+</p>
+<definition><define key="sys:file-operation-with-warnings-fun" name="sys:file-operation-with-warnings" type="mac"><args>(generic-pathname operation-name whole-file-p) body...</args>
+</define>
+
+<description><arg>body</arg> is executed within a context set up so that warnings can be
+recorded for operation <arg>operation-name</arg> about the file specified by
+<arg>generic-pathname</arg> (see <ref definition-in-file="pathnm" key="pathname-generic-pathname-method" title="Method pathname :generic-pathname" type="method"></ref>).
+
+In the case of compilation, this is done at the level of <obj>compile-file</obj>
+(actually, it is done in <obj>compiler:compile-stream</obj>).
+
+<arg>whole-file-p</arg> should be non-<obj>nil</obj> if the entire contents of the
+file are to be processed inside the <arg>body</arg> if it finishes; this implies
+that any warnings left over from previous iterations of this operation
+on this file should be thrown away on exit.  This is only relevant to
+objects that are not found in the file this time; the assumption is that
+the objects must have been deleted from the file and their warnings are
+no longer appropriate.
+
+All three of the special arguments are specified as expressions that
+are evaluated.
+</description></definition>
+<p>Within the processing of a file, you must also announce when you are
+beginning to process an object:
+</p>
+<definition><define key="sys:object-operation-with-warnings-fun" name="sys:object-operation-with-warnings" type="mac"><args>(object-name location-function) body...</args>
+</define>
+
+<description>Executes <arg>body</arg> in a context set up so that warnings are recorded
+for the object named <arg>object-name</arg>, which can be a symbol or a list.
+Object names are compared with <obj>equal</obj>.
+
+In the case of compilation, this macro goes around the processing of a
+single function.
+
+<arg>location-function</arg> is either <obj>nil</obj> or a function that the editor
+uses to find the text of the object.  Refer to the file <obj>SYS: ZWEI; POSS
+LISP</obj> for more details on this.
+
+<arg>object-name</arg> and <arg>location-function</arg> are specified with expressions
+that are evaluated.
+
+You can enter this macro recursively.  If the inner invocation is for
+the same object as the outer one, it has no effect.  Otherwise, warnings
+recorded in the inner invocation apply to the object specified therein.
+</description></definition>
+<p>Finally, when you detect exceptions, you must make the actual warnings:
+</p>
+<definition><define key="sys:record-warning-fun" name="sys:record-warning" type="fun"><args>type severity location-info format-string <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Records one warning for the object and file currently being processed.
+The text of the warning is specified by <arg>format-string</arg>and <arg>args</arg>,
+which are suitable arguments for <obj>format</obj>, but the warning is <arg>not</arg>
+printed when you call this function.  Those arguments will be used to
+reprint the warning later.
+
+</description></definition><definition><define key="sys:record-and-print-warning-fun" name="sys:record-and-print-warning" type="fun"><args>type severity location-info format-string <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Records a warning and also prints it.
+
+<arg>type</arg> is a symbol that identifies the specific cause of the warning.
+Types have meaning only as defined by a particular operation, and at
+present nothing makes much use of them.  The system defines one type:
+<obj>si:premature-warnings-marker</obj>.
+
+<arg>severity</arg> measures how important a warning this is, and the general
+causal classification.  It should be a symbol in the keyword package.
+Several severities are defined, and should be used when appropriate,
+but nothing looks at them:
+
+<table><tbody><tr><td><obj>:implausible</obj></td><td>This warning is about something that is not intrinsically wrong but is
+probably due to a mistake of some sort.
+
+</td></tr><tr><td><obj>:impossible</obj></td><td>This warning is about something that cannot have a meaning
+even if circumstances outside the text being processed are
+changed.
+
+</td></tr><tr><td><obj>:probable-error</obj></td><td>This is used to indicate something that is certainly an error
+but can be made correct by a change somewhere else; for example, calling
+a function with the wrong number of arguments.
+
+</td></tr><tr><td><obj>:missing-declaration</obj></td><td>This is used for warnings about free variables not declared special,
+and such.  It means that the text was not actually incorrect, but
+something else that is supposed to accompany it was missing.
+
+</td></tr><tr><td><obj>:obsolete</obj></td><td>This warning is about something that you shouldn't use any more,
+but which still does work.
+
+</td></tr><tr><td><obj>:very-obsolete</obj></td><td>This is about something that doesn't even work any more.
+
+</td></tr><tr><td><obj>:maclisp</obj></td><td>This is for something that doesn't work in Maclisp.
+
+</td></tr><tr><td><obj>:fatal</obj></td><td>This indicates a problem so severe that no sense can be made of the
+object at all.  It indicates that the presence or absence of other
+warnings is not significant.
+
+</td></tr><tr><td><obj>:error</obj></td><td>There was a Lisp error in processing the object.
+</td></tr></tbody></table>
+<arg>location-info</arg> is intended to be used to inform the editor of the
+precise location in the text of the cause of this warning.  It is not
+defined as yet, and you should use <obj>nil</obj>.
+</description></definition>
+<p>If a warning is encountered while processing data that doesn't really
+have a name (such as forms in a source file that are not function
+definitions), you can record a warning even though you are not inside
+an invocation of <obj>sys:object-operation-with-warnings</obj>.  This
+warning is known as a <arg>premature warning</arg> and it will be recorded with
+the next object that is processed; a message will be added so that the
+user can tell which warnings were premature.
+</p>
+
+<p>Refer to the file <obj>SYS: SYS; QNEW LISP</obj> for more information on the
+warnings data base.
+</p>
+</subsection></section><a name="Compiler Source-Level Optimizers"></a>
+
+
+<section chapter-number="18" name="Compiler Source-Level Optimizers" number="6" title="Compiler Source-Level Optimizers"><index-entry index="concepts" title="optimizer, compiler"></index-entry>
+
+<p>The compiler stores optimizers for source code on property lists so as
+to make it easy for the user to add them.  An optimizer can be used to
+transform code into an equivalent but more efficient form (for
+example, <obj>(eq <arg>obj</arg> nil)</obj> is transformed into <obj>(null <arg>obj</arg>)</obj>,
+which can be compiled better).  An optimizer can also be used to
+tell the compiler how to compile a special form.  For example,
+in the interpreter <obj>do</obj> is a special form, implemented by a function
+which takes quoted arguments and calls <obj>eval</obj>.  In the compiler,
+<obj>do</obj> is expanded in a macro-like way by an optimizer into
+equivalent Lisp code using <obj>prog</obj>, <obj>cond</obj>, and <obj>go</obj>, which
+the compiler understands.
+</p>
+
+<p>The compiler finds the optimizers to apply to a form by looking for
+the <obj>compiler:optimizers</obj> property of the symbol that is the
+car of the form.  The value of this property should be a list of
+optimizers, each of which must be a function of one argument.  The
+compiler tries each optimizer in turn, passing the form to be
+optimized as the argument.  An optimizer that returns the original
+form unchanged (<obj>eq</obj> to the argument) has ``done nothing'', and
+the next optimizer is tried.  If the optimizer returns anything else,
+it has ``done something'', and the whole process starts over again.
+</p>
+
+<p>Optimizers should not be used to define new language features, because
+they only take effect in the compiler; the interpreter (that is, the
+evaluator) doesn't know about optimizers.  So an optimizer should not
+change the effect of a form; it should produce another form that does
+the same thing, possibly faster or with less memory or something.  That
+is why they are called optimizers.  In principle, the code ought to
+compile just as correctly if the optimizer is eliminated.
+</p>
+<definition><define key="compiler:add-optimizer-fun" name="compiler:add-optimizer" type="mac"><args>function optimizer optimized-into...</args>
+</define>
+
+<description>Puts <arg>optimizer</arg> on <arg>function</arg>'s optimizers list if it isn't there already.
+<arg>optimizer</arg> is the name of an optimization function, and <arg>function</arg>
+is the name of the function calls which are to be processed.  Neither
+is evaluated.
+
+<obj>(compiler:add-optimizer <arg>function</arg> <arg>optimizer</arg> <arg>optimize-into-1</arg>
+<arg>optimize-into-2...</arg>)</obj> also remembers <arg>optimize-into-1</arg>, etc., as
+names of functions which may be called in place of <arg>function</arg> as a
+result of the optimization.  Then <obj>who-calls</obj> of <arg>function</arg> will
+also mention callers of <arg>optimize-into-1</arg>, etc.
+</description></definition><definition><define key="compiler:defoptimizer-fun" name="compiler:defoptimizer" type="mac"><args>function optimizer-name (optimizes-into...) lambda-list body...</args>
+</define>
+
+<description>Defines an optimizer and installs it.  Equivalent to
+
+<lisp>(progn
+  (defun <arg>optimizer-name</arg> <arg>lambda-list</arg>
+    <arg>body</arg>...)
+  (compiler:add-optimizer <arg>function</arg> <arg>optimizer-name</arg>
+                          <arg>optimizes-into</arg>...))
+</lisp></description></definition><definition><define key="compiler:defcompiler-synonym-fun" name="compiler:defcompiler-synonym" type="mac"><args>function for-function</args>
+</define>
+
+<description>Makes <arg>function</arg> a synonym for <arg>for-function</arg> in code being compiled.
+Example:
+
+<lisp>(compiler:defcompiler-synonym plus +)
+</lisp>is how the compiler is told how to compile <obj>plus</obj>.
+</description></definition></section><a name="Maclisp Compatibility"></a>
+
+
+<section chapter-number="18" name="Maclisp Compatibility" number="7" title="Maclisp Compatibility"><p>Certain programs are intended to be run both in Maclisp and in
+Zetalisp.  Their source files need some special conventions.  For
+example, all <obj>special</obj> declarations must be enclosed in <obj>declare</obj>'s,
+so that the Maclisp compiler will see them.  The main issue is that many
+functions and special forms of Zetalisp do not exist in
+Maclisp.  It is suggested that you turn on <obj>run-in-maclisp-switch</obj> in
+such files, which will warn you about a lot of problems that your program
+may have if you try to run it in Maclisp.
+</p>
+
+<p>The macro-character combination <obj>#+lispm</obj> causes the object that
+follows it to be visible only when compiling for Zetalisp.  The
+combination <obj>#+maclisp</obj> causes the following object to be visible only
+when compiling for Maclisp.  These work both on subexpressions of the
+objects in the file and at top level in the file.  To conditionalize
+top-level objects, however, it is better to put the macros
+<obj>if-for-lispm</obj> and <obj>if-for-maclisp</obj> around them.  The
+<obj>if-for-lispm</obj> macro turns off <obj>run-in-maclisp-switch</obj> within its
+object, preventing spurious warnings from the compiler.  The <obj>#+lispm</obj>
+reader construct does not dare do this, since it can be used to conditionalize
+any object, not just a expression that will be evaluated.
+</p>
+
+<p>To allow a file to detect what environment it is being compiled in,
+the following macros are provided:
+</p>
+<definition><define key="if-for-lispm-fun" name="if-for-lispm" type="mac"><args>form</args>
+</define>
+
+<description>If <obj>(if-for-lispm <arg>form</arg>)</obj> is seen at the top level of
+the compiler, <arg>form</arg> is passed to the compiler top level if
+the output of the compiler is a QFASL file intended for Zetalisp.
+If the Zetalisp interpreter sees this it evaluates <arg>form</arg>
+(the macro expands into <arg>form</arg>).
+</description></definition><definition><define key="if-for-maclisp-fun" name="if-for-maclisp" type="mac"><args>form</args>
+</define>
+
+<description>If <obj>(if-for-maclisp <arg>form</arg>)</obj> is seen at the top level of
+the compiler, <arg>form</arg> is passed to the compiler top level if
+the output of the compiler is a FASL file intended for Maclisp
+(e.g. if the compiler is COMPLR).
+If the Zetalisp interpreter ignores this form entirely
+(the macro expands into <obj>nil</obj>).
+</description></definition><definition><define key="if-for-maclisp-else-lispm-fun" name="if-for-maclisp-else-lispm" type="mac"><args>maclisp-form lispm-form</args>
+</define>
+
+<description>If <obj>(if-for-maclisp-else-lispm <arg>form1</arg> <arg>form2</arg>)</obj> is seen at the top level of
+the compiler, <arg>form1</arg> is passed to the compiler top level if
+the output of the compiler is a FASL file intended for Maclisp;
+otherwise <arg>form2</arg> is passed to the compiler top level.
+</description></definition><definition><define key="if-in-lispm-fun" name="if-in-lispm" type="mac"><args>form</args>
+</define>
+
+<description>In Zetalisp, <obj>(if-in-lispm <arg>form</arg>)</obj> causes <arg>form</arg>
+to be evaluated; in Maclisp, <arg>form</arg> is ignored.
+</description></definition><definition><define key="if-in-maclisp-fun" name="if-in-maclisp" type="mac"><args>form</args>
+</define>
+
+<description>In Maclisp, <obj>(if-in-maclisp <arg>form</arg>)</obj> causes <arg>form</arg>
+to be evaluated; in Zetalisp, <arg>form</arg> is ignored.
+</description></definition>
+<p indent="1">        In order to make sure that those macros are
+defined when reading the file into the Maclisp compiler, you must
+make the file start with a prelude, which should look like:
+
+<lisp>(eval-when (compile)
+  (cond ((not (status feature lispm))
+               (load '|PS:&lt;L.SYS2&gt;CONDIT.LISP|))))
+                ;; Or other suitable filename
+</lisp>This does nothing when you compile the program on the Lisp Machine.
+If you compile it with the Maclisp compiler, it loads in definitions
+of the above macros, so that they will be available to your
+program.  The form <obj>(status feature lispm)</obj> is generally useful in
+other ways; it evaluates to <obj>t</obj> when evaluated on the Lisp Machine and
+to <obj>nil</obj> when evaluated in Maclisp.
+</p>
+
+<p>There are some advertised variables whose compile-time values affect the
+operation of the compiler.  Mostly these are for Maclisp compatibility
+features.  You can set these variables by including in his file
+forms such as
+
+<lisp>(eval-when (compile) (setq open-code-map-switch t))
+</lisp>However, these variables seem not to be needed very often.
+</p>
+<definition>
+<define key="run-in-maclisp-switch-var" name="run-in-maclisp-switch" type="var"></define>
+
+<description>If this variable is non-<obj>nil</obj>, the compiler tries to warn the
+user about any constructs that will not work in Maclisp.  By no means
+all Lisp Machine system functions not built in to Maclisp
+cause warnings;  only those that could not be written by the user
+in Maclisp (for example, <obj>make-array</obj>, <obj>value-cell-location</obj>, etc.).
+Also, lambda-list keywords such as
+<obj>&amp;optional</obj> and initialized <obj>prog</obj> variables are be
+mentioned.  This switch also inhibits the warnings for obsolete Maclisp functions.
+The default value of this variable is <obj>nil</obj>.
+</description></definition><definition>
+<define key="obsolete-function-warning-switch-var" name="obsolete-function-warning-switch" type="var"></define>
+
+<description>If this variable is non-<obj>nil</obj>, the compiler tries to warn
+the user whenever an obsolete Maclisp-compatibility function such as
+<obj>maknam</obj> or <obj>samepnamep</obj> is used.  The default value is <obj>t</obj>.
+</description></definition><definition>
+<define key="allow-variables-in-function-position-switch-var" name="allow-variables-in-function-position-switch" type="var"></define>
+
+<description>If this variable is non-<obj>nil</obj>, the compiler allows the use of
+the name of a variable in function position to mean that the
+variable's value should be <obj>funcall</obj>'ed.  This is for compatibility
+with old Maclisp programs.  The default value of this variable is
+<obj>nil</obj>.
+</description></definition><definition>
+<define key="open-code-map-switch-var" name="open-code-map-switch" type="var"></define>
+
+<description>If this variable is non-<obj>nil</obj>, the compiler attempts
+to produce inline code for the mapping functions (<obj>mapc</obj>, <obj>mapcar</obj>, etc.,
+but not <obj>mapatoms</obj>) if the function being mapped is an anonymous
+lambda-expression.
+The generated code is faster but larger.  The default value is <obj>t</obj>.
+
+If you want to turn off open coding of these functions,
+It is preferable to use <obj>(declare (notinline mapc mapcar ...))</obj>.
+</description></definition><definition>
+<define key="inhibit-style-warnings-switch-var" name="inhibit-style-warnings-switch" type="var"></define>
+
+<description>If this variable is non-<obj>nil</obj>, all compiler style-checking is
+turned off.  Style checking is used to issue obsolete function
+warnings, won't-run-in-Maclisp warnings, and other sorts of
+warnings.  The default value is <obj>nil</obj>.  See also the
+<obj>inhibit-style-warnings</obj> macro, which acts on one level only of an
+expression.
+</description></definition><definition><define key="compiler-let-fun" name="compiler-let" type="mac"><args>((variable value)...) body...</args>
+</define>
+
+<description>Allows local rebinding
+of global switches that affect either compilation or the behavior
+of user-written macros.  Its syntax is like that of <obj>let</obj>, and
+in the interpreter it is identical to <obj>let</obj>.
+When encountered in compiled code, the variables are bound
+around the compilation of <arg>body</arg> rather than around
+the execution at a later time of the compiled code for <arg>body</arg>.
+For example,
+
+<lisp><exdent amount="96"><caption>Example: </caption>(compiler-let ((open-code-map-switch nil))
+  (mapc (function (lambda (x) ...)) foo))
+</exdent></lisp>prevents the compiler from open-coding the <obj>mapc</obj>.
+
+The same results can be obtained more cleanly using <obj>declare</obj>.
+User-written macros can examine the declarations using <obj>getdecl</obj>.
+</description></definition><nopara></nopara>
+<p>The next three functions are primarily for Maclisp compatibility.  In
+Maclisp, they are declarations, used within a <obj>declare</obj> at top level
+in the file.
+</p>
+<definition><define key="*expr-fun" name="*expr" type="spec"><args>symbol...</args>
+</define>
+
+<description>Declares each <arg>symbol</arg>
+to be the name of a function.  In addition it prevents these functions from appearing
+in the list of functions referenced but not defined, printed at the end of the compilation.
+</description></definition><definition><define key="*lexpr-fun" name="*lexpr" type="spec"><args>symbol...</args>
+</define>
+
+<description>Declares each <arg>symbol</arg>
+to be the name of a function.  In addition it prevents these functions from appearing
+in the list of functions referenced but not defined, printed at the end of the compilation.
+</description></definition><definition><define key="*fexpr-fun" name="*fexpr" type="spec"><args>symbol...</args>
+</define>
+
+<description>Declares each <arg>symbol</arg>
+to be the name of a special form.  In addition it prevents these names from appearing
+in the list of functions referenced but not defined, printed at the end of the compilation.
+</description></definition></section><a name="fasdump"></a>
+
+
+<section chapter-number="18" name="fasdump" number="8" title="Putting Data in QFASL Files"><index-entry index="concepts" title="fasdump"></index-entry>
+
+<p>It is possible to make a QFASL file containing data, rather than a
+compiled program.  This can be useful to speed up loading of a data
+structure into the machine, as compared with reading in printed
+representations.  Also, certain data structures such as arrays do not
+have a convenient printed representation as text, but can be saved in
+QFASL files.  For example, the system stores fonts this way.  Each
+font is in a QFASL file (on the <obj>SYS: FONTS;</obj> directory) that
+contains the data structures for that font.  When the file is loaded,
+the symbol that is the name of the font gets set to the array that
+represents the font.  Putting data into a QFASL file is often
+referred to as ``<arg>fasdumping</arg> the data''.
+</p>
+
+<p>In compiled programs, the constants are saved in the QFASL file in this way.
+The compiler optimizes by making constants that are <obj>equal</obj> become <obj>eq</obj>
+when the file is loaded.  This does not happen when you make a data file yourself;
+identity of objects is preserved.  Note that when a QFASL file is loaded,
+objects that were <obj>eq</obj> when the file was written are still <obj>eq</obj>; this does not
+normally happen with text files.
+</p>
+
+<p>The following types of objects can be represented in QFASL files:
+Symbols (uninterned or uninterned), numbers of all kinds, lists,
+strings, arrays of all kinds, named structures, instances, and FEFs.
+</p>
+<definition>
+<define key="instances-fasd-form-method" name="instances" type="metamethod"></define>
+
+<description>When an instance is fasdumped (put into a QFASL file), it is sent a <obj>:fasd-form</obj>
+message, which must return a Lisp form that, when evaluated, will recreate the
+equivalent of that instance.  This is because instances are often part of a large
+data structure, and simply fasdumping all of the instance variables and making
+a new instance with those same values is unlikely to work.  Instances remain
+<obj>eq</obj>; the <obj>:fasd-form</obj> message is only sent the first time a particular instance
+is encountered during writing of a QFASL file.  If the instance does
+not accept the <obj>:fasd-form</obj> message, it cannot be fasdumped.
+</description></definition>
+<p>Loading a QFASL file in which a named structure has been fasdumped
+creates a new named structure with components identical to those of the
+one that was dumped.  Then the <obj>:fasd-fixup</obj> operation is invoked,
+which gives the new structure the opportunity to correct its contents if
+they are not supposed to be just the same as what was dumped.
+</p>
+
+<p>The meaning of a QFASL file is greatly affected by the package used
+for loading it.  Therefore, the file itself says which package to use.
+</p>
+
+<p>In <obj>dump-forms-to-file</obj>, you can specify the package to use by
+including a <obj>:package</obj> attribute in the <arg>attribute-list</arg> argument.
+For example, if that argument is the list <obj>(:package &quot;SI&quot;)</obj> then the
+file is dumped and loaded in the <obj>si</obj> package.  If the package is not
+specified in this way, <obj>user</obj> is used.  The other fasdumping functions
+always use <obj>user</obj>.
+</p>
+<definition><define key="dump-forms-to-file-fun" name="dump-forms-to-file" type="fun"><args>filename forms-list <standard>&amp;optional</standard> attribute-list</args>
+</define>
+
+<description>Writes a QFASL file named <arg>filename</arg> which contains, in effect, the
+forms in <arg>forms-list</arg>.  That is to say, when the file is loaded, its
+effect will be the same as evaluating those forms.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(dump-forms-to-file &quot;foo&quot; '((setq x 1) (setq y 2)))
+(load &quot;foo&quot;)
+x =&gt; 1
+y =&gt; 2
+</exdent></lisp>
+<arg>attribute-list</arg> is the file attribute list to store in the QFASL
+file.  It is a list of
+alternating keywords and values, and corresponds to the <obj>-*-</obj> line of a source file.
+The most useful keyword in this context is <obj>:package</obj>, whose value in the
+attribute list specifies the package to be used both in dumping the forms and in
+loading the file.  If no <obj>:package</obj> keyword is present, the file will be loaded in
+whatever package is current at the time.
+</description></definition><definition><define key="compiler:fasd-symbol-value-fun" name="compiler:fasd-symbol-value" type="fun"><args>filename symbol</args>
+</define>
+
+<description>Writes a QFASL file named <arg>filename</arg> which contains the value of <arg>symbol</arg>.
+When the file is loaded, <arg>symbol</arg> will be <obj>setq</obj>'ed to the same value.
+<arg>filename</arg> is parsed and defaulted with the default pathname defaults.
+The file type defaults to <obj>:qfasl</obj>.
+</description></definition><definition><define key="compiler:fasd-font-fun" name="compiler:fasd-font" type="fun"><args>name</args>
+</define>
+
+<description>Writes the font named <arg>name</arg> into a QFASL file with the appropriate name
+(on the <obj>SYS: FONTS;</obj> directory).
+</description></definition><definition><define key="compiler:fasd-file-symbols-properties-fun" name="compiler:fasd-file-symbols-properties" type="fun"><args>filename symbols properties dump-values-p dump-functions-p new-symbol-function</args>
+</define>
+
+<description>This is a way to dump a complex data structure into a QFASL file.  The values,
+the function definitions, and some of the properties of certain symbols are put into
+the QFASL file in such a way that when the file is loaded the symbols will
+be <obj>setq</obj>ed, <obj>fdefine</obj>d, and <obj>putprop</obj>ped appropriately.  The user can
+control what happens to symbols discovered in the data structures being fasdumped.
+
+<arg>filename</arg> is the name of the file to be written.  It is defaulted
+with the default pathname defaults.  The file type
+defaults to <obj>&quot;QFASL&quot;</obj>.
+
+<arg>symbols</arg> is a list of symbols to be processed.  <arg>properties</arg> is a list
+of properties which are to be fasdumped if they are found on the symbols.
+<arg>dump-values-p</arg> and <arg>dump-functions-p</arg> control whether the values and
+function definitions are also dumped.
+
+<arg>new-symbol-function</arg> is called whenever a new symbol is found in the
+structure being dumped.  It can do nothing, or it can add the symbol to the
+list to be processed by calling <obj>compiler:fasd-symbol-push</obj>.  The value
+returned by <arg>new-symbol-function</arg> is ignored.
+</description></definition></section><a name="macro"></a>
+
+
+<section chapter-number="18" name="macro" number="9" title="Analyzing QFASL Files"><p>QFASL files are composed of 16-bit nibbles.  The first two nibbles in
+the file contain fixed values, which are there so the system can tell a
+proper QFASL file.  The next nibble is the beginning of the first
+<arg>group</arg>.  A group starts with a nibble that specifies an operation.
+It may be followed by other nibbles that are arguments.
+</p>
+
+<p>Most of the groups in a QFASL file are there to construct objects when
+the file is loaded.  These objects are recorded in the <arg>fasl-table</arg>.
+Each time an object is constructed, it is assigned the next sequential
+index in the fasl-table.  The indices are used by other groups later in
+the file, to refer back to objects already constructed.
+</p>
+
+<p>To prevent the fasl-table from becoming too large, the QFASL file
+can be divided into <arg>whacks</arg>.  The fasl-table is cleared out at the
+beginning of each whack.
+</p>
+
+<p>The other groups in the QFASL file perform operations such as
+evaluating a list previously constructed or storing an object into a
+symbol's function cell or value cell.
+</p>
+
+<p>If you are having trouble with a QFASL file and want to find out exactly
+what it does when it is loaded, you can use UNFASL to find out.
+</p>
+<definition><define key="si:unfasl-print-fun" name="si:unfasl-print" type="fun"><args>input-file-name</args>
+</define>
+
+<description>Prints on <obj>*standard-output*</obj> a description of the contents of the QFASL
+file <arg>input-file-name</arg>.
+</description></definition><definition><define key="si:unfasl-file-fun" name="si:unfasl-file" type="fun"><args>input-file-name <standard>&amp;optional</standard> output-file-name</args>
+</define>
+
+<description>Writes a description of the contents of the QFASL file
+<arg>input-file-name</arg> into the output file.  The output file type defaults
+to <obj>:unfasl</obj> and the rest of the pathname defaults from
+<arg>input-file-name</arg>.
+</description></definition></section></chapter>
+</document-part>

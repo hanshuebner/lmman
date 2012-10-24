@@ -1,0 +1,49 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part>
+ <center>Preface to the Hypertext Edition</center>
+ <p>
+  This is the hypertext edition of the Lisp Machine Manual.  It
+  describes the Lisp Machine system software, which had been
+  developed between 1978 and 1984 at the MIT.
+ </p>
+ <p>
+  This version of the manual is the result of automatically
+  converting the source files of the printed 6th edition of the
+  original manual, edited by Richard Stallman. The intention of the
+  conversion is to bring the manual into a more modern format that
+  could be read and edited using contemporary tools.  The goal is to
+  make the Lisp Machine documentation widely available and editable.
+ </p>
+ <p>
+  Originally, the manual was authored as text files with markup for
+  the ``Bolio'' text processor, which ran on the PDP-10 systems and
+  Lisp machines at the MIT in the 1980s.  Neither the source nor the
+  documentation for Bolio were available at the time the conversion
+  was done.  As such the meaning of the markup had to be deduced from
+  the context and there may be errors or deficiencies in the hypertext
+  edition that are a result of the conversion process.
+ </p>
+ <p>
+  The conversion was done with slightly edited Bolio source files.
+  The edits were done to correct problems introduced while converting
+  the tape backups back to text files and slight structural changes to
+  ease the conversion.  Additionally, the chapter on Resources has not
+  been an own chapter in the printed 6th edition, but rather a section
+  in the "Manipulating List Structure" chapter.  This presumably
+  happened by accident.  The source was changed that so that
+  "Resources" is now in it's own chapter.
+ </p>
+ <p>
+  The hypertext edition of the manual consists of files in an XML
+  format that resembles the original document stucture.  It does not
+  use a well-known XML schema or DTD.  XSL templates are provided to
+  convert the XML format to HTML for online browsing.  Conversion to
+  other documentation formats like DocBook or Texinfo are possible,
+  but the intention is to support these format in an output-only
+  matter.
+ </p>
+ <p>
+  If you have comments, bug reports or suggestions, please contact <a
+  href="mailto:hans.huebner@gmail.com">Hans Hübner</a>.
+ </p>
+</document-part>

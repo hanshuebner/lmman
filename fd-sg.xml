@@ -1,0 +1,661 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="stack-group-chapter"></a>
+<chapter name="stack-group-chapter" number="14" title="Stack Groups"><index-entry index="concepts" title="stack group"></index-entry>
+
+<index-entry index="concepts" title="coroutine"></index-entry>
+
+<p indent="1">        A <arg>stack group</arg> (usually abbreviated `SG') is a type of Lisp
+object useful for implementation of certain advanced control structures
+such as coroutines and generators.  Processes, which are a kind of
+coroutine, are built on top of stack groups (see <ref chapter="30" definition-in-file="proces" key="process" section="0" title="Processes" type="section"></ref>).  A stack
+group represents a computation and its internal state, including the
+Lisp stack.
+</p>
+
+<p indent="1">        At any time, the computation being performed by the Lisp
+Machine is associated with one stack group, called the <arg>current</arg> or
+<arg>running</arg> stack group.  The operation of making some stack group be
+the current stack group is called a <arg>resumption</arg> or a <arg>stack group
+switch</arg>; the previously running stack group is said to have <arg>resumed</arg> the new
+stack group.  The <arg>resume</arg> operation has two parts: first, the state
+of the running computation is saved away inside the current stack group,
+and secondly the state saved in the new stack group is restored, and the
+new stack group is made current.  Then the computation of the new stack
+group resumes its course.
+</p>
+
+<index-entry index="concepts" title="regular pdl"></index-entry>
+
+<index-entry index="concepts" title="special pdl"></index-entry>
+
+<p indent="1">        The stack group itself holds a great deal of state information.
+It contains the control stack, or <arg>regular PDL</arg>.  The control stack is
+what you are shown by the backtracing commands of the error handler
+(<obj>Control-B</obj>, <obj>Meta-B</obj>, and <obj>Control-Meta-B</obj>); it remembers the
+function which is running, its caller, its caller's caller, etc., and
+the point of execution of each function (the <arg>return address</arg> of each
+function).  A stack group also contains the dynamic environment stack,
+or <arg>special PDL</arg>.  The name `stack group' derives from the existence
+of these two stacks.  Finally, the stack group contains various internal
+state information (contents of machine registers and so on).
+</p>
+
+<p>When the stack group is running, the special PDL contains all the
+dynamic bindings that are shadowed by other bindings in this stack
+group; bindings that are current reside in the symbols' value cells.
+When the stack group is not running, all of the dynamic bindings it has
+made reside in its special PDL.  Switching to a stack group moves the
+current bindings from the special PDL to the symbol value cells,
+exchanging them with the global or other shadowed bindings.  Switching
+out of a stack group does the reverse process.  Note that
+<obj>unwind-protect</obj> handlers are <arg>not</arg> run by a stack-group switch (see
+<obj>let-globally</obj>, <ref definition-in-file="fd-eva" key="let-globally-fun" title="Macro let-globally" type="mac"></ref>).
+</p>
+
+<p indent="1">        Each stack group is a separate environment for purposes of function
+calling, throwing, dynamic variable binding, and condition signalling.  All
+stack groups run in the same address space; thus they share the same Lisp
+data and the same global (not lambda-bound) variables.
+</p>
+
+<index-entry index="concepts" title="presetting stack groups"></index-entry>
+
+<index-entry index="concepts" title="initial function"></index-entry>
+
+<p>When a new stack group is created, it is empty: it doesn't contain the state
+of any computation, so it can't be resumed.  In order to get things going,
+the stack group must be set to an initial state.  This is done by <arg>presetting</arg>
+the stack group.  To preset a stack group, you supply a function and a set
+of arguments.  The stack group is placed in such a state that when it is
+first resumed it will apply this function to those arguments.  The function is
+called the <arg>initial function</arg> of the stack group.
+</p>
+<a name="Resuming of Stack Groups"></a>
+
+
+<section chapter-number="14" name="Resuming of Stack Groups" number="1" title="Resuming of Stack Groups"><p>The interesting thing that happens to stack groups is that they resume
+each other.  When one stack group resumes a second stack group, the
+current state of Lisp execution is saved away in the first stack group
+and is restored from the second stack group.  Resuming is also called
+<arg>switching stack groups</arg>.
+</p>
+
+<p>At any time, there is one
+stack group associated with the current computation; it is called the
+current stack group.  The computations associated with other stack
+groups have their states saved away in memory and are not
+computing.  So the only stack group that can do anything at all, in
+particular resuming other stack groups, is the current one.
+</p>
+
+<p>You can look at things from the point of view of one computation.
+Suppose it is running along, and it resumes some stack group.  The state
+of the computation state is saved away into its own stack group, and the
+computation associated with the called stack group starts up.  The
+original computation lies dormant in the original stack group, while
+other computations go around resuming each other, until finally the
+original stack group is resumed by someone.  Then the computation is
+restored from the stack group and gets to run again.
+</p>
+
+<p>There are several ways that the current stack group can resume other
+stack groups.  This section describes all of them.
+</p>
+
+<index-entry index="concepts" title="resumer"></index-entry>
+
+<p>Each stack group records a <arg>resumer</arg> which is <obj>nil</obj>
+or another stack group.  Some forms of resuming examine and alter the
+resumer of some stack groups.
+</p>
+
+<p>Resuming has another ability: it can transmit a Lisp object from the
+old stack group to the new stack group.  Each stack group specifies
+a value to transmit whenever it resumes another stack group; whenever
+a stack group is resumed, it receives a value.
+</p>
+
+<p>In the descriptions below, let <arg>c</arg> stand for the current stack group,
+<arg>s</arg> stand for some other stack group, and <arg>x</arg> stand for any
+arbitrary Lisp object.
+</p>
+
+<p>Stack groups can be used as functions.  They accept one argument.  If
+<arg>c</arg> calls <arg>s</arg> as a function with one argument <arg>x</arg>, then <arg>s</arg> is
+resumed, and the object transmitted is <arg>x</arg>.  When <arg>c</arg> is resumed
+(usually--but not necessarily--by <arg>s</arg>), the object transmitted by that
+resumption is returned as the value of the call to <arg>s</arg>.  This is
+one of the simple ways to resume a stack group: call it as a function.
+The value you transmit is the argument to the function, and the value
+you receive is the value returned from the function.  Furthermore, this
+form of resuming sets <arg>s</arg>'s resumer to be <arg>c</arg>.
+</p>
+
+<p>Another way to resume a stack group is to use <obj>stack-group-return</obj>.
+Rather than allowing you to specify which stack group to resume, this
+function always resumes the resumer of the current stack group.  Thus,
+this is a good way to go back to the stack group which called the
+current one, assuming that this was done through a function call.
+<obj>stack-group-return</obj> takes one argument which is the object to
+transmit.  It returns when something resumes the current stack group, and
+returns one value, the object that was transmitted by that resumption.
+<obj>stack-group-return</obj> does not change the resumer of any stack group.
+</p>
+
+<p>The most fundamental way to do resuming is with <obj>stack-group-resume</obj>,
+which takes two arguments: the stack group, and a value to transmit.
+It returns when someone resumes the current stack group, returning
+the value that was transmitted by that resumption,
+and does not affect any stack group's resumer.
+</p>
+
+<p>If the initial function of <arg>c</arg> attempts to return a value <arg>x</arg>, the
+regular kind of Lisp function return cannot take place, since the
+function did not have any caller (it got there when the stack group was
+initialized).  So instead of normal function returning, a ``stack group
+return'' happens.  <arg>c</arg>'s resumer is resumed, and the value transmitted
+is <arg>x</arg>.  <arg>c</arg> is left in a state (``exhausted'') from which it cannot
+be resumed again; any attempt to resume it signals an error.  Presetting
+it will make it work again.
+</p>
+
+<p>Those are the ``voluntary'' forms of stack group switch; a resumption
+happens because the computation said it should.  There are also two
+``involuntary'' forms, in which another stack group is resumed without the
+explicit request of the running program.
+</p>
+
+<p>If an error occurs, the current stack group resumes the error handler stack
+group.  The value transmitted is partially descriptive of the error, and
+the error handler looks inside the saved state of the erring stack group
+to get the rest of the information.  The error handler recovers from the
+error by changing the saved state of the erring stack group and then
+resuming it.
+</p>
+
+<p>When certain events occur, typically a 1-second clock tick, a <arg>sequence
+break</arg> occurs.  This forces the current stack group to resume a special
+stack group called the <arg>scheduler</arg> (see <ref chapter="30" definition-in-file="proces" key="scheduler" section="1" title="The Scheduler" type="section"></ref>).  The scheduler
+implements processes by resuming, one after another, the stack group of each
+process that is ready to run.
+</p>
+<definition>
+<define key="current-stack-group-resumer-var" name="current-stack-group-resumer" type="var"></define>
+
+<description>Is the resumer of the current stack group.
+</description></definition><definition>
+<define key="current-stack-group-var" name="current-stack-group" type="var"></define>
+
+<description>Is the stack group which is currently running.  A program can use this
+variable to get its hands on its own stack group.
+</description></definition></section><a name="Stack Group States"></a>
+
+
+<section chapter-number="14" name="Stack Group States" number="2" title="Stack Group States"><p>A stack group has a <arg>state</arg>, which controls what it will do when it
+is resumed.  The code number for the state is returned by the function
+<obj>sys:sg-current-state</obj>.  This number is the value of one of
+the following symbols.  Only the states actually used by the current
+system are documented here; some other codes are defined but not used.
+</p>
+
+<table><tbody><tr><td><obj>sys:sg-state-active</obj></td><td>The stack group is the current one.
+
+</td></tr><tr><td><obj>sys:sg-state-resumable</obj></td><td>The stack group is waiting to be resumed, at which time it will pick up
+its saved machine state and continue doing what it was doing before.
+
+</td></tr><tr><td><obj>sys:sg-state-awaiting-return</obj></td><td>The stack group called some other stack group as a function.  When it is
+resumed, it will return from that function call.
+
+</td></tr><tr><td><obj>sys:sg-state-awaiting-initial-call</obj></td><td>The stack group has been preset (see below) but has never been called.
+When it is resumed, it will call its initial function with the preset
+arguments.
+
+</td></tr><tr><td><obj>sys:sg-state-exhausted</obj></td><td>The stack group's initial function has returned.  It cannot be resumed.
+
+</td></tr><tr><td><obj>sys:sg-state-awaiting-error-recovery</obj></td><td>When a stack group gets an error it goes into this state, which prevents
+anything from happening to it until the error handler has looked at it.
+In the meantime it cannot be resumed.
+
+</td></tr><tr><td><obj>sys:sg-state-invoke-call-on-return</obj></td><td>When the stack group is resumed, it will call a function.  The function
+and arguments are already set up on the stack.  The debugger uses this
+to force the stack group being debugged to do things.
+</td></tr></tbody></table></section><a name="Stack Group Functions"></a>
+
+<section chapter-number="14" name="Stack Group Functions" number="3" title="Stack Group Functions"><definition><define key="make-stack-group-fun" name="make-stack-group" type="fun"><args>name <standard>&amp;rest</standard> options</args>
+</define>
+
+<description>Creates and returns a new stack group.  <arg>name</arg> may be any symbol
+or string; it is used in the stack group's printed representation.
+<arg>options</arg> is a list of alternating keywords and values.  The options
+are not too useful; most calls to <obj>make-stack-group</obj> don't need any
+options at all.  The options are:
+
+<table><tbody><tr><td><obj>:sg-area</obj></td><td>The area in which to create the stack group structure itself.
+Defaults to the default area (the value of <obj>default-cons-area</obj>).
+
+</td></tr><tr><td><obj>:regular-pdl-area</obj></td><td>The area in which to create the regular PDL.  Only certain areas
+specially designated when they were created may be used for regular
+PDLs, because regular PDLs are cached in a hardware device called the
+<arg>pdl buffer</arg>.  The default is <obj>sys:pdl-area</obj>.
+
+</td></tr><tr><td><obj>:special-pdl-area</obj></td><td>The area in which to create the special PDL.
+Defaults to the default area (the value of <obj>default-cons-area</obj>).
+
+</td></tr><tr><td><obj>:regular-pdl-size</obj></td><td>Length of the regular PDL to be created.  Defaults to 3000 octal.
+
+</td></tr><tr><td><obj>:special-pdl-size</obj></td><td>Length of the special PDL to be created.  Defaults to 2000 octal.
+
+</td></tr><tr><td><obj>:swap-sv-on-call-out</obj></td><td></td></tr><tr><td><obj>:swap-sv-of-sg-that-calls-me</obj></td>
+<td><index-entry index="keywords" title=":swap-sv-of-sg-that-calls-me make-stack-group"></index-entry>
+These flags default to 1.  If these are 0, the system does not maintain
+separate binding environments for each stack group.  You do not want
+to use this feature.
+
+</td></tr><tr><td><obj>:trap-enable</obj></td><td>This determines what to do if a microcode error occurs.  If it is 1
+the system tries to handle the error; if it is 0 the machine halts.
+Defaults to 1.  It is 0 only in the error handler stack group, a
+trap in which would not work anyway.
+
+</td></tr><tr><td><obj>:safe</obj></td><td>If this flag is 1 (the default), a strict call-return discipline among
+stack-groups is enforced.  If 0, no restriction on stack-group
+switching is imposed.
+</td></tr></tbody></table></description></definition><definition><define key="sys:pdl-overflow-condition" name="sys:pdl-overflow" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This condition is signaled when there is overflow on either the regular
+pdl or the special pdl.  The <obj>:pdl-name</obj> operation on the condition
+instance returns either <obj>:special</obj> or <obj>:regular</obj>, to tell handlers
+which one.
+
+The <obj>:grow-pdl</obj> proceed type is provided.  It takes no arguments.
+Proceeding from the error automatically makes the affected pdl bigger.
+</description></definition><definition>
+<define key="eh:pdl-grow-ratio-var" name="eh:pdl-grow-ratio" type="var"></define>
+
+<description>This is the factor by which to increase the size of a pdl after an overflow.
+It is initially <obj>1.5</obj>.
+</description></definition><definition><define key="eh:require-pdl-room-fun" name="eh:require-pdl-room" type="fun"><args>regpdl-space specpdl-space</args>
+</define>
+
+<description>Makes the current stack group larger if necessary, to make sure that
+there are at least <arg>regpdl-space</arg> free words in the regular pdl, and at
+least <arg>specpdl-space</arg> free words in the special pdl, not counting the words
+currently in use.
+</description></definition><definition><define key="stack-group-preset-fun" name="stack-group-preset" type="fun"><args>stack-group function <standard>&amp;rest</standard> arguments</args>
+</define>
+
+<description>This sets up <arg>stack-group</arg> so that when it is resumed,
+<arg>function</arg> will be applied to <arg>arguments</arg> within the stack group.
+Both stacks are made empty; all saved state in the stack group is destroyed.
+<obj>stack-group-preset</obj> is typically used to initialize a stack group just after it is made,
+but it may be done to any stack group at any time.  Doing this to a stack
+group which is not exhausted destroys its present state without
+properly cleaning up by running <obj>unwind-protect</obj>s.
+</description></definition><definition><define key="stack-group-resume-fun" name="stack-group-resume" type="fun"><args>s x</args>
+</define>
+
+<description>Resumes <arg>s</arg>, transmitting the value <arg>x</arg>.
+No stack group's resumer is affected.
+</description></definition><definition><define key="si:sg-resumable-p-fun" name="si:sg-resumable-p" type="fun"><args>s</args>
+</define>
+
+<description><obj>t</obj> if <arg>s</arg>'s state permits it to be resumed.
+</description></definition><definition><define key="sys:wrong-stack-group-state-condition" name="sys:wrong-stack-group-state" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This is signaled if, for example, you try to resume a stack group which
+is in the exhausted state.
+</description></definition><definition><define key="stack-group-return-fun" name="stack-group-return" type="fun"><args>x</args>
+</define>
+
+<description>Resumes the current stack group's resumer, transmitting the value <arg>x</arg>.
+No stack group's resumer is affected.
+</description></definition><definition><define key="symeval-in-stack-group-fun" name="symeval-in-stack-group" type="fun"><args>symbol sg <standard>&amp;optional</standard> frame as-if-current</args>
+</define>
+
+<description>Evaluates the variable <arg>symbol</arg> as a special variable in the binding
+environment of <arg>sg</arg>.  If <arg>frame</arg> is not <obj>nil</obj>, it evaluates
+<arg>symbol</arg> in the binding environment of execution in that frame.  (A
+frame is an index in the stack group's regular pdl).
+
+Two values are returned: the symbol's value, and a locative to where
+the value is stored.  If <arg>as-if-current</arg> is not <obj>nil</obj>, the
+locative points to where the value <arg>would</arg> be stored if <arg>sg</arg> were
+running.  This may be different from where the value is stored now;
+for example, the current binding in stack group <arg>sg</arg> is stored in
+<arg>symbol</arg>'s value cell when <arg>sg</arg> is running, but is probably
+stored in <arg>sg</arg>'s special pdl when <arg>sg</arg> is not running.
+<arg>as-if-current</arg> makes no difference if <arg>sg</arg> actually <arg>is</arg>
+the current stack group.
+
+If <arg>symbol</arg>'s current dynamic binding in the specified stack group and
+frame is void, this signals a <obj>sys:unbound-variable</obj> error.
+</description></definition></section><a name="Analyzing Stack Frames"></a>
+
+
+<section chapter-number="14" name="Analyzing Stack Frames" number="4" title="Analyzing Stack Frames"><p>A stack frame is represented by an index in the regular pdl array of the
+stack group.  The word at this index is the function executing, or to be
+called, in the frame.  The following words in the pdl contain the
+arguments.
+</p>
+<definition><define key="sg-regular-pdl-fun" name="sg-regular-pdl" type="fun"><args>sg</args>
+</define>
+
+<description>Returns the regular pdl of <arg>sg</arg>.  This is an array of type
+<obj>art-reg-pdl</obj>.  Stack frames are represented as indices into this array.
+</description></definition><definition><define key="sg-regular-pdl-pointer-fun" name="sg-regular-pdl-pointer" type="fun"><args>sg</args>
+</define>
+
+<description>Returns the index in <arg>sg</arg>'s regular pdl of the last word pushed.
+</description></definition><definition><define key="sg-special-pdl-fun" name="sg-special-pdl" type="fun"><args>sg</args>
+</define>
+
+<description>Returns the special pdl of <arg>sg</arg>.  This is an array of type
+<obj>art-special-pdl</obj>, used to hold special bindings made by functions
+executing in that stack group.
+</description></definition><definition><define key="sg-special-pdl-pointer-fun" name="sg-special-pdl-pointer" type="fun"><args>sg</args>
+</define>
+
+<description>Returns the index in <arg>sg</arg>'s special pdl of the last word pushed.
+</description></definition><need amount="1800"></need><nopara></nopara>
+<p>The following functions are used to move from one stack frame to
+another.
+</p>
+<definition><define key="eh:sg-innermost-active-fun" name="eh:sg-innermost-active" type="fun"><args>sg</args>
+</define>
+
+<description>Returns (the regular pdl index of) the innermost frame in <arg>sg</arg>, the
+one that would be executing if <arg>sg</arg> were current.  If <arg>sg</arg> is
+current, the value is the frame of the caller of this function.
+</description></definition><definition><define key="eh:sg-next-active-fun" name="eh:sg-next-active" type="fun"><args>sg frame</args>
+</define>
+
+<description>Returns the next active frame out from
+<arg>frame</arg> in <arg>sg</arg>.  This is the one that called <arg>frame</arg>.  If
+<arg>frame</arg> is the outermost frame, the value is <arg>nil</arg>.
+</description></definition><definition><define key="eh:sg-previous-active-fun" name="eh:sg-previous-active" type="fun"><args>sg frame</args>
+</define>
+
+<description>Returns the previous active frame in from <arg>frame</arg> in <arg>sg</arg>.
+This is the one called by <arg>frame</arg>.  If <arg>frame</arg> is the currently
+executing frame, the value is <obj>nil</obj>.  If <arg>frame</arg> is <obj>nil</obj>,
+the value is the outermost or initial frame.
+</description></definition><definition><define key="eh:sg-innermost-open-fun" name="eh:sg-innermost-open" type="fun"><args>sg</args>
+</define>
+
+<description>Returns the innermost open frame in <arg>sg</arg>, which may be the same as the
+innermost active one or it may be within that.  In other respects, this is
+like <obj>eh:sg-innermost-active</obj>.
+</description></definition><definition><define key="eh:sg-next-open-fun" name="eh:sg-next-open" type="fun"><args>sg frame</args>
+</define>
+
+<description>Like <obj>eh:sg-next-active</obj> but includes frames which are <arg>open</arg>, that is,
+still accumulating arguments prior to calling the function.
+</description></definition><definition><define key="eh:sg-previous-open-fun" name="eh:sg-previous-open" type="fun"><args>sg frame</args>
+</define>
+
+<description>Like <obj>eh:sg-previous-active</obj> but includes frames which are <arg>open</arg>, that is,
+still accumulating arguments prior to calling the function.
+</description></definition><definition><define key="eh:sg-frame-active-p-fun" name="eh:sg-frame-active-p" type="fun"><args>sg frame</args>
+</define>
+
+<description>Returns <obj>t</obj> if <arg>frame</arg> is active; that is, if the function has been
+entered.
+</description></definition><need amount="1800"></need>
+<p>Running interpreted code involves calls to <obj>eval</obj>, <obj>cond</obj>, etc.
+which would not be there in compiled code.  The following three
+functions can be used to skip over the stack frames of such functions,
+showing only the frames for the functions the user would know about.
+</p>
+<definition><define key="eh:sg-next-interesting-active-fun" name="eh:sg-next-interesting-active" type="fun"><args>sg frame</args>
+</define>
+
+<description>Like <obj>eh:sg-next-active</obj> but skips over uninteresting frames.
+</description></definition><definition><define key="eh:sg-previous-interesting-active-fun" name="eh:sg-previous-interesting-active" type="fun"><args>sg frame</args>
+</define>
+
+<description>Like <obj>eh:sg-previous-active</obj> but skips over uninteresting frames.
+</description></definition><definition><define key="eh:sg-out-to-interesting-active-fun" name="eh:sg-out-to-interesting-active" type="fun"><args>sg frame</args>
+</define>
+
+<description>If <arg>frame</arg> is interesting, returns <arg>frame</arg>.  Otherwise, it returns
+the next interesting active frame.
+</description></definition><need amount="1800"></need><nopara></nopara>
+<p>Functions to analyze the data in a particular stack frame:
+</p>
+<definition><define key="sys:rp-function-word-fun" name="sys:rp-function-word" type="fun"><args>regpdl frame</args>
+</define>
+
+<description>Returns the function executing in <arg>frame</arg>.  <arg>regpdl</arg> should be
+the <obj>sg-regular-pdl</obj> of the stack group.
+</description></definition><definition><define key="eh:sg-frame-number-of-spread-args-fun" name="eh:sg-frame-number-of-spread-args" type="fun"><args>sg frame</args>
+</define>
+
+<description>Returns the number of arguments received by <arg>frame</arg>, which should be
+an active frame.  The rest argument (if any) and arguments
+received by it, do not count.
+</description></definition><definition><define key="eh:sg-frame-arg-value-fun" name="eh:sg-frame-arg-value" type="fun"><args>sg frame n</args>
+</define>
+
+<description>Returns the value of argument number <arg>n</arg> of stack frame <arg>frame</arg> in
+<arg>sg</arg>.  An error is signaled if <arg>n</arg> is out of range, if the frame is
+active.  (For an open frame, the number of arguments is not yet
+known, so there is no error check.)
+
+The second value is the location in which the argument is stored when
+<arg>sg</arg> is running.  The location may not actually be in the stack, if
+the argument is special.  The location may then contain other contents
+when the stack group is not running.
+</description></definition><definition><define key="eh:sg-frame-rest-arg-value-fun" name="eh:sg-frame-rest-arg-value" type="fun"><args>sg frame</args>
+</define>
+
+<description>Returns the value of the rest argument in <arg>frame</arg>, or <obj>nil</obj> if there
+is none.
+
+The second value is <obj>t</obj> if the function called in <arg>frame</arg> expects an
+explicitly passed rest argument.
+
+The third value is <obj>t</obj> if the rest argument was passed explicitly.
+If this is <obj>nil</obj>, the rest arg is a stack list that overlaps the
+arguments of stack frame <arg>frame</arg>.  If it was passed explicitly, it may still
+be a stack list, but not in this frame.  See <ref chapter="5" definition-in-file="fd-con" key="stack-list" section="9" title="Stack Lists" type="section"></ref> for
+more information on stack lists.
+</description></definition><definition><define key="eh:sg-frame-number-of-locals-fun" name="eh:sg-frame-number-of-locals" type="fun"><args>sg frame</args>
+</define>
+
+<description>Returns the number of local variables in stack frame <arg>frame</arg>.
+</description></definition><definition><define key="eh:sg-frame-local-value-fun" name="eh:sg-frame-local-value" type="fun"><args>sg frame n</args>
+</define>
+
+<description>Returns the value of local variable number <arg>n</arg> of stack frame <arg>frame</arg> in
+<arg>sg</arg>.  An error is signaled if <arg>n</arg> is out of range.
+
+The second value is the location in which the local is stored when
+<arg>sg</arg> is running.  The location may not actually be in the stack; if
+not, it may have other contents when the stack group is not running.
+</description></definition><definition><define key="eh:sg-frame-value-value-fun" name="eh:sg-frame-value-value" type="fun"><args>sg frame n <standard>&amp;optional</standard> create-slot</args>
+</define>
+
+<description>Returns the value and location of the <arg>n</arg>'th multiple value <arg>frame</arg>
+has returned.  If <arg>frame</arg> has not begun to return values, the first
+value returned is <obj>nil</obj> but the location still validly shows where
+value number <arg>n</arg> will be stored.
+
+If <arg>frame</arg> was called with <obj>multiple-value-list</obj>, it can return any
+number of values, but they do not have cells to receive them until
+<arg>frame</arg> returns them.  In this case, a non-<obj>nil</obj> <arg>create-slot</arg>
+means that this function should allocate cells as necessary so that a
+valid location can be returned.  Otherwise, the location as well as the
+value is <obj>nil</obj>.
+</description></definition><definition><define key="eh:sg-frame-value-list-fun" name="eh:sg-frame-value-list" type="fun"><args>sg frame <standard>&amp;optional</standard> new-number-of-values</args>
+</define>
+
+<description>Returns three values that describe whether <arg>frame</arg>'s caller wants
+multiple values, and any values <arg>frame</arg> has returned already.
+
+The first value is a list in which live the values being, or to be,
+returned by <arg>frame</arg>.
+
+The second value is <obj>nil</obj> if this frame has not been invoked to return multiple values,
+a number which is the number of values it has been asked for,
+or a locative, meaning the frame was called with <obj>multiple-value-list</obj>.
+In the last case, the first value includes only the values <arg>frame</arg>
+has returned already, and the locative points to a cell that points
+to the cons whose cdr should receive the next link of the list.
+
+The third value is how many values <arg>frame</arg> has returned so far.
+
+If <arg>new-number-of-values</arg> is non-<obj>nil</obj>, it is used to alter the
+``number of values already returned'' as recorded in the stack group.
+This may alter the length of the list that is the first value.
+The value you get is the altered one, in that case.
+</description></definition><definition><define key="eh:sg-frame-special-pdl-range-fun" name="eh:sg-frame-special-pdl-range" type="fun"><args>sg frame</args>
+</define>
+
+<description>Returns two values delimiting the range of <arg>sg</arg>'s special pdl that
+belongs to the specified stack frame.  The first value is the index of
+the first special pdl word that belongs to the frame, and the second
+value is the index of the next word that does not belong to it.
+
+If the specified frame has no special bindings, both values are <obj>nil</obj>.
+Otherwise, the indicated special pdl words describe bindings made on
+entry to or during execution in this frame.  The words come in pairs.
+
+The first word of each pair contains the saved value; the second points
+to the location that was bound.  When the stack group is not current,
+the saved value is the value for the binding made in this frame.  When
+the stack group is current, the saved value is the shadowed value, and
+the value for this binding is either in the cell that was bound, or is
+the saved value of another binding, at a higher index, of the same cell.
+
+The bit <obj>sys:%%specpdl-closure-binding</obj> is nonzero in the first word
+of the pair if the binding was made before entry to the function itself.
+This includes bindings made by closures, and by instances (including
+<obj>self</obj>).  Otherwise, the binding was made by the function itself.
+This includes arguments that are declared special.
+</description></definition><nopara></nopara>
+<p><obj>symeval-in-stack-group</obj> can be used to find the value of a special
+variable at a certain stack frame (<ref definition-in-file="fd-sg" key="symeval-in-stack-group-fun" title="Function symeval-in-stack-group" type="fun"></ref>).
+</p>
+</section><a name="sg-terminal-io-issues"></a>
+
+
+<section chapter-number="14" name="sg-terminal-io-issues" number="5" title="Input/Output in Stack Groups"><p indent="1">        Because each stack group has its own set of dynamic bindings, a
+stack group does not inherit its creator's value of <obj>*terminal-io*</obj>
+(see <ref definition-in-file="stream" key="terminal-io-var" title="Variable terminal-io" type="var"></ref>), nor its caller's, unless you make special
+provision for this.  The <obj>*terminal-io*</obj> a stack group gets by default
+is a ``background'' stream that does not normally expect to be used.  If
+it is used, it turns into a ``background window'' that will request
+the user's attention.  Often this happens when an error invokes the
+debugger.
+</p>
+
+<p indent="1">        If you write a program that uses multiple stack groups, and you want
+them all to do input and output to the terminal, you should pass the
+value of <obj>*terminal-io*</obj> to the top-level function of each stack group
+as part of the <obj>stack-group-preset</obj>, and that function should bind
+the variable <obj>*terminal-io*</obj>.
+</p>
+
+<p indent="1">        Another technique is to use a closure as the top-level function
+of a stack group.  This closure can bind <obj>*terminal-io*</obj> and any other
+variables that should be shared between the stack group and its
+creator.
+</p>
+</section><a name="locative"></a>
+
+
+<section chapter-number="14" name="locative" number="6" title="An Example of Stack Groups"><p>The canonical coroutine example is the so-called samefringe problem:
+Given two trees, determine whether they contain the same
+atoms in the same order, ignoring parenthesis structure.  A better
+way of saying this is, given two binary trees built out of conses,
+determine whether the sequence of atoms on the fringes of the trees
+is the same, ignoring differences in the arrangement of the
+internal skeletons of the two trees.  Following the usual rule
+for trees, <obj>nil</obj> in the cdr of a cons is to be ignored.
+</p>
+
+<p>One way of solving this problem is to use <arg>generator</arg> coroutines.
+We make a generator for each tree.  Each time the generator is called
+it returns the next element of the fringe of its tree.  After the
+generator has examined the entire tree, it returns a special ``exhausted''
+flag.  The generator is most naturally written as a recursive function.
+The use of coroutines, i.e. stack groups, allows the two generators to
+recurse separately on two different control stacks without having to
+coordinate with each other.
+</p>
+
+<p>The program is very simple.  Constructing it in the usual bottom-up style,
+we first write a recursive function that takes a tree and <obj>stack-group-return</obj>s
+each element of its fringe.  The <obj>stack-group-return</obj> is how the generator
+coroutine delivers its output.  We could easily test this function by changing
+<obj>stack-group-return</obj> to <obj>print</obj> and trying it on some examples.
+</p>
+
+<lisp>(defun fringe (tree)
+  (cond ((atom tree) (stack-group-return tree))
+        (t (fringe (car tree))
+           (if (not (null (cdr tree)))
+               (fringe (cdr tree))))))
+</lisp>
+<p>Now we package this function inside another, which takes care of
+returning the special ``exhausted'' flag.
+</p>
+
+<lisp>(defun fringe1 (tree exhausted)
+  (fringe tree)
+  exhausted)
+</lisp>
+<p>The <obj>samefringe</obj> function takes the two trees as arguments and returns
+<obj>t</obj> or <obj>nil</obj>.  It creates two stack groups to act as the two
+generator coroutines, presets them to run the <obj>fringe1</obj> function, then
+goes into a loop comparing the two fringes.  The value is <obj>nil</obj> if a difference
+is discovered, or <obj>t</obj> if they are still the same when the end is reached.
+</p>
+
+<lisp>(defun samefringe (tree1 tree2)
+  (let ((sg1 (make-stack-group &quot;samefringe1&quot;))
+        (sg2 (make-stack-group &quot;samefringe2&quot;))
+        (exhausted (ncons nil)))
+    (stack-group-preset sg1 #'fringe1 tree1 exhausted)
+    (stack-group-preset sg2 #'fringe1 tree2 exhausted)
+    (do ((v1) (v2)) (nil)
+      (setq v1 (funcall sg1 nil)
+            v2 (funcall sg2 nil))
+      (cond ((neq v1 v2) (return nil))
+            ((eq v1 exhausted) (return t))))))
+</lisp>
+<p>Now we test it on a couple of examples:
+</p>
+
+<lisp>(samefringe '(a b c) '(a (b c))) =&gt; t
+(samefringe '(a b c) '(a b c d)) =&gt; nil
+</lisp>
+<p>As stack groups are large, and slow to create, it is desirable to avoid
+the overhead of creating one each time two fringes are compared.  It can
+easily be eliminated with a modest amount of explicit storage
+allocation, using the resource facility (see <ref definition-in-file="resour" key="defresource-fun" title="Macro defresource" type="mac"></ref>).  While
+we're at it, we can avoid making the exhausted flag fresh each time; its
+only important property is that it not be an atom.
+</p>
+
+<lisp>(defresource samefringe-coroutine ()
+   :constructor (make-stack-group &quot;for-samefringe&quot;))
+
+(defvar exhausted-flag (ncons nil))
+
+(defun samefringe (tree1 tree2)
+  (using-resource (sg1 samefringe-coroutine)
+    (using-resource (sg2 samefringe-coroutine)
+      (stack-group-preset sg1 #'fringe1 tree1 exhausted-flag)
+      (stack-group-preset sg2 #'fringe1 tree2 exhausted-flag)
+      (do ((v1) (v2)) (nil)
+        (setq v1 (funcall sg1 nil)
+              v2 (funcall sg2 nil))
+        (cond ((neq v1 v2) (return nil))
+              ((eq v1 exhausted-flag) (return t)))))))
+</lisp>
+<p>Now we can compare the fringes of two trees with no allocation of memory whatsoever.
+</p>
+</section></chapter>
+</document-part>

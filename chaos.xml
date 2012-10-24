@@ -1,0 +1,1567 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="chaos-chapter"></a>
+<chapter name="chaos-chapter" number="27" title="The Chaosnet"><p>The purpose of the basic software protocol of Chaosnet is to allow
+high-speed communication among processes on different machines, with no
+undetected transmission errors.
+</p>
+<a name="Chaosnet Overview"></a>
+
+
+<section chapter-number="27" name="Chaosnet Overview" number="1" title="Chaosnet Overview"><p>The principal service provided by Chaosnet is a <arg>connection</arg> between
+two user processes.  This is a full-duplex reliable packet-transmission
+channel.  The network undertakes never to garble, lose, duplicate, or
+resequence the packets; in the event of a serious error it may break the
+connection off entirely, informing both user processes.  User programs
+may deal explicitly in terms of packets.  They may also ignore packet
+boundaries and treat the connection as two uni-directional streams of
+8-bit or 16-bit bytes, but this really works by means of packets.
+</p>
+
+<p>If you just want to ask a question of another process or host and
+receive a reply, you can use a <arg>simple transaction</arg>: You send only
+one packet to the other host, and it sends one packet back.  This is
+more efficient than establishing a connection and using it only briefly.
+In a simple transaction, the server cannot tell whether the user
+received the answer; and if the user does not receive the answer, it
+cannot tell whether the server received the question.  In fact, the
+server might receive the question more than once.  If this is
+unacceptable, a connection must be used.
+</p>
+
+<p>Each node (or host) on the network is identified by an <arg>address</arg>,
+which is a 16-bit number.  These addresses are used in the routing of
+packets.  There is a table (the system host table, <obj>SYS: CHAOS; HOSTS
+TXT</obj>) that relates symbolic host names to numeric host addresses.  The
+host table can record addresses on any number of different networks, and
+in certain contexts a host address is meaningful only together with the
+name of the network it is for.
+</p>
+
+<p>The data transmitted over connections are in units called <arg>packets</arg>.
+Each packet contains an 8-bit number, the <arg>opcode</arg>, which indicates
+what its function is.  Opcode numbers are always given in octal.
+Opcodes less than 200 (octal) are special purpose.  Each such opcode
+that is used has an assigned name and a specific function.  Users need
+not know about all of them.  Opcodes 200 through 277 (octal) are used
+for 8-bit user data.  Opcodes 300 through 377 (octal) are used for
+16-bit user data.
+</p>
+
+<p>Each packet also contains some number of data bytes, whose meaning
+depends on the opcode.  If the opcode is for user data, then it is up to
+the application user software to decide on the interpretation.
+</p>
+<need amount="1500"></need><nopara></nopara>
+<p>Establishing a connection:
+</p>
+
+<p>A connection is created because one process sends a request to a host.
+The request is a packet containing the special-purpose opcode RFC.  The
+data contains a <arg>contact name</arg> which is used to find the process to
+connect to.  There may be a process on the target host <arg>listening</arg> on
+this contact name.  If so, it decides whether to agree to the
+connection.  Alternatively, the contact name can be the name of a standard service
+such as <example>TELNET</example>.  In this case, the receiving host creates a
+process to respond, loaded with the program for that service.
+</p>
+
+<p>Once a connection has been established, there is no more need for the
+contact name and it is discarded.  The Lisp Machine remembers what
+contact name was used to open a connection, but this is only for the
+user's information.
+</p>
+
+<p>In the case where two existing processes that already know about each
+other want to establish a connection, they must agree on a contact name,
+and then one of them must send the request while the other listens.
+They must agree between themselves which is to do which.
+</p>
+
+<p>Contact names are restricted to strings of upper-case letters, numbers,
+and ASCII punctuation.  The maximum length of a contact name is limited
+only by the packet size, although on ITS hosts the names of
+automatically-started servers are limited by the file-system to six characters.
+The contact name is terminated by a space.  If the RFC packet contains
+data beyond the contact name, it is just for interpretation by the
+listening process, which can also use it in deciding whether to accept
+the connection.
+</p>
+
+<p>A simple transaction is also begun with an RFC packet.  There is
+nothing in the RFC packet which indicates whether it is intended to
+start a connection or a simple transaction.  The server has the option
+of doing either one.  But normally any given server always does one or
+the other, and the requestor knows which one to expect.
+</p>
+
+<p>The server accepts the request for a connection by sending an OPN packet
+(a packet with opcode OPN) to the requestor.  It can also refuse the
+connection by sending a CLS packet.  The data in the CLS packet is a
+string explaining the reason for the refusal.  Another alternative is to
+tell the requestor to try a different host or a different contact name.
+This is called <arg>forwarding</arg> the request, and is done with a FWD
+packet.
+</p>
+
+<p>The server can also respond with an answer, an ANS packet, which is the
+second half of a simple transaction.  (Refusing and forwarding are also
+meaningful when a simple transaction is intended, just as when a
+connection is intended).
+</p>
+<need amount="1500"></need><nopara></nopara>
+<p>Once the connection is open:
+</p>
+
+<p>Data transmitted through Chaosnet generally follow Lisp Machine
+standards.  Bits and bytes are numbered from right to
+left, or least-significant to most-significant.  The first 8-bit byte
+in a 16-bit word is the one in the arithmetically least-significant
+position.  The first 16-bit word in a 32-bit double-word is the one
+in the arithmetically least-significant position.  This is the
+``little-endian'' convention.
+</p>
+
+<p>Big-endian machines such as the PDP-10 need to reorder the characters
+in a word in order to access them conveniently.  For their sake, some
+packet opcodes imply 8-bit data and some imply 16-bit data.  Packets
+known to contain 8-bit bytes, including opcodes 200 through 277, are
+stored in the big-endian machine's memory a character at a time,
+whereas packets containing 16-bit data are stored 16 bits at a time.
+</p>
+
+<p>The character set used is dictated by the higher-level protocol in use.
+Telnet and Supdup, for example, each specifies its own ASCII-based character set.
+The default character set--used for new protocols and for text that
+appears in the basic Chaosnet protocol, such as contact names--is
+the Lisp Machine character set.
+</p>
+
+<p>If one process tries to send data faster than the other can process it,
+the buffered packets could devour lots of memory.  Preventing this is
+the purpose of <arg>flow control</arg>.  Each process specifies a <arg>window
+size</arg>, which is the number of packets that are allowed to be waiting
+for that process to read.  Attempting to send on a connection whose
+other side's window is full waits until the other side reads some
+packets.  The default window size is 13, but for some applications you
+might wish to specify a larger value (see <obj>chaos:connect</obj>,
+<ref definition-in-file="chaos" key="chaos:connect-fun" title="Function chaos:connect" type="fun"></ref>).  There is little reason ever to
+specify a smaller value.
+</p>
+<need amount="1500"></need><nopara></nopara>
+<p>Breaking a connection:
+</p>
+
+<p>Either end of a connection can break the connection abruptly by sending
+a CLS packet.  The data in this packet is a string describing why the
+connection was broken.
+</p>
+
+<p>To break a connection gently, it is necessary to verify that all the
+data transmitted was received properly before sending a CLS.  This
+matters in some applications and is unnecessary in others.  When it is
+needed, it is done by sending a special packet, an EOF packet, which is
+mostly like a data packet except for its significance with regard to
+closing the connection.  The EOF packet is like the words ``the end'' at
+the end of a book: it tells the recipient that it has received all the
+data it is supposed to receive, that there are no missing pages that
+should have followed.  When the sender of the EOF sees the
+acknowledgement for the EOF packet, indicating that the EOF was received
+and understood, it can break the connection with a CLS.
+</p>
+
+<p>If a process that expects to receive an EOF gets a CLS with no EOF, it
+takes this to mean that the connection was broken before the
+transmission was finished.  If the process does receive an EOF, it does
+not break the connection itself immediately.  It waits to see the sender
+of the EOF break it.  If this does not happen in a few seconds, the EOF
+recipient can break the connection.
+</p>
+
+<p>It is illegal to put data in an EOF packet; in other words, the byte
+count should always be zero.  Most Chaosnet implementations simply
+ignore any data that is present in an EOF.
+</p>
+
+<p>If both sides are sending data and both need to know for certain where
+``the end'' is, they must do something a little more complicated.
+Arbitrarily call one party the user and the other the server.  The
+protocol is that after sending all its data, each party sends an EOF and
+waits for it to be acknowledged.  The server, having seen its EOF
+acknowledged, sends a second EOF.  The user, having seen its EOF
+acknowledged, looks for a second EOF and <arg>then</arg> sends a CLS and goes
+away.  The server goes away when it sees the user's CLS, or after a
+brief timeout has elapsed.  This asymmetrical protocol guarantees that
+each side gets a chance to know that both sides agree that all the data
+have been transferred.  The first CLS is sent only after both sides
+have waited for their (first) EOF to be acknowledged.
+</p>
+<need amount="1500"></need><nopara></nopara>
+<p>Clearing up inconsistencies:
+</p>
+
+<p>If a host crashes, it is supposed to forget all the connections that it
+had.  When a packet arrives on one of the former connections, the host
+will report ``no such connection'' to the sender with a LOS packet, whose
+data is a string explaining what happened.  The same thing happens if a
+CLS packet is lost; the intended recipient may keep trying to use the
+connection that the other side (which sent the CLS) no longer believes
+should exist.  LOS packets are used
+whenever a host receives a packet that it should not be getting; the
+recipient of the LOS packet knows that the connection it thought it was
+using does not exist any more.
+</p>
+</section><a name="Conns"></a>
+
+
+<section chapter-number="27" name="Conns" number="2" title="Conns"><p>On the Lisp Machine, your handle on a connection is a named
+structure of type <obj>chaos:conn</obj>.  The <obj>conn</obj> may have an actual
+connection attached to it, or it may have a connection still being made,
+or record that a connection was refused, closed or broken.
+</p>
+
+<table><tbody><tr><td><obj>chaos:inactive-state &quot;connection state&quot;</obj></td><td>This <obj>conn</obj> is not really in use at all.
+
+</td></tr><tr><td><obj>chaos:rfc-sent-state &quot;connection state&quot;</obj></td><td>This <obj>conn</obj> was used to request a connection to another process,
+but no reply has been received.  When the reply is received, it may
+change the <obj>conn</obj>'s state to <obj>chaos:answered-state</obj>,
+<obj>chaos:cls-received-state</obj>, or <obj>chaos:open-state</obj>.
+
+</td></tr><tr><td><obj>chaos:listening-state &quot;connection state&quot;</obj></td><td>This <obj>conn</obj> is being used to listen with.
+If a RFC packet is received for the contact name you are listening
+on, the state changes to <obj>chaos:rfc-received-state</obj>.
+
+</td></tr><tr><td><obj>chaos:rfc-received-state &quot;connection state&quot;</obj></td><td>This means that your listen has ``heard'' an RFC packet that matches
+it.  You can accept, reject, forward or answer the request.  Accepting
+goes to state <obj>chaos:open-state</obj>; refusing or forwarding goes to to state
+<obj>chaos:inactive-state</obj>.
+
+</td></tr><tr><td><obj>chaos:open-state &quot;connection state&quot;</obj></td><td>This <obj>conn</obj> is one end of an open connection.
+You can receive any data packets that are waiting and you can transmit
+data.
+
+</td></tr><tr><td><obj>chaos:answered-state &quot;connection state&quot;</obj></td><td>This <obj>conn</obj> was used to send an RFC packet and an ANS packet
+was received in response (a simple transaction answer arrived).  You can
+read the ANS packet, that is all.
+
+</td></tr><tr><td><obj>chaos:cls-received-state &quot;connection state&quot;</obj></td><td>This <obj>conn</obj> has received a CLS packet (the connection was closed
+or refused).  You can read any data packets that came in before the
+CLS; after them you can read the CLS.
+
+</td></tr><tr><td><obj>chaos:los-received-state &quot;connection state&quot;</obj></td><td>This <obj>conn</obj>'s connection was broken and the other end sent a LOS
+packet to say so.  The LOS packet is the only packet available to be
+read.
+
+</td></tr><tr><td><obj>chaos:host-down-state &quot;connection state&quot;</obj></td><td>The host at the other end of this <obj>conn</obj>'s connection has not
+responded to anything for a significant time.
+
+</td></tr><tr><td><obj>chaos:foreign-state &quot;connection state&quot;</obj></td><td>The connection is being used with a foreign protocol encapsulated in UNC
+packets
+(see the MIT AI Lab memo entitled ``Chaosnet'' for more information on this).
+</td></tr></tbody></table><nopara></nopara>
+<p>These are
+the fields of a <obj>conn</obj> that you might be interested in:
+</p>
+<definition><define key="chaos:conn-state-fun" name="chaos:conn-state" type="fun"><args>conn</args>
+</define>
+
+<description>This slot holds the state of <arg>conn</arg>.  It is one of the symbols listed above.
+</description></definition><definition><define key="chaos:conn-foreign-address-fun" name="chaos:conn-foreign-address" type="fun"><args>conn</args>
+</define>
+
+<description>Returns the address of the host at the other end of this connection.
+Use <obj>si:get-host-from-address</obj> to find out which host this is
+(see <ref definition-in-file="pathnm" key="si:get-host-from-address-fun" title="Function si:get-host-from-address" type="fun"></ref>).
+</description></definition><definition><define key="chaos:conn-read-pkts-fun" name="chaos:conn-read-pkts" type="fun"><args>conn</args>
+</define>
+
+<description>Internally threaded chain of incoming packets available to be read from
+<arg>conn</arg>.
+
+Its main use for the applications programmer is to test whether there
+are any incoming packets.
+</description></definition><definition><define key="chaos:conn-window-available-fun" name="chaos:conn-window-available" type="fun"><args>conn</args>
+</define>
+
+<description>Returns the number of packets you may transmit before the network
+software forces you to wait for the receiver to read some.
+This is just a minimum.  By the time you actually send this many
+packets, the receiver may already have said he has room for some more.
+</description></definition><definition><define key="chaos:conn-plist-fun" name="chaos:conn-plist" type="fun"><args>conn</args>
+</define>
+
+<description>This slot is used to store arbitrary properties on <arg>conn</arg>.
+You can store properties yourself; use property names that are not in
+the <obj>chaos</obj> package to avoid conflict.
+</description></definition><definition><define key="chaos:contact-name-fun" name="chaos:contact-name" type="fun"><args>conn</args>
+</define>
+
+<description>Returns the contact name with which <arg>conn</arg> was created.  The contact
+name is not significant to the functioning of the connection once an RFC
+and LSN have matched, but it is remembered for the sake of debugging.
+The user can use this function or the <obj>:contact-name</obj> message to a
+stream to determine any contact name ``arguments.''
+</description></definition><definition><define key="chaos:wait-fun" name="chaos:wait" type="fun"><args>conn state timeout <standard>&amp;optional</standard> whostate</args>
+</define>
+
+<description>Waits until the state of <arg>conn</arg> is not the symbol <arg>state</arg>, or until
+<arg>timeout</arg> 60ths of a second have elapsed.  If the timeout occurs, <obj>nil</obj> is
+returned; otherwise <obj>t</obj> is returned.  <arg>whostate</arg> is the process state to
+put in the who-line; it defaults to <obj>&quot;Chaosnet wait&quot;</obj>.
+</description></definition></section><a name="Opening and Closing Connections"></a>
+
+
+<section chapter-number="27" name="Opening and Closing Connections" number="3" title="Opening and Closing Connections">
+<subsection name="NIL" title="User-Side"><definition><define key="chaos:connect-fun" name="chaos:connect" type="fun"><args>host contact-name <standard>&amp;optional</standard> window-size timeout</args>
+</define>
+
+<description>Opens a stream connection; returns a <obj>conn</obj> if it succeeds or else a
+string giving the reason for failure.  <arg>host</arg> may be a number or the name
+of a known host.  <arg>contact-name</arg> is a string containing the contact name
+and any additional arguments to go in the RFC packet.  If <arg>window-size</arg>
+is not specified it defaults to 13.  If <arg>timeout</arg> is not specified it
+defaults to 600 (ten seconds).
+</description></definition><definition><define key="chaos:simple-fun" name="chaos:simple" type="fun"><args>host contact-name <standard>&amp;optional</standard> timeout</args>
+</define>
+
+<description>Taking arguments similar to those of <obj>chaos:connect</obj>, this performs the user
+side of a simple-transaction.  The returned value is either an ANS packet
+or a string containing a failure message.  The ANS packet should be disposed
+of (using <obj>chaos:return-pkt</obj>, see below) when you are done with it.
+</description></definition><definition><define key="chaos:remove-conn-fun" name="chaos:remove-conn" type="fun"><args>conn</args>
+</define>
+
+<description>Makes <arg>conn</arg> null and void.  It becomes inactive, all its buffered packets
+are freed, and the corresponding Chaosnet connection (if any) goes away.
+This is called <arg>removing</arg> the connection.  <arg>conn</arg> itself is marked
+for reuse for another Chaosnet connection, so you should not do anything
+else with it after it is removed.
+</description></definition><definition><define key="chaos:close-conn-fun" name="chaos:close-conn" type="fun"><args>conn <standard>&amp;optional</standard> reason</args>
+</define>
+
+<description>Closes and removes the connection.  If it is open, a CLS packet is sent
+containing the string <arg>reason</arg>.  Don't use this to reject RFC's; use
+<obj>chaos:reject</obj> for that.
+</description></definition><definition><define key="chaos:open-foreign-connection-fun" name="chaos:open-foreign-connection" type="fun"><args>host index <standard>&amp;optional</standard> pkt-allocation distinguished-port</args>
+</define>
+
+<description>Creates a <obj>conn</obj> that may be used to transmit and receive foreign
+protocols encapsulated in UNC packets.  <arg>host</arg> and <arg>index</arg> are the
+destination address for packets sent with <obj>chaos:send-unc-pkt</obj>.
+<arg>pkt-allocation</arg> is the `window size', i.e. the maximum number of input
+packets that may be buffered.  It defaults to 10.
+If <arg>distinguished-port</arg> is supplied, the local index is set to it.
+This is necessary for protocols that define the meanings of particular index
+numbers.
+
+See the MIT AI Lab memo entitled ``Chaosnet'' for more information on
+using foreign protocols.
+</description></definition></subsection>
+
+<subsection name="NIL" title="Server-Side"><definition><define key="chaos:listen-fun" name="chaos:listen" type="fun"><args>contact-name <standard>&amp;optional</standard> window-size wait-for-rfc</args>
+</define>
+
+<description>Waits for an RFC for the specified contact name to arrive, then returns a
+<obj>conn</obj> that is in <obj>chaos:rfc-received-state</obj>.  If <arg>window-size</arg> is
+not specified it defaults to 13.  If <arg>wait-for-rfc</arg> is specified as <obj>nil</obj>
+(it defaults to <obj>t</obj>) then the <obj>conn</obj> is returned immediately without
+waiting for an RFC to arrive.
+</description></definition><definition>
+<define key="chaos:server-alist-var" name="chaos:server-alist" type="var"></define>
+
+<description>Contains an entry for each server that always exists.  When an RFC
+arrives for one of these servers, the specified form is evaluated in the
+background process; typically it creates a process that will then do a
+<obj>chaos:listen</obj>.  Use the <obj>add-initialization</obj> function to add entries
+to this list.  Here is how the EVAL server is installed:
+
+<lisp>(ADD-INITIALIZATION &quot;EVAL&quot;
+     '(PROCESS-RUN-FUNCTION &quot;EVAL Server&quot; 'EVAL-SERVER-FUNCTION)
+     NIL
+     'CHAOS:SERVER-ALIST)
+</lisp></description></definition><definition><define key="chaos:accept-fun" name="chaos:accept" type="fun"><args>conn</args>
+</define>
+
+<description><arg>conn</arg> must be in <obj>chaos:rfc-received-state</obj>.  An OPN packet is
+transmitted and <arg>conn</arg> enters the <obj>chaos:open-state</obj>.  If the RFC packet
+has not already been read with <obj>chaos:get-next-pkt</obj>, it is discarded.  You
+should read it before accepting, if it contains arguments in addition to the
+contact name.
+</description></definition><definition><define key="chaos:reject-fun" name="chaos:reject" type="fun"><args>conn reason</args>
+</define>
+
+<description><arg>conn</arg> must be in <obj>chaos:rfc-received-state</obj>.  A CLS packet containing
+the string <arg>reason</arg> is sent and <arg>conn</arg> is removed from the connection table.
+</description></definition><definition><define key="chaos:forward-all-fun" name="chaos:forward-all" type="fun"><args>contact-name host</args>
+</define>
+
+<description>Causes all future requests for connection to this host on <arg>contact-name</arg> 
+to be forwarded to the same contact name at host <arg>host</arg>.
+</description></definition><definition><define key="chaos:answer-string-fun" name="chaos:answer-string" type="fun"><args>conn string</args>
+</define>
+
+<description><arg>conn</arg> must be in <obj>chaos:rfc-received-state</obj>.  An ANS packet containing
+the string <arg>string</arg> is sent and <arg>conn</arg> is removed from the connection table.
+</description></definition><definition><define key="chaos:answer-fun" name="chaos:answer" type="fun"><args>conn pkt</args>
+</define>
+
+<description><arg>conn</arg> must be in <obj>chaos:rfc-received-state</obj>.  <arg>pkt</arg> is transmitted as
+an ANS packet and <arg>conn</arg> is removed.  Use this function when the answer 
+is some binary data rather than a text string.
+</description></definition><definition><define key="chaos:fast-answer-string-fun" name="chaos:fast-answer-string" type="fun"><args>contact-name string</args>
+</define>
+
+<description>If a pending RFC exists to <arg>contact-name</arg>, an ANS containing <arg>string</arg>
+is sent in response to it and <obj>t</obj> is returned.  Otherwise <obj>nil</obj> is returned.
+This function involves the minimum possible overhead.  No <obj>conn</obj> is created.
+</description></definition></subsection></section><a name="Stream Input and Output"></a>
+
+<section chapter-number="27" name="Stream Input and Output" number="4" title="Stream Input and Output"><definition><define key="chaos:open-stream-fun" name="chaos:open-stream" type="fun"><args>host contact-name <standard>&amp;key</standard> window-size timeout error direction characters ascii-translation</args>
+</define>
+
+<description>Opens a Chaosnet connection and returns a stream that does I/O to it.
+<arg>host</arg> is the host to connect to; <arg>contact-name</arg> is the contact name at that host.
+These two arguments are passed along to <obj>chaos:connect</obj>.
+
+If <arg>host</arg> is <obj>nil</obj>, a connection to <arg>contact-name</arg> is listened
+for, and a stream is returned as soon as a request comes in for that
+contact name.  At this time, you must accept or reject the connection by
+invoking the stream operation <obj>:accept</obj> or <obj>:reject</obj>.  Before you
+decide which to do, you can use the <obj>:foreign-host</obj> operation to find
+out where the connection came from.
+
+The remaining arguments are:
+
+<table><tbody><tr><td><arg>window-size</arg></td><td></td></tr><tr><td><arg>timeout</arg></td><td>These two arguments specify two arguments for <obj>chaos:connect</obj>.
+</td></tr><tr><td><arg>error</arg></td><td>If the value is non-<obj>nil</obj>, a failure to connect causes a Lisp error.
+Otherwise, it causes a string describing the error to be returned.
+</td></tr><tr><td><arg>direction</arg></td><td></td></tr><tr><td><arg>characters</arg></td><td></td></tr><tr><td><arg>ascii-translation</arg></td><td>These three arguments are passed along to <obj>chaos:make-stream</obj>.
+</td></tr></tbody></table></description></definition><definition><define key="chaos:make-stream-fun" name="chaos:make-stream" type="fun"><args>conn <standard>&amp;key</standard> direction characters ascii-translation</args>
+</define>
+
+<description>Creates and returns a stream that does I/O on the connection <arg>conn</arg>,
+which should be open as a stream connection.  <arg>direction</arg> may be
+<obj>:input</obj>, <obj>:output</obj> or <obj>:bidirectional</obj>.
+
+If <arg>characters</arg> is non-nil (which is the default), the stream reads
+and writes 8-bit bytes.  If <arg>characters</arg> is <obj>nil</obj>, the stream reads
+and writes 16-bit bytes.
+
+If <arg>ascii-translation</arg> is non-<obj>nil</obj>, characters written to the
+stream are translated to standard ASCII before they are sent, and
+characters read are translated from ASCII to the Lisp Machine character
+set.
+</description></definition><definition>
+<define key="chaos:basic-stream-connection-method" name="chaos:basic-stream" type="method"></define>
+
+<description>Returns the connection with which this stream is connected.
+</description></definition><definition>
+<define key="chaos:basic-stream-contact-name-method" name="chaos:basic-stream" type="method"></define>
+
+<description>Return the contact name with with this stream was opened.
+</description></definition><definition>
+<define key="chaos:basic-stream-foreign-host-method" name="chaos:basic-stream" type="method"></define>
+
+<description>Returns the host object for the host at the other end of this stream's connection.
+</description></definition><definition>
+<define key="chaos:basic-stream-accept-method" name="chaos:basic-stream" type="method"></define>
+
+<description>Accepts the request for a connection which this stream received.
+Used only for streams made by <obj>chaos:open-stream</obj> with <obj>nil</obj> as
+the <arg>host</arg> argument.
+</description></definition><definition><define key="chaos:basic-stream-reject-method" name="chaos:basic-stream" type="method"><args>reason-string</args>
+</define>
+
+<description>Rejects the request for a connection which this stream received, sending
+<arg>reason-string</arg> in the CLS packet as the reason.  Used only for
+streams made by <obj>chaos:open-stream</obj> with <obj>nil</obj> as the <arg>host</arg>
+argument.
+</description></definition><definition><define key="chaos:basic-stream-close-method" name="chaos:basic-stream" type="method"><args><standard>&amp;optional</standard> abort-p</args>
+</define>
+
+<description>Sends a CLS packet and removes the connection.  For output connections and bidirectional
+connections, the <obj>:eof</obj> operation is performed first, if
+<arg>abort-p</arg> is <obj>nil</obj>.
+</description></definition><definition>
+<define key="chaos:basic-output-stream-force-output-method" name="chaos:basic-output-stream" type="method"></define>
+
+<description>Any buffered output is transmitted.  Normally output is accumulated until a
+full packet's worth of bytes are available, so that maximum-size packets are
+transmitted.
+</description></definition><definition>
+<define key="chaos:basic-output-stream-finish-method" name="chaos:basic-output-stream" type="method"></define>
+
+<description>Waits until either all packets have been sent and acknowledged, or the connection ceases
+to be open.  If successful, returns <obj>t</obj>; if the connection goes into a bad state,
+returns <obj>nil</obj>.
+</description></definition><definition>
+<define key="chaos:basic-output-stream-eof-method" name="chaos:basic-output-stream" type="method"></define>
+
+<description>Forces out any buffered output, sends an EOF packet, and does a <obj>:finish</obj>.
+</description></definition><definition>
+<define key="chaos:basic-input-stream-clear-eof-method" name="chaos:basic-input-stream" type="method"></define>
+
+<description>Allows you to read past an EOF packet on input.  Normally, each <obj>:tyi</obj>
+done at eof returns <obj>nil</obj> or signals the specified eof error.  If you
+do <obj>:clear-eof</obj> on the stream, you can then read more data (assuming
+there are data packets following the EOF packet).
+</description></definition></section><a name="Packet Input and Output"></a>
+
+
+<section chapter-number="27" name="Packet Input and Output" number="5" title="Packet Input and Output"><p>Input and output on a Chaosnet connection can be done at the whole-packet
+level, using the functions in this section.  A packet is represented by
+a <obj>chaos:pkt</obj> data structure.  Allocation of <obj>pkts</obj> is controlled by the system;
+each <obj>pkt</obj> that it gives you must be given back.  There are functions to
+convert between <obj>pkts</obj> and strings.  A <obj>pkt</obj> is an <obj>art-16b</obj> array
+containing the packet header and data; the leader of a <obj>pkt</obj>
+contains a number of fields used by the system.
+</p>
+<definition>
+<define key="chaos:first-data-word-in-pkt-var" name="chaos:first-data-word-in-pkt" type="const"></define>
+
+<description>This is the index in any <obj>pkt</obj> of the element that is the first
+16-bit word of user data.  (Preceding elements are used to store a
+header used by the hardware.)
+</description></definition><definition>
+<define key="chaos:max-data-words-per-pkt-var" name="chaos:max-data-words-per-pkt" type="const"></define>
+
+<description>The maximum number of 16-bit data words allowed in a packet.
+</description></definition><definition><define key="chaos:pkt-opcode-fun" name="chaos:pkt-opcode" type="fun"><args>pkt</args>
+</define>
+
+<description>Accessor for the opcode of the packet <arg>pkt</arg>.  To set the opcode, do
+
+<lisp>(setf (chaos:pkt-opcode my-pkt) my-opcode)
+</lisp>The system provides names for all the opcodes standardly used.  The names useful to the applications programmer appear at the end of this section.
+</description></definition><definition><define key="chaos:pkt-nbytes-fun" name="chaos:pkt-nbytes" type="fun"><args>pkt</args>
+</define>
+
+<description>Accessor for the number-of-data-bytes field of <arg>pkt</arg>'s.
+This field says how much of <arg>pkt</arg>'s contects are valid data,
+measured in 8-bit bytes.
+This field can be set with <obj>setf</obj> also.
+</description></definition><definition><define key="chaos:pkt-string-fun" name="chaos:pkt-string" type="fun"><args>pkt</args>
+</define>
+
+<description>An indirect array that is the data field of <arg>pkt</arg> as a string of 8-bit bytes.
+The length of this string is equal to <obj>(chaos:pkt-nbytes <arg>pkt</arg>)</obj>.
+If you wish to record the contects of <arg>pkt</arg> permanently, you must copy this string.
+</description></definition><definition><define key="chaos:set-pkt-string-fun" name="chaos:set-pkt-string" type="fun"><args>pkt <standard>&amp;rest</standard> strings</args>
+</define>
+
+<description>Copies the <arg>strings</arg> into the data field of <arg>pkt</arg>, concatenating them,
+and sets <obj>(chaos:pkt-nbytes <arg>pkt</arg>)</obj> accordingly.
+</description></definition><definition>
+<define key="chaos:get-pkt-fun" name="chaos:get-pkt" type="fun"></define>
+
+<description>Allocates a <obj>pkt</obj> for use by the user.
+</description></definition><definition><define key="chaos:return-pkt-fun" name="chaos:return-pkt" type="fun"><args>pkt</args>
+</define>
+
+<description>Returns <arg>pkt</arg> to the system for reuse.  The packets given to you by <obj>chaos:get-pkt</obj>,
+<obj>chaos:get-next-pkt</obj> and <obj>chaos:simple</obj> should be returned to the system in this way
+when you are finished with them.
+</description></definition><definition><define key="chaos:send-pkt-fun" name="chaos:send-pkt" type="fun"><args>conn pkt <standard>&amp;optional</standard> (opcode <obj>chaos:dat-op</obj>)</args>
+</define>
+
+<description>Transmits <arg>pkt</arg> on <arg>conn</arg>.  <arg>pkt</arg> should have been allocated with <obj>chaos:get-pkt</obj>
+and then had its data field and n-bytes filled in.  <arg>opcode</arg> must be a data opcode
+(#o200 or more) or EOF.  An error is signaled, with condition <obj>chaos:not-open-state</obj>,
+if <arg>conn</arg> is not open.
+
+Giving a <obj>pkt</obj> to <obj>chaos:send-pkt</obj> constitutes giving it back to the system.
+You do not need to call <obj>chaos:return-pkt</obj>.
+</description></definition><definition><define key="chaos:send-string-fun" name="chaos:send-string" type="fun"><args>conn <standard>&amp;rest</standard> strings</args>
+</define>
+
+<description>Sends a data packet containing the concatenation of <arg>strings</arg> as its data.
+</description></definition><definition><define key="chaos:send-unc-pkt-fun" name="chaos:send-unc-pkt" type="fun"><args>conn pkt <standard>&amp;optional</standard> pkt-number ack-number</args>
+</define>
+
+<description>Transmits <arg>pkt</arg>, an UNC packet, on <arg>conn</arg>.  The opcode, packet
+number, and acknowledge number fields in the packet header are filled in
+(the latter two only if the optional arguments are supplied).
+
+See the MIT AI Lab memo entitled ``Chaosnet'' for more information on
+using foreign protocols.
+</description></definition><definition><define key="chaos:may-transmit-fun" name="chaos:may-transmit" type="fun"><args>conn</args>
+</define>
+
+<description>A predicate that returns <obj>t</obj> if there is any space in the window for
+transmitting on <arg>conn</arg>.  If the value is <obj>nil</obj>, you may have to wait
+if you try to transmit.  If the value is <obj>t</obj>, you certainly do not have to wait.
+</description></definition><definition><define key="chaos:finish-conn-fun" name="chaos:finish-conn" type="fun"><args>conn <standard>&amp;optional</standard> (whostate <obj>&quot;Net Finish&quot;</obj>)</args>
+</define>
+
+<description>Waits until either all packets have been sent and acknowledged, or the connection ceases
+to be open.  If successful, returns <obj>t</obj>; if the connection goes into a bad state,
+returns <obj>nil</obj>.  <arg>whostate</arg> is the process state to display in the who-line
+while waiting.
+</description></definition><definition><define key="chaos:conn-finished-p-fun" name="chaos:conn-finished-p" type="fun"><args>conn</args>
+</define>
+
+<description><obj>t</obj> unless <arg>conn</arg> is open and has sent packets which have not been acknowledged.
+</description></definition><definition><define key="chaos:get-next-pkt-fun" name="chaos:get-next-pkt" type="fun"><args>conn <standard>&amp;optional</standard> (no-hang-p <obj>nil</obj>) whostate check-conn-state</args>
+</define>
+
+<description>Returns the next input packet from <arg>conn</arg>.  When you are done with the packet you
+must give it back to the system with <obj>chaos:return-pkt</obj>.  This can return
+an RFC, CLS, or ANS packet, in addition to data, UNC, or EOF.
+
+If no packets are available, <obj>nil</obj> is returned
+if <arg>no-hang-p</arg> is <obj>t</obj>.  Otherwise, <obj>chaos:get-next-pkt</obj>
+waits for a packet to come in or for the state to change.  <arg>whostate</arg> is displayed
+in the who line; it defaults to <obj>&quot;Chaosnet Input&quot;</obj>.
+
+If <arg>check-conn-state</arg> is non-<obj>nil</obj>, the connection state is checked
+for validity before anything else is done, and an error is signaled if
+the connection is in a bad state, with condition name
+<obj>chaos:host-down</obj>, <obj>chaos:los-received-state</obj>, or
+<obj>chaos:read-on-closed-connection</obj>.  If <arg>check-conn-state</arg> is <obj>nil</obj>
+and <arg>no-hang-p</arg> is <obj>t</obj>, <obj>nil</obj> is returned.  <arg>check-conn-state</arg>
+defaults to <obj>(not <arg>no-hang-p</arg>)</obj>.
+</description></definition><definition><define key="chaos:data-available-fun" name="chaos:data-available" type="fun"><args>conn</args>
+</define>
+
+<description>A predicate that returns <obj>t</obj> if there any input packets available from <arg>conn</arg>.
+</description></definition><need amount="1500"></need><nopara></nopara>
+<p>Here are symbolic names for the opcodes that an applications programmer
+needs to know about:
+</p>
+<definition>
+<define key="chaos:rfc-op-var" name="chaos:rfc-op" type="const"></define>
+
+<description>This special-purpose opcode is used for requesting a connection.  The
+data consists of the contact name terminated by a space character,
+followed optionally by additional data whose meaning is up to the server
+for that contact name.
+</description></definition><definition>
+<define key="chaos:brd-op-var" name="chaos:brd-op" type="const"></define>
+
+<description>This special purpose opcode is for requesting responses from many hosts.
+Currently, there is no user end for initiating these requests in the
+Lisp Machine system, but the Lisp Machine can respond to such requests.
+An incoming packet of this type is treated like an RFC packet.
+</description></definition><definition>
+<define key="chaos:lsn-op-var" name="chaos:lsn-op" type="const"></define>
+
+<description>This special-purpose opcode is used when you ask to listen on a contact
+name.  The data is just the contact name.  This packet is never actually
+sent over the network, just kept in the Chaosnet software and compared
+with the contact names in RFC packets that arrive.
+</description></definition><definition>
+<define key="chaos:opn-op-var" name="chaos:opn-op" type="const"></define>
+
+<description>This special-purpose opcode is used by the server process to accept the
+request for a connection conveyed by an RFC packet.
+Its data serves only internal functions.
+</description></definition><definition>
+<define key="chaos:ans-op-var" name="chaos:ans-op" type="const"></define>
+
+<description>This special-purpose opcode is used to send a simple reply.  The simple
+reply is sent back in place of opening a connection.
+</description></definition><definition>
+<define key="chaos:los-op-var" name="chaos:los-op" type="const"></define>
+
+<description>This special-purpose packet is what you receive if you try to use a
+connection that has been broken.  Its data is a message explaining the
+situation, which you can print for the user.
+</description></definition><definition>
+<define key="chaos:cls-op-var" name="chaos:cls-op" type="const"></define>
+
+<description>This special-purpose packet is used to close a connection.  Its data is
+a message explaining the reason, and it can be printed for the user.
+Note that you cannot count on receiving a CLS packet because it is
+not retransmitted if it is lost.  If that happens you get a
+LOS when you try to use the connection (thinking it is still open).
+
+CLS packets are also used for refusing to open a connection in the
+first place.
+</description></definition><definition>
+<define key="chaos:eof-op-var" name="chaos:eof-op" type="const"></define>
+
+<description>This special-purpose opcode is used to indicate the end of the data that
+you really want to transmit.  When this packet is acknowledged by the
+other process, you know that all the real data was received properly.
+You can wait for this with <obj>chaos:finish</obj>.
+The EOF packet carries no data itself.
+</description></definition><definition>
+<define key="chaos:dat-op-var" name="chaos:dat-op" type="const"></define>
+
+<description>This is opcode 200 (octal), which is the normal opcode used for 8-bit
+user data.  Some protocols use multiple data opcodes in the range 200
+through 277, but simple protocols that do not need to distinguish
+types of packets just use opcode 200.
+</description></definition></section><a name="Connection Interrupts"></a>
+
+<section chapter-number="27" name="Connection Interrupts" number="6" title="Connection Interrupts"><definition><define key="chaos:interrupt-function-fun" name="chaos:interrupt-function" type="fun"><args>conn</args>
+</define>
+
+<description>This attribute of a <obj>conn</obj> is a function to be called when certain
+events occur on this connection.  Normally this is <obj>nil</obj>, which means
+not to call any function, but you can use <obj>setf</obj> to store a function
+here.  Since the function is called in the Chaosnet background process,
+it should not do any operations that might have to wait for the network,
+since that could permanently hang the background process.
+
+The function's first argument is one of the following symbols, giving the
+reason for the interrupt.  The function's second argument is <arg>conn</arg>.
+Additional arguments may be present depending on the reason.  The possible
+reasons are:
+
+<table><tbody><tr><td><obj>:input</obj></td><td>A packet has arrived for the connection when it had no input packets queued.
+It is now possible to do <obj>chaos:get-next-pkt</obj> without having to wait.
+There are no additional arguments.
+
+</td></tr><tr><td><obj>:output</obj></td><td>An acknowledgement has arrived for the connection and made space in the window
+when formerly it was full.  Additional output packets may now be transmitted
+with <obj>chaos:send-pkt</obj> without having to wait.
+There are no additional arguments.
+
+</td></tr><tr><td><obj>:change-of-state</obj></td><td>The state of the connection has changed.  The third argument to the function
+is the symbol for the new state.
+</td></tr></tbody></table></description></definition><definition><define key="chaos:read-pkts-fun" name="chaos:read-pkts" type="fun"><args>conn</args>
+</define>
+
+<description>Some interrupt functions want to look at the queued input packets of a connection
+when they get a <obj>:input</obj> interrupt.  <obj>chaos:read-pkts</obj> returns the first packet
+available for reading.  Successive packets can be found by following <obj>chaos:pkt-link</obj>.
+</description></definition><definition><define key="chaos:pkt-link-fun" name="chaos:pkt-link" type="fun"><args>pkt</args>
+</define>
+
+<description>Lists of packets in the NCP are threaded together by storing each packet
+in the <obj>chaos:pkt-link</obj> of its predecessor.  The list is terminated with <obj>nil</obj>.
+</description></definition></section><a name="Chaosnet Errors"></a>
+
+<section chapter-number="27" name="Chaosnet Errors" number="7" title="Chaosnet Errors"><definition><define key="sys:network-error-flavor-condition" name="sys:network-error" type="flavor-condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>All errors from the Chaosnet code use flavors built on this one.
+</description></definition>
+
+<subsection name="NIL" title="Local Problems"><definition><define key="sys:local-network-error-flavor-condition" name="sys:local-network-error" type="flavor-condition"><args>(<obj>sys:network-error</obj> <obj>error</obj>)</args>
+</define>
+
+<description>This flavor is used for problems in connection with the Chaosnet
+that have entirely to do with what is going on in this Lisp Machine.
+</description></definition><definition><define key="sys:network-resources-exhausted-condition" name="sys:network-resources-exhausted" type="condition"><args>(<obj>sys:local-network-error</obj> <obj>sys:network-error</obj> <obj>error</obj>)</args>
+</define>
+
+<description>Signaled when some local resource in the NCP was exhausted.  Most
+likely, there are too many Chaosnet connections and the connection table
+is full.
+</description></definition><definition><define key="sys:unknown-address-condition" name="sys:unknown-address" type="condition"><args>(<obj>sys:local-network-error</obj> <obj>sys:network-error</obj> <obj>error</obj>)</args>
+</define>
+
+<description>The <arg>address</arg> argument to <obj>chaos:connect</obj> or some similar function was not recognizable.
+The <obj>:address</obj> operation on the condition instance returns the address that was supplied.
+</description></definition></subsection>
+
+<subsection name="NIL" title="Problems Involving Other Machines' Actions"><definition><define key="sys:remote-network-error-flavor-condition" name="sys:remote-network-error" type="flavor-condition"><args>(<obj>sys:network-error</obj> <obj>error</obj>)</args>
+</define>
+
+<description>This flavor is used for network problems that involve the
+actions (or lack of them) of other machines.
+It is often useful to test for as a condition name.
+
+The operations <obj>:connection</obj> and <obj>:foreign-host</obj> return the
+<obj>chaos:conn</obj> object and the host object for the foreign host.
+</description></definition>
+<p>All the condition names listed below imply the presence of
+<obj>sys:remote-network-error</obj>, <obj>sys:network-error</obj> and
+<obj>error</obj>.  For brevity, these are not mentioned in the
+individual descriptions.
+</p>
+
+<p>Every instance of <obj>sys:remote-network-error</obj> is either a
+<obj>sys:connection-error</obj> or a <obj>sys:bad-connection-state</obj>.
+</p>
+<definition>
+<define key="sys:connection-error-condition" name="sys:connection-error" type="condition"></define>
+
+<description>This condition name categorizes failure to complete a connection.
+</description></definition><definition>
+<define key="sys:bad-connection-state-condition" name="sys:bad-connection-state" type="condition"></define>
+
+<description>This condition name categorizes errors where an existing, valid connection
+becomes invalid.  The error is not signaled until you try to use the connection.
+</description></definition><definition>
+<define key="sys:host-not-responding-condition" name="sys:host-not-responding" type="condition"></define>
+
+<description>This condition name categorizes errors where no packets whatever are
+received from the foreign host, making it seem likely that that host or
+the network is down.
+</description></definition><definition><define key="sys:host-not-responding-during-connection-condition" name="sys:host-not-responding-during-connection" type="condition"><args>(<obj>sys:connection-error</obj> <obj>sys:host-not-responding</obj>)</args>
+</define>
+
+<description>This condition is signaled when a host does not respond while it is
+being asked to make a connection.
+</description></definition><definition><define key="sys:no-server-up-condition" name="sys:no-server-up" type="condition"><args>(<obj>sys:connection-error</obj>)</args>
+</define>
+
+<description>This condition is signaled by certain functions which request service from
+any available machine which can provide it, if no such machine is
+responding or no host is listed as a server for a particular service.
+</description></definition><definition><define key="sys:host-stopped-responding-condition" name="sys:host-stopped-responding" type="condition"><args>(<obj>sys:bad-connection-state</obj> <obj>sys:host-not-responding</obj>)</args>
+</define>
+
+<description>This condition is signaled when a host does not respond even though a
+connection to it already exists.
+</description></definition><definition><define key="sys:connection-refused-condition" name="sys:connection-refused" type="condition"><args>(<obj>sys:connection-error</obj>)</args>
+</define>
+
+<description>This is signaled when a connection is refused.
+
+The <obj>:reason</obj> operation on the condition instance returns the reason
+specified in the CLS packet (a string) or <obj>nil</obj> if no reason was
+given.
+
+Note that many Chaosnet implementations do not send CLS packets when
+there is no process or server listening for a contact name.  Also, it is
+possible for the CLS packet to get lost in the network, so that the
+error actually signalled is not unlikely to be 
+<obj>sys:host-not-responding-during-connection</obj>.
+</description></definition><definition><define key="sys:connection-closed-condition" name="sys:connection-closed" type="condition"><args>(<obj>sys:bad-connection-state</obj>)</args>
+</define>
+
+<description>This is signaled when you try to send on a connection which has been closed
+by the other host.
+
+The <obj>:reason</obj> operation on the condition instance returns the reason
+specified in the CLS packet (a string) or <obj>nil</obj> if no reason was
+given.
+</description></definition><definition><define key="sys:connection-lost-condition" name="sys:connection-lost" type="condition"><args>(<obj>sys:bad-connection-state</obj>)</args>
+</define>
+
+<description>This is signaled when you try to use a connection on which a LOS packet was received.
+
+The <obj>:reason</obj> operation on the condition instance returns the reason
+specified in the CLS packet (a string) or <obj>nil</obj> if no reason was
+given.
+</description></definition><definition><define key="sys:connection-no-more-data-condition" name="sys:connection-no-more-data" type="condition"><args>(<obj>sys:bad-connection-state</obj>)</args>
+</define>
+
+<description>This is signaled when you try to read from a connection which has been
+closed by the other host, when there are no packets left to be read.
+(It is no error to read from a connection which has been closed, if you
+have not yet read all the packets which arrived, including the CLS
+packet).
+
+The <obj>:reason</obj> operation on the condition instance returns the reason
+specified in the CLS packet (a string) or <obj>nil</obj> if no reason was
+given.
+</description></definition></subsection></section><a name="Information and Control"></a>
+
+<section chapter-number="27" name="Information and Control" number="8" title="Information and Control"><definition><define key="chaos:host-up-p-fun" name="chaos:host-up-p" type="fun"><args>host <standard>&amp;optional</standard> (timeout <obj>180.</obj>)</args>
+</define>
+
+<description><obj>t</obj> if <arg>host</arg> responds over the Chaosnet within <arg>timeout</arg> sixtieths of
+a second, otherwise <obj>nil</obj>.  The value is always <obj>nil</obj> if <arg>host</arg>
+is not on the Chaosnet.
+</description></definition><definition><define key="chaos:up-hosts-fun" name="chaos:up-hosts" type="fun"><args>host-list <standard>&amp;optional</standard> number-of-hosts (timeout <obj>250.</obj>)</args>
+</define>
+
+<description>Returns a list of all the hosts in <arg>host-list</arg> which are currently responding
+over the Chaosnet.  <arg>host-list</arg> is a list of host names and/or host objects.
+The value is always a list of host objects, possibly <obj>nil</obj> for none of them.
+
+If <arg>number-of-hosts</arg> is non-<obj>nil</obj>, it should be a positive integer; when that
+many hosts have responded, <obj>chaos:up-hosts</obj> returns right away without
+bothering to listen for replies from the rest.
+
+<arg>timeout</arg> is an integer; if a host fails to respond for that many
+sixtieths of a second, it is assumed to be down.
+</description></definition><definition><define key="chaos:host-data-fun" name="chaos:host-data" type="fun"><args><standard>&amp;optional</standard> host</args>
+</define>
+
+<description><arg>host</arg> may be a number or a known host name, and defaults to the local host.  Two
+values are returned.  The first value is the host name and the second is
+the host number.  If the host is a number not in the table, it is asked its name
+using the <obj>STATUS</obj> protocol; if no response is received the name
+<obj>&quot;Unknown&quot;</obj> is returned.
+</description></definition><definition><define key="chaos:print-conn-fun" name="chaos:print-conn" type="fun"><args>conn <standard>&amp;optional</standard> (short <obj>t</obj>)</args>
+</define>
+
+<description>Prints everything the system knows about the connection.  If <arg>short</arg> is <obj>nil</obj> it
+also prints everything the system knows about each queued input and output packet
+on the connection.
+</description></definition><definition><define key="chaos:print-pkt-fun" name="chaos:print-pkt" type="fun"><args>pkt <standard>&amp;optional</standard> (short <obj>nil</obj>)</args>
+</define>
+
+<description>Prints everything the system knows about the packet, except its data field.
+If <arg>short</arg> is <obj>t</obj>, only the first line of the information is printed.
+</description></definition><definition><define key="chaos:print-all-pkts-fun" name="chaos:print-all-pkts" type="fun"><args>pkt <standard>&amp;optional</standard> (short <obj>t</obj>)</args>
+</define>
+
+<description>Calls <obj>chaos:print-pkt</obj> on <arg>pkt</arg> and all packets on the threaded list emanating
+from it.
+</description></definition><definition>
+<define key="chaos:status-fun" name="chaos:status" type="fun"></define>
+
+<description>Prints the hardware status.  (Currently works for the CADR only.)
+</description></definition><definition>
+<define key="chaos:reset-fun" name="chaos:reset" type="fun"></define>
+
+<description>Resets the hardware and software and turns off Chaosnet communication.
+</description></definition><definition>
+<define key="chaos:assure-enabled-fun" name="chaos:assure-enabled" type="fun"></define>
+
+<description>Turns on Chaosnet communication if it is not already on.  It is normally
+always on unless you call one of the functions in this section.
+</description></definition><definition>
+<define key="chaos:enable-fun" name="chaos:enable" type="fun"></define>
+
+<description>Resets the hardware and turns on Chaosnet communication.
+</description></definition><definition>
+<define key="chaos:disable-fun" name="chaos:disable" type="fun"></define>
+
+<description>Resets the hardware and turns off Chaosnet communication.
+</description></definition><definition><define key="chaos:show-routing-table-fun" name="chaos:show-routing-table" type="fun"><args>host <standard>&amp;optional</standard> (stream <obj>*standard-output</obj>)</args>
+</define>
+
+<description>Print out <arg>host</arg>'s routing table onto <arg>stream</arg>.
+</description></definition><definition><define key="chaos:show-routing-path-fun" name="chaos:show-routing-path" type="fun"><args><standard>&amp;key</standard> (from <obj>si:local-host</obj>) to (stream <obj>*standard-output</obj>)</args>
+</define>
+
+<description>Show how a packet would get from <arg>from</arg> to <arg>to</arg>.  For this to
+work when the hosts are on different subnets, the bridge must respond to
+the <obj>DUMP-ROUTING-TABLE</obj> request.
+</description></definition><definition>
+<define key="chaos:my-address-var" name="chaos:my-address" type="const"></define>
+
+<description>The sixteen bit Chaosnet address of this Lisp Machine.  On the CADR, this
+is set by reading
+a location off the Chaosnet (I/O) board.  On a Lambda, this is set by
+looking at the name of the disk pack, and using that as a host name to
+get the Chaosnet address.  (This is because a Lambda talks Chaosnet
+through an Ethernet interface, which has a pre-assigned address of its
+own.)
+</description></definition><definition>
+<define key="chaos:my-subnet-var" name="chaos:my-subnet" type="const"></define>
+
+<description>The high eight bits of <obj>chaos:my-address</obj>.
+</description></definition><definition>
+<define key="chaos:routing-table-var" name="chaos:routing-table" type="const"></define>
+
+<description>This is an <obj>art-16b</obj> array which contains for each subnet the address
+of a bridge which is the best way of getting to that subnet.  Since
+(currently) Lisp Machines can only have one interface to the network,
+the addresses in the table all contain the same subnet, namely, the name
+of <obj>chaos:my-address</obj>.
+</description></definition><definition>
+<define key="chaos:maximum-routing-cost-var" name="chaos:maximum-routing-cost" type="const"></define>
+
+<description>The maximum cost that a route can be in the routing table.  Subnets with
+a cost greater than this do not appear in the Peek Chaosnet display
+</description></definition><definition>
+<define key="chaos:routing-table-cost-var" name="chaos:routing-table-cost" type="const"></define>
+
+<description>This is an <obj>art-16b</obj> array which contains for each subnet the cost for
+getting to that subnet.
+</description></definition><definition>
+<define key="chaos:*receive-broadcast-packets-p*-var" name="chaos:*receive-broadcast-packets-p*" type="var"></define>
+
+<description>If not <obj>nil</obj> (the default), broadcast packets are responded to.
+</description></definition><definition>
+<define key="chaos:*brd-history*-var" name="chaos:*brd-history*" type="var"></define>
+
+<description>A list of elements of the form <obj>(</obj><arg>contact-name address</arg><obj>)</obj>
+recording what hosts have been contacting this machine with broadcast
+requests.
+</description></definition><definition>
+<define key="chaos:*brd-pkts-in*-var" name="chaos:*brd-pkts-in*" type="var"></define>
+
+<description>The number of broadcast packets (opcode <obj>BRD-OP</obj>) that have been
+received.  This should never be less than <obj>(length chaos:*brd-history*)</obj>.
+</description></definition>
+<p>The PEEK program has a mode that displays the status of all of the Lisp
+Machine's Chaosnet connections, and various other information, in a
+continuously updating fashion.
+</p>
+</section><a name="arpanet-gateway"></a>
+
+
+<section chapter-number="27" name="arpanet-gateway" number="9" title="Higher-Level Protocols"><p>This section briefly documents some of the higher-level protocols of
+the most general interest.  There are quite a few other protocols which
+are too specialized to mention here.  All protocols other than the
+<obj>STATUS</obj> protocol are optional and are only implemented by those
+hosts that need them.  All hosts are required to implement the
+<obj>STATUS</obj> protocol since it is used for network maintenance.
+</p>
+
+<p>The site files tell the Lisp Machine which hosts at your site implement
+certain higher-level protocols.  See <ref chapter="36" definition-in-file="fd-hac" key="site-files" section="12" title="Site Options and Host Table" type="section"></ref>.
+</p>
+
+
+
+<subsection name="NIL" title="Status"><p>All network nodes, even bridges, are required to answer RFC's with contact
+name <example>STATUS</example>, returning an ANS packet in a simple transaction.  This
+protocol is primarily used for network maintenance.  The answer to a
+<example>STATUS</example> request should be generated by the Network Control Program,
+rather than by starting up a server process, in order to provide rapid
+response.
+</p>
+
+<p>The <example>STATUS</example> protocol is used to determine whether a host is up,
+to determine whether an operable path through the network exists between
+two hosts, to monitor network error statistics, and to debug new Network
+Control Programs and new Chaosnet hardware.  The <obj>hostat</obj> function
+on the Lisp Machine uses this protocol.
+</p>
+
+<p>The first 32 bytes of the ANS contain the name of the node, padded on
+the right with zero bytes.  The rest of the packet contains blocks of
+information expressed in 16-bit and 32-bit words, low byte first
+(little-endian convention).  The low-order half of a 32-bit word comes
+first.  Since ANS packets contain 8-bit data (not 16-bit), big-endian
+machines such as PDP-10s have to shuffle the bytes explicitly when
+using this protocol.  The first 16-bit word in a block is its
+identification.  The second 16-bit word is the number of 16-bit words
+to follow.  The remaining words in the block depend on the
+identification.
+</p>
+
+<p>This is the only block type currently defined.  All items are optional,
+according to the count field, and extra items not defined here may be
+present and should be ignored.  Note that items after the first two
+are 32-bit words.
+
+<table><tbody><tr><td><standard>word 0</standard></td><td>A number between 400 and 777 octal.  This is 400 plus a subnet number.
+This block contains information on this host's direct connection to
+that subnet.
+
+</td></tr><tr><td><standard>word 1</standard></td><td>The number of 16-bit words to follow, usually 16.
+
+</td></tr><tr><td><standard>words 2-3</standard></td><td>The number of packets received from this subnet.
+
+</td></tr><tr><td><standard>words 4-5</standard></td><td>The number of packets transmitted to this subnet.
+
+</td></tr><tr><td><standard>words 6-7</standard></td><td>The number of transmissions to this subnet aborted by collisions or
+because the receiver was busy.
+
+</td></tr><tr><td><standard>words 8-9</standard></td><td>The number of incoming packets from this subnet lost because the
+host had not yet read a previous packet out of the interface and consequently
+the interface could not capture the packet.
+
+</td></tr><tr><td><standard>words 10-11</standard></td><td>The number of incoming packets from this subnet with CRC errors.
+These were either transmitted wrong or damaged in transmission.
+
+</td></tr><tr><td><standard>words 12-13</standard></td><td>The number of incoming packets from this subnet that had no CRC
+error when received, but did have an error after being read out of
+the packet buffer.  This error indicates either a hardware problem with the
+packet buffer or an incorrect packet length.
+
+</td></tr><tr><td><standard>words 14-15</standard></td><td>The number of incoming packets from this subnet that were rejected
+due to incorrect length (typically not a multiple of 16 bits).
+
+</td></tr><tr><td><standard>words 16-17</standard></td><td>The number of incoming packets from this subnet rejected for
+other reasons (e.g. too short to contain a header, garbage byte-count,
+forwarded too many times.)
+</td></tr></tbody></table></p>
+
+<p>If word 0, the identification, is a number between 0 and 377 octal, this is an obsolete
+format of block.  The identification is a subnet number and the counts are as
+above except that they are only 16 bits instead of 32, and consequently may overflow.
+This format should no longer be sent by any hosts.
+</p>
+
+<p>Identification numbers of 1000 octal and up are reserved for future use.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Routing Information"><p>For network and NCP debugging, this RFC/ANS protocol should be
+implemented.  The contact name is <example>DUMP-ROUTING-TABLE</example>, and the
+response is an ANS packet whose words alternately contain a
+method to getting to a subnet, and the cost.
+If the method is zero, then the machine knows of no way to get to
+that subnet.  If the method is positive and less than 400 (octal),
+it is an interface of some kind to that subnet.
+If the method is 400 (octal) or greater, this is actually a bridge
+(host) off which the machine is bouncing packets destined for the
+subnet.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Telnet and Supdup"><p>The Telnet and Supdup protocols of the Arpanet exist in
+identical form in Chaosnet.  These protocols allow access to a
+computer system as an interactive terminal from another network node.
+</p>
+
+<p>The contact names are <example>TELNET</example> and <example>SUPDUP</example>.  The direct borrowing of
+the Telnet and Supdup protocols was eased by their use of 8-bit byte
+streams and of only a single connection.  Note that these protocols define
+their own character sets, which differ from each other and from the
+Chaosnet standard character set.
+</p>
+
+<p>For the Telnet protocol, refer to the RFC 854 (An RFC is a network
+document put out by the NIC or Network Information Center.)  For the Supdup
+protocol, see MIT AI Lab memo 644.
+</p>
+
+<p>Chaosnet contains no counterpart of the INR/INS attention-getting feature
+of the Arpanet.  The Telnet protocol sends a packet with opcode 201 octal in
+place of the INS signal.  This is a controlled packet and hence does not
+provide the ``out of band'' feature of the Arpanet INS, however it is
+satisfactory for the Telnet `interrupt process' and `discard output'
+operations on the kinds of hosts attached to Chaosnet.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="File Access"><p>The FILE protocol is primarily used by Lisp Machines to access files on
+network file servers.  ITS, TOPS-20, Tenex, Unix, VMS, and Lisp Machines are
+equipped to act as file servers.  A user end for the file protocol also
+exists for all the operating systems mentioned (except VMS) and
+is used for general-purpose file transfer.  For complete documentation
+on the file protocol, see <obj>SYS: DOC; FILE TEXT</obj>.  The Arpanet file
+transfer protocols have not been implemented on the Chaosnet (except
+through the Arpanet gateway described below).
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Mail"><p>The MAIL protocol is used to transmit inter-user messages through the Chaosnet.
+The Arpanet mail protocol in FTP was not used because of its complexity
+and poor
+state of documentation.  This simple protocol is by no means the last word
+in mail protocols; however, it is adequate for the mail systems we presently
+possess.
+</p>
+
+<p>The sender of mail connects to contact name <example>MAIL</example> and establishes a stream connection.
+It then sends the names of all the recipients to which the mail is to be sent
+at (or via) the server host.  The names are sent one to a line and terminated
+by a blank line (two carriage returns in a row).  The Lisp Machine character
+set is used.  A reply (see below) is immediately returned for each recipient.
+A recipient is typically just the name of a user, but it can be a user-atsign-host
+sequence or anything else acceptable to the mail system on the server machine.
+After sending the recipients, the sender sends the text of the message, terminated
+by an EOF.  After the mail has been successfully swallowed, a reply is sent.
+After the sender of mail has read the reply, both sides close the connection.
+</p>
+
+<p>In the MAIL protocol, a reply is a signal from the server to the user
+(or sender) indicating success or failure.  The first character of a reply
+is a plus sign for success, a minus sign for permanent failure (e.g. no such
+user exists), or a percent sign for temporary failure (e.g. unable to receive message
+because disk is full).  The rest of a reply is a human-readable character string
+explaining the situation, followed by a carriage return.
+</p>
+
+<p>The message text transmitted through the mail protocol normally contains a header
+formatted in the Arpanet standard fashion.  Refer to the Arpanet Protocols Handbook.
+</p>
+
+<p>The SMTP protocol can also be used over Chaosnet; the contact name is
+<example>SMTP</example>.  See RFC 821 for details.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Send"><p>The SEND protocol is used to transmit an interactive message (requiring
+immediate attention) between users.  The sender connects to contact name
+<example>SEND</example> at the machine to which the recipient is logged in.  The remainder of
+the RFC packet contains the name of the person being sent to.  A stream
+connection is opened and the message is transmitted, followed by an EOF.
+Both sides close after following the end-of-data protocol described in <ref definition-in-file="chaos" key="safe-eof-protocol" type="page"></ref>.
+The fact that the RFC was responded to affirmatively indicates that the
+recipient is in fact present and accepting messages.  The message text should begin
+with a suitable header, naming the user that sent the message.  The standard
+for such headers, not currently adhered to by all hosts, is one line formatted
+as in the following example:
+
+<lisp>Moon@MIT-MC 6/15/81 02:20:17
+</lisp>Automatic reply to the sender can be implemented by searching for the first
+`@' and using the SEND protocol to the host following the `@' with the
+argument preceding it.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Name"><p>The Name/Finger protocol of the Arpanet exists in identical form
+on the Chaosnet.  Both Lisp Machines and timesharing machines support this
+protocol and provide a display of the user(s) currently logged in to them.
+</p>
+
+<p>The contact name is <example>NAME</example>, which can be followed by a space and a string of
+arguments like the ``command line'' of the Arpanet Name protocol.  A stream
+connection is established and the ``finger'' display is output in Lisp
+Machine character set, followed by an EOF.
+</p>
+
+<p>Lisp Machines also support the FINGER protocol, a simple-transaction version
+of the NAME protocol.  An RFC with contact name <example>FINGER</example> is transmitted and
+the response is an ANS containing the following items of information separated
+by carriage returns: the logged-in user ID, the location of the terminal, the
+idle time in minutes or hours-colon-minutes, the user's full name, and
+the user's group affiliation.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Time"><p>The Time protocol allows a host such as a Lisp Machine that has no
+long-term timebase to ask the time of day.  An RFC to contact name
+<example>TIME</example> evokes an ANS containing the universal time as a 32-bit
+number in four 8-bit bytes, least-significant byte first.
+</p>
+<definition><define key="chaos:host-time-fun" name="chaos:host-time" type="fun"><args><standard>&amp;optional</standard> hosts</args>
+</define>
+
+<description>Returns either a universal time, or a string explaining why the time
+couldn't be found out, from one of <arg>hosts</arg>.  <arg>Hosts</arg> defaults to
+the list of Chaosnet time server hosts.
+</description></definition><definition><define key="chaos:print-host-times-fun" name="chaos:print-host-times" type="fun"><args><standard>&amp;optional</standard> hosts (stream <obj>*standard-output*</obj>)</args>
+</define>
+
+<description>Print out on <arg>stream</arg> the times given by <arg>hosts</arg>.  Any host that
+returns a time that is more than three minutes off this hosts time will
+have its repsonse marked with ``!''  <arg>Hosts</arg> defaults to the list of
+Chaosnet time server hosts.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Time Server Control"><p>For a time server that does not have any other way to correct its own
+time (usually because it is a bridge), that host should support this
+simple way of accepting a request to reset its own timebase.  The contact
+name is <example>RESET-TIME-SERVER</example>, and the response (on successful
+completion) is an ANS.  Following such a request, if the network is the
+only source of a timebase, it may be wise to
+immediately disable the <example>TIME</example> server, wait about 20 seconds, and then
+attempt to get the time from the network.  This may prevent the host
+from getting bad times from other machines that were ``infected'' with
+it.
+</p>
+<definition><define key="chaos:reset-time-server-fun" name="chaos:reset-time-server" type="fun"><args>host</args>
+</define>
+
+<description>Reset the network time server of <arg>host</arg>.  It will try to tell you the
+time it gets afterward, if possible.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Uptime"><p>This is similar to the TIME protocol, except that the contact
+name is <example>UPTIME</example>, and the time returned is actually an interval (in
+seconds) describing how long the host has been up.
+</p>
+<definition><define key="host-uptime-fun" name="host-uptime" type="fun"><args>host <standard>&amp;optional</standard> (stream <obj>*standard-output*</obj>)</args>
+</define>
+
+<description>Return the number of seconds that <arg>host</arg> has been up, and print that
+out in human-readable form if <arg>stream</arg> is not <obj>nil</obj>.
+</description></definition><definition><define key="uptime-fun" name="uptime" type="fun"><args><standard>&amp;optional</standard> (stream <obj>*standard-output*</obj>) hosts</args>
+</define>
+
+<description>Print out the uptimes for <arg>hosts</arg> (which if not supplied defaults to
+all Chaosnet hosts) onto <arg>stream</arg>.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Internet Gateway"><p>This protocol allows a Chaosnet host to access almost any service on
+the Internet.  The gateway server runs on each ITS host that is connected
+to both networks.  It creates an Internet connection and a Chaosnet connection
+and forwards data bytes from one to the other.  It also provides for a one-way
+auxiliary connection, used for the data connection of the Arpanet File Transfer Protocol.
+</p>
+
+<p>The RFC packet contains a contact name of <example>TCP</example>, a space, the name
+of the Internet host to be connected to, optionally followed by a space
+and the contact-socket number in octal, which defaults to 1 if omitted.
+The name of host can also be an Internet-format address.
+The bi-directional 8-bit connection is made by connecting to the host
+with TCP.
+</p>
+
+<p>If a data packet with opcode 201 (octal) is received, an Arpanet INS
+signal is transmitted.
+Any data bytes in this packet are transmitted
+normally.  (This does nothing in the current server, since TCP
+does not define an interrupt signal.)
+</p>
+
+<p>If a data packet with opcode 210 (octal) is received, an auxiliary
+connection on each network is opened.  The first eight data bytes are
+the Chaosnet contact name for the auxiliary connection; the user should
+send an RFC with this name to the server.  The next four data bytes are the
+TCP socket number to be connected to, in the wrong order, most-significant
+byte first.  The byte-size of the auxiliary connection is 8 bits.
+</p>
+
+<p>The normal closing of an TCP connection corresponds to an EOF packet.
+Closing due to an error, such as Host Dead, corresponds to a CLS packet.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Host Table"><p>The <example>HOSTAB</example> protocol may be used to access tables of host addresses
+on other networks, such as the Arpanet or Internet.  Servers for this protocol
+currently exist for Tenex, TOPS-20, ITS, and Lisp Machines.
+</p>
+
+<p>The user connects to contact name <example>HOSTAB</example>, undertakes a number of
+transactions, then closes the connection.  Each transaction is initiated
+by the user transmitting a host name followed by a carriage return.  The
+server responds with information about that host, terminated with an EOF,
+and is then ready for another transaction.  The server's response
+consists of a number of attributes of the host.  Each attribute consists
+of an identifying name, a space character, the value of the attribute,
+and a carriage return.  Values may be strings (free of carriage returns
+and <arg>not</arg> surrounded by double-quotes) or octal numbers.
+Attribute names and most values are in upper case.  There can be more than
+one attribute with the same name; for example, a host may have more than
+one name or more than one network address.
+</p>
+
+<p>The standard attribute names defined now are as follows.  Note that more
+are likely to be added in the future.
+</p>
+
+<table><tbody><tr><td><example>ERROR</example></td><td>The value is an error message.  The only error one might expect
+to get is ``no such host''.
+
+</td></tr><tr><td><example>NAME</example></td><td>The value is a name of the host.  There may be more than one <example>NAME</example>
+attribute; the first one is always the official name, and any additional
+names are nicknames.
+
+</td></tr><tr><td><example>MACHINE-TYPE</example></td><td>The value is the type of machine, such as <example>LISPM</example>, <example>PDP10</example>, etc.
+
+</td></tr><tr><td><example>SYSTEM-TYPE</example></td><td>The value is the type of software running on the machine,
+such as <example>LISPM</example>, <example>ITS</example>, etc.
+
+</td></tr><tr><td><example>ARPA</example></td><td>The value is an address of the host on the Arpanet, in the form
+<arg>host</arg>/<arg>imp</arg>.  The two numbers are decimal.
+
+</td></tr><tr><td><example>CHAOS</example></td><td>The value is an address of the host on Chaosnet, as an octal number.
+
+</td></tr><tr><td><example>DIAL</example></td><td>The value is an address of the host on Dialnet, as a telephone number.
+
+</td></tr><tr><td><example>LCS</example></td><td>The value is an address of the host on the LCSnet, as two octal numbers
+separated by a slash.
+
+</td></tr><tr><td><example>SU</example></td><td>The value is an address of the host on the SUnet, in the form
+<arg>net</arg>#<arg>host</arg>.  The two numbers are octal.
+
+</td></tr></tbody></table></subsection>
+
+
+<subsection name="NIL" title="Dover"><p>A press file may be sent to the Dover printer at MIT by connecting to contact
+name <obj>DOVER</obj> at host <obj>AI-CHAOS-11</obj>.  This host provides a protocol
+translation service that translates from Chaosnet stream protocol to
+the <obj>EFTP</obj> protocol spoken by the Dover printer.  Only one file at
+a time can be sent to the Dover, so an attempt to use this service may
+be refused by a CLS packet containing the string <obj>&quot;BUSY&quot;</obj>.
+Once the connection has been established, the press file is transmitted
+as a sequence of 8-bit bytes in data packets (opcode 200).  It is necessary
+to provide packets rapidly enough to keep the Dover's program (Spruce)
+from timing out; a packet every five seconds suffices.  Of course, packets
+are normally transmitted much more rapidly.
+</p>
+
+<p>Once the file has been transmitted, an EOF packet must be sent.
+The transmitter must wait for that EOF to be acknowledged, then send a
+second one, and then close the connection.  The two EOF's are
+necessary to provide the proper connection-closing sequence for the
+<obj>EFTP</obj> protocol.  Once the press file has been transmitted to the
+Dover in this way and stored on the Dover's local disk, it will be
+processed, prepared for printing, and printed.
+</p>
+
+<p>If an error message is returned by the Dover while the press file is
+being transmitted, it is reported back through the Chaosnet as a
+LOS containing the text of the error message.  Such errors are
+fairly common; the sender of the press file should be prepared to retry
+the operation a few times.
+</p>
+
+<p>Most programs that send press files to the Dover first wait for the
+Dover to be idle, using the Foreign Protocol mechanism of Chaosnet to
+check the status of the Dover.  This is optional, but is courteous to
+other users since it prevents printing from being held up while
+additional files are sent to the Dover and queued on its local disk.
+</p>
+
+<p>It would be possible to send to a press file to the Dover using its
+<obj>EFTP</obj> protocol through the Foreign Protocol mechanism, rather than
+using the <obj>AI-CHAOS-11</obj> gateway service.  This is not usually done
+because <obj>EFTP</obj>, which requires a handshake for every packet, tends to
+be very slow on a timesharing system.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Remote Disk"><p>The Remote Disk server exists on Lisp Machines to allow other machines
+to refer to or modify the contents of the Lisp Machine's disk.
+Primarily this is used for printing and editing the disk label.
+</p>
+
+<p>After first establishing a connection to contact name <example>REMOTE-DISK</example>,
+the user process sends commands as packets which contain a line of text,
+ending with a <obj>Return</obj> character.  The text consists of a command name, a
+space, and arguments interpreted according to the command.  The server
+processing the command may send disk data to the user, or it may read
+successive packets and write them to the disk.  It is up to the user to
+know how many packets of disk data to read or send after each command.
+The commands are:
+
+<table><tbody><tr><td><obj>READ <arg>unit</arg> <arg>block</arg> <arg>n-blocks</arg></obj></td><td>Reads <arg>n-blocks</arg> of data from disk <arg>unit</arg> starting at <arg>block</arg> and
+transmits their contents to the user process.
+
+</td></tr><tr><td><obj>WRITE <arg>unit</arg> <arg>block</arg> <arg>n-blocks</arg></obj></td><td>Reads data from the net connection and stores it into <arg>n-blocks</arg> disk
+blocks on disk <arg>unit</arg> starting at <arg>block</arg>.
+
+</td></tr><tr><td><obj>SAY <arg>text</arg></obj></td><td>Prints <arg>text</arg>, which is simply all the rest of the line following <obj>SAY</obj>,
+on the screen of the server host as a notification.
+</td></tr></tbody></table></p>
+
+<p>Each disk block is transmitted as three packets, the first two
+containing the data for 121 (decimal) Lisp Machine words, and the third
+containing the data for the remaining 14 (decimal) words of the disk
+block.  Each packet's data ends with a checksum made by adding together
+all the 8-bit bytes of the actual disk data stored in the packet.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="The Eval Server"><p>The Eval server is available on Lisp Machines with contact name
+<example>EVAL</example>.  It provides a read-eval-print loop which reads and prints
+using the Chaosnet connection.  The data consists of text in the ASCII
+character set.
+</p>
+
+<p>Each time a complete s-expression arrives, the Eval
+server reads it, evaluates it and prints the list of values back onto
+the network connection, followed by a CRLF.  There is no way for the
+user process to tell the end of the output for a particular
+s-expression; the usual application is simply to copy all the output to
+a user's terminal asynchronously.
+</p>
+
+<p>The Eval server is disabled when the Lisp Machine is logged in, unless
+the user requests to enable it.
+</p>
+<definition><define key="chaos:eval-server-on-fun" name="chaos:eval-server-on" type="fun"><args>mode</args>
+</define>
+
+<description>Turn the Eval server on this Lisp Machine on or off.
+<arg>mode</arg> can be <obj>t</obj> (on), <obj>nil</obj> (off), or <obj>:notify</obj> (on, but
+notify the user when a connection is made).
+</description></definition></subsection></section><a name="package"></a>
+
+<section chapter-number="27" name="package" number="10" title="Using Higher Level Protocols"><definition><define key="qsend-fun" name="qsend" type="fun"><args>user <standard>&amp;optional</standard> text</args>
+</define>
+
+<description>Sends a message to another user.  <obj>qsend</obj> is different from <obj>mail</obj> because it
+sends the message immediately; it will appear within seconds on the other user's
+screen, rather than being saved in her mail file.
+
+<arg>user</arg> should be a string of the form <obj>&quot;<arg>username<example>@</example>hostname</arg>&quot;</obj>;
+<arg>host</arg> is the name of the Lisp Machine or timesharing system the user
+is currently logged-in to.  Multiple recipients separated by commas are
+also allowed.  <arg>text</arg> is a string which is the message.  If <arg>text</arg>
+is not specified, you are prompted to type in a message.
+
+Unlike <obj>mail</obj> and <obj>bug</obj>, <obj>qsend</obj> does not put up a window to allow
+you to compose the message; it just reads it from the input stream.  Use
+Converse if you wish to compose sends in the editor.  Converse can be
+invoked by typing <obj>System</obj> <obj>C</obj>.  If you have started typing in a message to
+<obj>qsend</obj>, you can switch to Converse by typing <obj>Control-Meta-E</obj>
+(``Edit'').  The text you have typed so far is transferred into
+Converse.
+
+<obj>qsend</obj> does give you the ability to insert the text of the last
+message you received.  Type <obj>Control-Meta-Y</obj> to do this.
+</description></definition><definition><define key="reply-fun" name="reply" type="fun"><args><standard>&amp;optional</standard> text</args>
+</define><define key="qreply-fun" name="qreply" type="fun"><args><standard>&amp;optional</standard> text</args>
+</define>
+
+<description>Sends <arg>text</arg> as a message to the last user who sent a message to you,
+like <obj>qsend</obj> with an appropriate first argument provided.
+The two names are synonymous.
+</description></definition><definition><define key="chaos:shout-fun" name="chaos:shout" type="fun"><args><standard>&amp;optional</standard> message</args>
+</define>
+
+<description>Sends <arg>message</arg> to every Lisp Machine at your site.
+If you do not specify <arg>message</arg>, it is read from <obj>*standard-input*</obj>.
+</description></definition><definition>
+<define key="print-sends-fun" name="print-sends" type="fun"></define>
+
+<description>Reprints any messages that have been received.  This is useful if you want to see
+a message again.
+</description></definition><definition><define key="supdup-fun" name="supdup" type="fun"><args><standard>&amp;optional</standard> host</args>
+</define>
+
+<description><arg>host</arg> may be a string or symbol, which is taken as a host name,
+or a number, which is taken as a host number.  If no <arg>host</arg> is
+given, the machine you are logged-in to is assumed.
+This function opens a connection to the host
+over the Chaosnet using the Supdup protocol, and allows the Lisp
+Machine to be used as a terminal for any ITS, UNIX or TOPS-20 system.
+
+To give commands to <obj>supdup</obj>, type the <obj>Network</obj> key followed by one character.
+Type <obj>Network</obj> followed by <obj>Help</obj> for documentation.
+</description></definition><definition><define key="telnet-fun" name="telnet" type="fun"><args><standard>&amp;optional</standard> host simulate-imlac</args>
+</define>
+
+<description><obj>telnet</obj> is similar to <obj>supdup</obj> but uses the Arpanet-standard Telnet
+protocol, simulating a printing terminal rather than a display terminal.
+</description></definition><definition><define key="hostat-fun" name="hostat" type="fun"><args><standard>&amp;rest</standard> hosts</args>
+</define>
+
+<description>Asks each of the <arg>hosts</arg> for its status using the <example>STATUS</example> protocol,
+and prints the results.  If no hosts are specified, all hosts on the
+Chaosnet are asked.  Hosts can be specified either by name or by number.
+
+For each host, a line is output that either says that the host is not
+responding or gives metering information for the host's network
+attachments.  If a host is not responding, that usually means that it is down
+or there is no such host at that address.  A Lisp Machine can fail to respond
+if it is looping inside <obj>without-interrupts</obj> or paging extremely heavily,
+such that it is simply unable to respond within a reasonable amount of time.
+</description></definition><definition><define key="finger-fun" name="finger" type="fun"><args><standard>&amp;optional</standard> spec (stream <obj>*standard-output*</obj>)</args>
+</define><define key="whois-fun" name="whois" type="fun"><args><standard>&amp;optional</standard> spec (stream <obj>*standard-output*</obj>)</args>
+</define>
+
+<description>Prints brief (<obj>finger</obj>) or verbose (<obj>whois</obj>) information about a user
+or users specified by <arg>spec</arg>, on <arg>stream</arg>.  <arg>spec</arg> can be a user
+name, <obj>@</obj> followed by a host name, or a user name, <obj>@</obj>, and a host
+name.  If there is no host name, the default login host is used.  If
+there is no user name, all users on the host are described.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(finger &quot;@OZ&quot;)
+(whois &quot;RMS@OZ&quot;)
+</exdent></lisp></description></definition><definition><define key="chaos:finger-all-lms-fun" name="chaos:finger-all-lms" type="fun"><args><standard>&amp;optional</standard> stream print-free return-free hosts</args>
+</define>
+
+<description>Prints a line of information about the user of each Lisp Machine in
+<arg>hosts</arg> (the default is all Lisp Machines at this site) on <arg>stream</arg>
+(default is <obj>*standard-output*</obj>).
+
+If <arg>print-free</arg> is non-<obj>nil</obj>, information on free Lisp Machines and
+nonresponding Lisp Machines is also printed.
+
+If <arg>return-free</arg> is non-<obj>nil</obj>, then this function returns two
+values, the first a list of host objects of free Lisp Machines, the
+second a list of host objects of nonresponding Lisp Machines.
+</description></definition><definition><define key="chaos:user-logged-into-host-p-fun" name="chaos:user-logged-into-host-p" type="fun"><args>username host</args>
+</define>
+
+<description>Returns <obj>t</obj> if there is a user named <arg>username</arg> logged in on
+<arg>host</arg> (a host name or host object).
+</description></definition><definition><define key="chaos:find-hosts-or-lispms-logged-in-as-user-fun" name="chaos:find-hosts-or-lispms-logged-in-as-user" type="fun"><args>user hosts</args>
+</define>
+
+<description>Return a list of host objects for hosts on which <arg>user</arg> is logged in.
+All Lisp Machines at this site are checked, and so are <arg>hosts</arg> (which
+are presumably non-Lisp machines).
+</description></definition><definition><define key="tv:close-all-servers-fun" name="tv:close-all-servers" type="fun"><args>reason</args>
+</define>
+
+<description>Close the connections of all network servers on this Lisp Machine,
+giving <arg>reason</arg> (a string) as the reason in the CLS packet.
+
+Note that PEEK has a mode that displays information on the active
+network servers.
+</description></definition></section></chapter>
+</document-part>

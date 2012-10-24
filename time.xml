@@ -1,0 +1,461 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="time-chapter"></a>
+<chapter name="time-chapter" number="35" title="Dates and Times"><index-entry index="concepts" title="dates and times"></index-entry>
+
+<index-entry index="concepts" title="times and dates"></index-entry>
+
+<p>The <obj>time</obj> package contains a set of functions for manipulating dates and
+times: finding the current time, reading and printing dates and times,
+converting between formats, and other miscellany regarding peculiarities
+of the calendar system.  It also includes functions for accessing the
+Lisp Machine's microsecond timer.
+</p>
+
+<p>Times are represented in two different formats by the functions in the
+<obj>time</obj> package.  One way is to represent a time by many numbers,
+indicating a year, a month, a date, an hour, a minute, and a second
+(plus, sometimes, a day of the week and timezone).  If a year less than
+100 is specified, a multiple of 100 is added to it to bring it within
+50 years of the present.  Year numbers returned by the
+time functions are greater than 1900.  The month is 1 for January, 2 for
+February, etc.  The date is 1 for the first day of a month.  The hour is
+a number from 0 to 23.  The minute and second are numbers from 0 to 59.
+Days of the week are fixnums, where 0 means Monday, 1 means Tuesday, and
+so on.  A timezone is specified as the number of hours west of GMT; thus
+in Massachusetts the timezone is 5.  Any adjustment for daylight savings
+time is separate from this.
+</p>
+
+<index-entry index="concepts" title="universal time"></index-entry>
+
+<p>This ``decoded'' format is convenient for printing out times into a readable
+notation, but it is inconvenient for programs to make sense of these numbers
+and pass them around as arguments (since there are so many of them).  So there
+is a second representation, called Universal Time, which measures a time as the
+number of seconds since January 1, 1900, at midnight GMT.  This ``encoded'' format
+is easy to deal with inside programs, although it doesn't make much sense to
+look at (it looks like a huge integer).  So both formats are provided; there are
+functions to convert between the two formats; and many functions exist in two
+versions, one for each format.
+</p>
+
+<p>The Lisp Machine hardware includes a timer that counts once every
+microsecond.  It is controlled by a crystal and so is fairly accurate.
+The absolute value of this timer doesn't mean anything useful, since it
+is initialized randomly; what you do with the timer is to read it at the
+beginning and end of an interval, and subtract the two values to get the
+length of the interval in microseconds.  These relative times allow you to time
+intervals of up to an hour (32 bits) with microsecond accuracy.
+</p>
+
+<p>The Lisp Machine keeps track of the time of day by maintaining a
+<arg>timebase</arg>, using the microsecond clock to count off the seconds.
+On the CADR, when the machine first comes up, the timebase is
+initialized by querying hosts on the Chaosnet to find out the
+current time.  The Lambda has a calendar clock which never stops,
+so it normally does not need to do this.  You can also set the
+time base using <obj>time:set-local-time</obj>, described below.
+</p>
+
+<p>There is a similar timer that counts in 60ths of a second rather than
+microseconds; it is useful for measuring intervals of a few seconds or
+minutes with less accuracy.  Periodic housekeeping functions of the system
+are scheduled based on this timer.
+</p>
+<a name="Getting and Setting the Time"></a>
+
+<section chapter-number="35" name="Getting and Setting the Time" number="1" title="Getting and Setting the Time"><definition>
+<define key="get-decoded-time-fun" name="get-decoded-time" type="fun"></define>
+<define key="time:get-time-fun" name="time:get-time" type="fun"></define>
+
+<description>Gets the current time, in decoded form.  Return seconds, minutes, hours, date,
+month, year, day-of-the-week, and daylight-savings-time-p, with the same
+meanings as <obj>decode-universal-time</obj> (see <ref definition-in-file="time" key="decode-universal-time-fun" title="Function decode-universal-time" type="fun"></ref>).
+If the current time is not known, <obj>nil</obj> is returned.
+
+The name <obj>time:get-time</obj> is obsolete.
+</description></definition><definition>
+<define key="get-universal-time-fun" name="get-universal-time" type="fun"></define>
+
+<description>Returns the current time in Universal Time form.
+</description></definition><definition><define key="time:set-local-time-fun" name="time:set-local-time" type="fun"><args><standard>&amp;optional</standard> new-time</args>
+</define>
+
+<description>Sets the local time to <arg>new-time</arg>.  If <arg>new-time</arg> is
+supplied, it must be either a universal time or a suitable
+argument to <obj>time:parse-universal-time</obj> (see
+<ref definition-in-file="time" key="time:parse-universal-time-fun" title="Function time:parse-universal-time" type="fun"></ref>).  If it is not supplied, or if
+there is an error parsing the argument, you are prompted for the
+new time.  Note that you will not normally need to call this
+function; it is useful mainly when the timebase gets screwed up
+for one reason or another.
+</description></definition>
+
+
+<subsection name="NIL" title="Elapsed Time in 60ths of a Second"><index-entry index="concepts" title="60ths of a second"></index-entry>
+
+<p>The following functions deal with a different kind of time.  These are not
+calendrical date/times, but simply elapsed time in 60ths of a second.  These
+times are used for many internal purposes where the idea is to measure a small
+interval accurately, not to depend on the time of day or day of month.
+</p>
+<definition>
+<define key="time-fun" name="time" type="fun"></define>
+
+<description>Returns a number that increases by 1 every 60th of a second.  The value
+wraps around roughly once a day.  Use the <obj>time-lessp</obj> and
+<obj>time-difference</obj> functions to avoid getting in trouble due to the
+wrap-around.  <obj>time</obj> is completely incompatible with the Maclisp
+function of the same name.
+
+Note that <obj>time</obj> with an argument measures the length of time
+required to evaluate a form.  See <ref definition-in-file="fd-hac" key="time-fun-2" type="page"></ref>.
+</description></definition><definition>
+<define key="get-internal-run-time-fun" name="get-internal-run-time" type="fun"></define>
+<define key="get-internal-real-time-fun" name="get-internal-real-time" type="fun"></define>
+
+<description>Returns the total time in 60ths of a second since the last boot.
+This value does not wrap around.  Eventually it becomes a bignum.
+The Lisp Machine does not distinguish between run time and real time.
+</description></definition><definition>
+<define key="internal-time-units-per-second-var" name="internal-time-units-per-second" type="const"></define>
+
+<description>According to Common Lisp, this is the ratio between a second and the
+time unit used by values of <obj>get-internal-real-time</obj>.  On the Lisp
+Machine, the value is 60.  The value may be different in other Common
+Lisp implementations.
+</description></definition><definition><define key="time-lessp-fun" name="time-lessp" type="fun"><args>time1 time2</args>
+</define>
+
+<description><obj>t</obj> if <arg>time1</arg> is earlier than <arg>time2</arg>, compensating for
+wrap-around, otherwise <obj>nil</obj>.
+</description></definition><definition><define key="time-difference-fun" name="time-difference" type="fun"><args>time1 time2</args>
+</define>
+
+<description>Assuming <arg>time1</arg> is later than <arg>time2</arg>, returns the number of 60ths
+of a second difference between them, compensating for wrap-around.
+</description></definition><definition><define key="time-increment-fun" name="time-increment" type="fun"><args>time interval</args>
+</define>
+
+<description>Increments <arg>time</arg> by <arg>interval</arg>, wrapping around if appropriate.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Elapsed Time in Microseconds"><index-entry index="concepts" title="microseconds"></index-entry>
+<definition>
+<define key="time:microsecond-time-fun" name="time:microsecond-time" type="fun"></define>
+
+<description>Returns the value of the microsecond timer, as a bignum.  The values
+returned by this function wrap around back to zero about once per hour.
+</description></definition><definition>
+<define key="time:fixnum-microsecond-time-fun" name="time:fixnum-microsecond-time" type="fun"></define>
+
+<description>Returns as a fixnum the value of the low 23 bits of the microsecond timer.
+This is like <obj>time:microsecond-time</obj>, with the advantage that
+it returns a value in the same format as the <obj>time</obj> function, except
+in microseconds rather than 60ths of a second.  This means that you can
+compare fixnum-microsecond-times with <obj>time-lessp</obj> and
+<obj>time-difference</obj>.  <obj>time:fixnum-microsecond-time</obj> is also a bit
+faster, but has the disadvantage that since you only see the low bits of
+the clock, the value can wrap around more quickly (about every eight seconds).
+Note that the Lisp Machine garbage collector is so designed that the
+bignums produced by <obj>time:microsecond-time</obj> are garbage-collected
+quickly and efficiently, so the overhead for creating the bignums is
+really not high.
+</description></definition></subsection></section><a name="Printing Dates and Times"></a>
+
+
+<section chapter-number="35" name="Printing Dates and Times" number="2" title="Printing Dates and Times"><p>The functions in this section create printed representations of times and
+dates in various formats and send the characters to a stream.  To any
+of these functions, you may pass <obj>nil</obj> as the <arg>stream</arg> parameter
+and the function will return a string containing the printed representation
+of the time, instead of printing the characters to any stream.
+</p>
+
+<p>The three functions <obj>time:print-time</obj>,
+<obj>time:print-universal-time</obj>,
+<obj>time:print-brief-universal-time</obj> and
+<obj>time:print-current-time</obj> accept an argument called
+<arg>date-print-mode</arg>, whose purpose is to control how the date is
+printed.  It always defaults to the value of
+<obj>time:*default-date-print-mode*</obj>.  Possible values include:
+
+<table><tbody><tr><td><obj>:dd//mm//yy</obj></td><td>Print the date as in `3/16/53'.
+</td></tr><tr><td><obj>:mm//dd//yy</obj></td><td>Print as in `16/3/53'.
+</td></tr><tr><td><obj>:dd-mm-yy</obj></td><td>Print as in `16-3-53'.
+</td></tr><tr><td><obj>:dd-mmm-yy</obj></td><td>Print as in `16-Mar-53'.
+</td></tr><tr><td><obj>:|dd mmm yy|</obj></td><td>Print as in `16 Mar 53'.
+</td></tr><tr><td><obj>:ddmmmyy</obj></td><td>Print as in `16Mar53'.
+</td></tr><tr><td><obj>:yymmdd</obj></td><td>Print as in `530316'.
+</td></tr><tr><td><obj>:yymmmdd</obj></td><td>Print as in `53Mar16'.
+</td></tr></tbody></table></p>
+<definition><define key="time:print-current-time-fun" name="time:print-current-time" type="fun"><args><standard>&amp;optional</standard> (stream <obj>*standard-output*</obj>)</args>
+</define>
+
+<description>Prints the current time, formatted as in <obj>11/25/80 14:50:02</obj>, to
+the specified stream.  The date portion may be printed differently
+according to the argument <arg>date-print-mode</arg>.
+</description></definition><definition><define key="time:print-time-fun" name="time:print-time" type="fun"><args>seconds minutes hours date month year <standard>&amp;optional</standard> (stream <obj>*standard-output*</obj>) date-print-mode</args>
+</define>
+
+<description>Prints the specified time, formatted as in <obj>11/25/80 14:50:02</obj>, to
+the specified stream.  The date portion may be printed differently
+according to the argument <arg>date-print-mode</arg>.
+</description></definition><definition><define key="time:print-universal-time-fun" name="time:print-universal-time" type="fun"><args>universal-time <standard>&amp;optional</standard> (stream <obj>*standard-output*</obj>) (timezone <obj>time:*timezone*</obj>) date-print-mode</args>
+</define>
+
+<description>Prints the specified time, formatted as in <obj>11/25/80 14:50:02</obj>, to the specified stream.  The date portion may be printed differently
+according to the argument <arg>date-print-mode</arg>.
+</description></definition><definition><define key="time:print-brief-universal-time-fun" name="time:print-brief-universal-time" type="fun"><args>universal-time <standard>&amp;optional</standard> (stream <obj>*standard-output*</obj>) reference-time date-print-mode</args>
+</define>
+
+<description>This is like <obj>time:print-universal-time</obj> except that it omits seconds and
+only prints those parts of <arg>universal-time</arg> that differ from
+<arg>reference-time</arg>, a universal time that defaults to the current time.
+Thus the output is in one of the following three forms:
+
+<lisp>02:59           ;<standard>the same day</standard>
+3/4 14:01       ;<standard>a different day in the same year</standard>
+8/17/74 15:30   ;<standard>a different year</standard>
+</lisp>
+The date portion may be printed differently
+according to the argument <arg>date-print-mode</arg>.
+</description></definition><definition>
+<define key="time:*default-date-print-mode*-var" name="time:*default-date-print-mode*" type="var"></define>
+
+<description>Holds the default for the <arg>date-print-mode</arg> argument to each
+of the functions above.  Initially the value here is <obj>:mm//dd/yy</obj>.
+</description></definition><definition><define key="time:print-current-date-fun" name="time:print-current-date" type="fun"><args><standard>&amp;optional</standard> (stream <obj>*standard-output*</obj>)</args>
+</define>
+
+<description>Prints the current time, formatted as in <obj>Tuesday the twenty-fifth of
+November, 1980; 3:50:41 pm</obj>, to the specified stream. 
+</description></definition><definition><define key="time:print-date-fun" name="time:print-date" type="fun"><args>seconds minutes hours date month year day-of-the-week <standard>&amp;optional</standard> (stream <obj>*standard-output*</obj>)</args>
+</define>
+
+<description>Prints the specified time, formatted as in <obj>Tuesday the twenty-fifth of
+November, 1980; 3:50:41 pm</obj>, to the specified stream.
+</description></definition><definition><define key="time:print-universal-date-fun" name="time:print-universal-date" type="fun"><args>universal-time <standard>&amp;optional</standard> (stream <obj>*standard-output*</obj>) (timezone <obj>time:*timezone*</obj>)</args>
+</define>
+
+<description>Prints the specified time, formatted as in <obj>Tuesday the twenty-fifth of
+November, 1980; 3:50:41 pm</obj>, to the specified stream.
+</description></definition></section><a name="Reading Dates and Times"></a>
+
+
+<section chapter-number="35" name="Reading Dates and Times" number="3" title="Reading Dates and Times"><p>These functions accept most reasonable printed representations of date and time
+and convert them to the standard internal forms.  The following are
+representative formats that are accepted by the parser.  Note that
+slashes are escaped with additional slashes, as is necessary if
+these strings are input in traditional syntax.
+</p>
+
+<lisp>&quot;March 15, 1960&quot;      &quot;3//15//60&quot;   &quot;3//15//1960&quot;
+&quot;15 March 1960&quot;       &quot;15//3//60&quot;   &quot;15//3//1960&quot;
+&quot;March-15-60&quot;         &quot;3-15-60&quot;     &quot;3-15-1960&quot;
+&quot;15-March-60&quot;         &quot;15-3-60&quot;     &quot;15-3-1960&quot;
+&quot;15-Mar-60&quot;           &quot;3-15&quot;        &quot;15 March 60&quot;
+&quot;Fifteen March 60&quot;    &quot;The Fifteenth of March, 1960;&quot;
+&quot;Friday, March 15, 1980&quot;
+
+&quot;1130.&quot;     &quot;11:30&quot;     &quot;11:30:17&quot;  &quot;11:30 pm&quot;
+&quot;11:30 AM&quot;  &quot;1130&quot;      &quot;113000&quot;
+&quot;11.30&quot;     &quot;11.30.00&quot;  &quot;11.3&quot;      &quot;11 pm&quot;
+
+&quot;12 noon&quot;   &quot;midnight&quot;  &quot;m&quot;    &quot;6:00 gmt&quot;  &quot;3:00 pdt&quot;
+
+   <standard>any date format may be used with any time format</standard>
+
+&quot;One minute after March 3, 1960&quot;
+   <standard>meaning one minute after midnight</standard>
+&quot;Two days after March 3, 1960&quot;
+&quot;Three minutes after 23:59:59 Dec 31, 1959&quot;
+
+&quot;Now&quot;     &quot;Today&quot;     &quot;Yesterday&quot;   &quot;five days ago&quot;
+&quot;two days after tomorrow&quot;   &quot;the day after tomorrow&quot;         
+&quot;one day before yesterday&quot;  &quot;BOB@OZ's birthday&quot;
+</lisp><definition><define key="time:parse-fun" name="time:parse" type="fun"><args>string <standard>&amp;optional</standard> (start <obj>0</obj>) (end <obj>nil</obj>) (futurep <obj>t</obj>) base-time must-have-time date-must-have-year time-must-have-second (day-must-be-valid <obj>t</obj>)</args>
+</define>
+
+<description>Interpret <arg>string</arg> as a date and/or time, and return seconds, minutes,
+hours, date, month, year, day-of-the-week, daylight-savings-time-p, and relative-p.
+<arg>start</arg> and <arg>end</arg> delimit a substring
+of the string; if <arg>end</arg> is <obj>nil</obj>, the end of the string is used.
+<arg>must-have-time</arg> means that <arg>string</arg> must not be empty.
+<arg>date-must-have-year</arg> means that a year must be explicitly specified.
+<arg>time-must-have-second</arg> means that the second must be specified.
+<arg>day-must-be-valid</arg> means that if a day of the week is given, then it
+must actually be the day that corresponds to the date.  <arg>base-time</arg> provides
+the defaults for unspecified components; if it is <obj>nil</obj>, the current time
+is used.  <arg>futurep</arg> means that the time should be interpreted as being
+in the future; for example, if the base time is 5:00 and the string refers
+to the time 3:00, that means the next day if <arg>futurep</arg> is non-<obj>nil</obj>, but
+it means two hours ago if <arg>futurep</arg> is <obj>nil</obj>.  The <arg>relative-p</arg>
+returned value is <obj>t</obj> if the string included a relative part, such
+as `one minute after' or `two days before' or `tomorrow' or `now'; otherwise,
+it is <obj>nil</obj>.
+
+If the input is not valid, the error condition <obj>sys:parse-error</obj>
+is signaled (see <ref definition-in-file="ios" key="sys:parse-error-condition" title="Condition sys:parse-error" type="condition"></ref>).
+</description></definition><definition><define key="time:parse-universal-time-fun" name="time:parse-universal-time" type="fun"><args>string <standard>&amp;optional</standard> (start <obj>0</obj>) (end <obj>nil</obj>) (futurep <obj>t</obj>) base-time must-have-time date-must-have-year time-must-have-second (day-must-be-valid <obj>t</obj>)</args>
+</define>
+
+<description>This is the same as <obj>time:parse</obj> except that it returns two
+values: an integer, representing the time in Universal Time, and
+the <arg>relative-p</arg> value.
+</description></definition></section><a name="Reading and Printing Time Intervals"></a>
+
+
+<section chapter-number="35" name="Reading and Printing Time Intervals" number="4" title="Reading and Printing Time Intervals"><p>In addition to the functions for reading and printing instants of time,
+there are other functions specifically for printing time intervals.  A
+time interval is either a number (measured in seconds) or <obj>nil</obj>,
+meaning `never'.  The printed representations used look like `3 minutes
+23 seconds' for actual intervals, or `Never' for <obj>nil</obj> (some other
+synonyms and abbreviations for `never' are accepted as input).
+</p>
+<definition><define key="time:print-interval-or-never-fun" name="time:print-interval-or-never" type="fun"><args>interval <standard>&amp;optional</standard> (stream <obj>*standard-output*</obj>)</args>
+</define>
+
+<description><arg>interval</arg> should be a non-negative fixnum or <obj>nil</obj>.
+Its printed representation as a time interval is written onto
+<arg>stream</arg>.
+</description></definition><definition><define key="time:parse-interval-or-never-fun" name="time:parse-interval-or-never" type="fun"><args>string <standard>&amp;optional</standard> start end</args>
+</define>
+
+<description>Converts <arg>string</arg>, a printed representation for a time interval, into
+a number or <arg>nil</arg>.  <arg>start</arg> and <arg>end</arg> may be used to specify a
+portion of <arg>string</arg> to be used; the default is to use all of
+<arg>string</arg>.  It is an error if the contents of string do not look like a
+reasonable time interval.  Here are some examples of acceptable strings:
+
+
+<lisp>&quot;4 seconds&quot;       &quot;4 secs&quot;          &quot;4 s&quot;
+&quot;5 mins 23 secs&quot;  &quot;5 m 23 s&quot;        &quot;23 SECONDS 5 M&quot;
+           &quot;3 yrs 1 week 1 hr 2 mins 1 sec&quot;
+&quot;never&quot;           &quot;not ever&quot;        &quot;no&quot;              &quot;&quot;
+</lisp>
+Note that several abbreviations are understood, the components may be in
+any order, and case (upper versus lower) is ignored.  Also, ``months'' are
+not recognized, since various months have different lengths and there is
+no way to know which month is being spoken of.  This function
+always accepts anything that was produced by <obj>time:print-interval-or-never</obj>;
+furthermore, it returns exactly the same fixnum (or <obj>nil</obj>) that
+was printed.
+</description></definition><definition><define key="time:read-interval-or-never-fun" name="time:read-interval-or-never" type="fun"><args><standard>&amp;optional</standard> (stream <obj>*standard-input*</obj>)</args>
+</define>
+
+<description>Reads a line of input from <arg>stream</arg> (using <obj>readline</obj>) and
+then calls <obj>time:parse-interval-or-never</obj> on the resulting string.
+</description></definition></section><a name="Time Conversions"></a>
+
+<section chapter-number="35" name="Time Conversions" number="5" title="Time Conversions"><definition><define key="decode-universal-time-fun" name="decode-universal-time" type="fun"><args>universal-time <standard>&amp;optional</standard> (timezone <obj>time:*timezone*</obj>)</args>
+</define>
+
+<description>Converts <arg>universal-time</arg> into its decoded representation.  The
+following values are returned: seconds, minutes, hours, date, month,
+year, day-of-the-week, daylight-savings-time-p, and the timezone used.
+<arg>daylight-savings-time-p</arg> tells you whether or not
+daylight savings time is in effect; if so, the value of <arg>hour</arg> has been
+adjusted accordingly.  You can specify <arg>timezone</arg> explicitly if you
+want to know the equivalent representation for this time in other parts
+of the world.
+</description></definition><definition><define key="encode-universal-time-fun" name="encode-universal-time" type="fun"><args>seconds minutes hours date month year <standard>&amp;optional</standard> timezone</args>
+</define>
+
+<description>Converts the decoded time into Universal Time format, and return the
+Universal Time as an integer.  If you don't specify <arg>timezone</arg>, it
+defaults to the current timezone adjusted for daylight savings time; if
+you provide it explicitly, it is not adjusted for daylight savings time.
+If <arg>year</arg> is less than 100, it is shifted by centuries until it is
+within 50 years of the present.
+</description></definition><definition>
+<define key="time:*timezone*-var" name="time:*timezone*" type="var"></define>
+
+<description>The value of <obj>time:*timezone*</obj> is the time zone in which this Lisp Machine
+resides, expressed in terms of the number of hours west of GMT this time
+zone is.  This value does not change to reflect daylight savings time; it
+tells you about standard time in your part of the world.
+</description></definition></section><a name="Internal Functions"></a>
+
+
+<section chapter-number="35" name="Internal Functions" number="6" title="Internal Functions"><p>These functions provide support for those listed above.  Some user programs
+may need to call them directly, so they are documented here.
+</p>
+<definition>
+<define key="time:initialize-timebase-fun" name="time:initialize-timebase" type="fun"></define>
+
+<description>Initializes the timebase by querying Chaosnet hosts to find out the
+current time.  This is called automatically during system initialization.
+You may want to call it yourself to correct the time if it appears to be
+inaccurate or downright wrong.  See also <obj>time:set-local-time</obj>,
+<ref definition-in-file="time" key="time:set-local-time-fun" title="Function time:set-local-time" type="fun"></ref>.
+</description></definition><definition><define key="time:daylight-savings-time-p-fun" name="time:daylight-savings-time-p" type="fun"><args>hours date month year</args>
+</define>
+
+<description>Returns <obj>t</obj> if daylight savings time is in effect for the specified
+hour; otherwise, return <obj>nil</obj>. 
+If <arg>year</arg> is less than 100, it is shifted by centuries until it is
+within 50 years of the present.
+</description></definition><definition>
+<define key="time:daylight-savings-p-fun" name="time:daylight-savings-p" type="fun"></define>
+
+<description>Returns <obj>t</obj> if daylight savings time is currently in effect; otherwise,
+returns <obj>nil</obj>.
+</description></definition><definition><define key="time:month-length-fun" name="time:month-length" type="fun"><args>month year</args>
+</define>
+
+<description>Returns the number of days in the specified <arg>month</arg>; you must supply
+a <arg>year</arg> in case the month is February (which has a different length
+during leap years).
+If <arg>year</arg> is less than 100, it is shifted by centuries until it is
+within 50 years of the present.
+</description></definition><definition><define key="time:leap-year-p-fun" name="time:leap-year-p" type="fun"><args>year</args>
+</define>
+
+<description>Returns <obj>t</obj> if <arg>year</arg> is a leap year; otherwise return <obj>nil</obj>.
+If <arg>year</arg> is less than 100, it is shifted by centuries until it is
+within 50 years of the present.
+</description></definition><definition><define key="time:verify-date-fun" name="time:verify-date" type="fun"><args>date month year day-of-the-week</args>
+</define>
+
+<description>If the day of the week of the date specified by <arg>date</arg>, <arg>month</arg>, and
+<arg>year</arg> is the same as <arg>day-of-the-week</arg>, returns <obj>nil</obj>; otherwise,
+returns a string that contains a suitable error message.
+If <arg>year</arg> is less than 100, it is shifted by centuries until it is
+within 50 years of the present.
+</description></definition><definition><define key="time:day-of-the-week-string-fun" name="time:day-of-the-week-string" type="fun"><args>day-of-the-week <standard>&amp;optional</standard> (mode <obj>:long</obj>)</args>
+</define>
+
+<description>Returns a string representing the day of the week.  As usual, <obj>0</obj> means
+Monday, <obj>1</obj> means Tuesday, and so on.  Possible values of <arg>mode</arg>
+are:
+
+<table><tbody><tr><td><obj>:long</obj></td><td>Returns the full English name, such as <obj>&quot;Monday&quot;</obj>, <obj>&quot;Tuesday&quot;</obj>, etc.  This
+is the default.
+</td></tr><tr><td><obj>:short</obj></td><td>Returns a three-letter abbreviation, such as <obj>&quot;Mon&quot;</obj>, <obj>&quot;Tue&quot;</obj>, etc.
+</td></tr><tr><td><obj>:medium</obj></td><td>Returns a longer abbreviation, such as <obj>&quot;Tues&quot;</obj> and <obj>&quot;Thurs&quot;</obj>.
+</td></tr><tr><td><obj>:french</obj></td><td>Returns the French name, such as <obj>&quot;Lundi&quot;</obj>, <obj>&quot;Mardi&quot;</obj>, etc.
+</td></tr><tr><td><obj>:german</obj></td><td>Returns the German name, such as <obj>&quot;Montag&quot;</obj>, <obj>&quot;Dienstag&quot;</obj>, etc.
+</td></tr><tr><td><obj>:italian</obj></td><td>Returns the Italian name, such as <obj>&quot;Lunedi&quot;</obj>, <obj>&quot;Martedi&quot;</obj>, etc.
+</td></tr></tbody></table></description></definition><definition><define key="time:month-string-fun" name="time:month-string" type="fun"><args>month <standard>&amp;optional</standard> (mode <obj>:long</obj>)</args>
+</define>
+
+<description>Returns a string representing the month of the year.  As usual, <obj>1</obj> means January,
+<obj>2</obj> means February, etc.  Possible values of <arg>mode</arg> are:
+
+<table><tbody><tr><td><obj>:long</obj></td><td>Returns the full English name, such as <obj>&quot;January&quot;</obj>, <obj>&quot;February&quot;</obj>, etc.  This
+is the default.
+</td></tr><tr><td><obj>:short</obj></td><td>Returns a three-letter abbreviation, such as <obj>&quot;Jan&quot;</obj>, <obj>&quot;Feb&quot;</obj>, etc.
+</td></tr><tr><td><obj>:medium</obj></td><td>Returns a longer abbreviation, such as <obj>&quot;Sept&quot;</obj>, <obj>&quot;Novem&quot;</obj>, and <obj>&quot;Decem&quot;</obj>.
+</td></tr><tr><td><obj>:roman</obj></td><td>Returns the Roman numeral for <arg>month</arg> (this convention is used in Europe).
+</td></tr><tr><td><obj>:french</obj></td><td>Returns the French name, such as <obj>&quot;Janvier&quot;</obj>, <obj>&quot;Fevrier&quot;</obj>, etc.
+</td></tr><tr><td><obj>:german</obj></td><td>Returns the German name, such as <obj>&quot;Januar&quot;</obj>, <obj>&quot;Februar&quot;</obj>, etc.
+</td></tr><tr><td><obj>:italian</obj></td><td>Returns the Italian name, such as <obj>&quot;Gennaio&quot;</obj>, <obj>&quot;Febbraio&quot;</obj>, etc.
+</td></tr></tbody></table></description></definition><definition><define key="time:timezone-string-fun" name="time:timezone-string" type="fun"><args><standard>&amp;optional</standard> (timezone <obj>time:*timezone*</obj>) (daylight-savings-p <obj>(time:daylight-savings-p)</obj>)</args>
+</define>
+
+<description>Return the three-letter abbreviation for this time zone.  For example, if
+<arg>timezone</arg> is <obj>5</obj>, then either <obj>&quot;EST&quot;</obj> (Eastern Standard Time) or <obj>&quot;CDT&quot;</obj>
+(Central Daylight Time) is used, depending on <arg>daylight-savings-p</arg>.
+</description></definition></section></chapter>
+</document-part>

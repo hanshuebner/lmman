@@ -1,0 +1,1939 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="misc-chapter"></a>
+<chapter name="misc-chapter" number="36" title="Miscellaneous Useful Functions"><p>This chapter describes a number of functions that don't logically fit in anywhere else.
+Most of these functions are not normally used in programs, but are ``commands'', i.e.
+things that you type directly at Lisp.
+</p>
+<a name="Documentation"></a>
+
+<section chapter-number="36" name="Documentation" number="1" title="Documentation"><definition><define key="documentation-fun" name="documentation" type="fun"><args>name doc-type</args>
+</define>
+
+<description>Returns the documentation string of <arg>name</arg> in the role <arg>doc-type</arg>.
+<arg>doc-type</arg> should be a symbol, but only its print-name matters.
+<obj>function</obj> as <arg>doc-type</arg> requests the documentation of <arg>name</arg>
+as a function, <obj>variable</obj> as <arg>doc-type</arg> requests the documentation of
+<arg>name</arg> as a variable, and so on.
+
+When <arg>doc-type</arg> is <obj>function</obj>, <arg>name</arg> can be any function spec,
+and the documentation string of its function definition is returned.
+Otherwise, <arg>name</arg> must be a symbol, and <arg>doc-type</arg> may be anything.
+However, only these values of <arg>doc-type</arg> are standardly used:
+
+<table><tbody><tr><td><obj>variable</obj></td><td>Documentation of <arg>name</arg> as a special variable.  Such documentation is
+recorded automatically by <obj>defvar</obj>, <obj>defconst</obj>, <obj>defconstant</obj>,
+<obj>defparameter</obj> (<ref definition-in-file="fd-eva" key="defvar-fun" title="Macro defvar" type="mac"></ref>).
+</td></tr><tr><td><obj>type</obj></td><td>Documentation of <arg>name</arg> as a type for <obj>typep</obj>.  Recorded
+automatically when a documentation string is given in a <obj>deftype</obj>
+form (<ref definition-in-file="fd-dtp" key="deftype-fun" title="Macro deftype" type="mac"></ref>).
+</td></tr><tr><td><obj>structure</obj></td><td>Documentation of <arg>name</arg> as a <obj>defstruct</obj> type.
+Recorded automatically by a <obj>defstruct</obj> for <arg>name</arg> (<ref chapter="21" definition-in-file="defstr" key="defstruct" section="0" title="Defstruct" type="section"></ref>).
+</td></tr><tr><td><obj>setf</obj></td><td>Documentation on what it means to <obj>setf</obj> a form
+that starts with <arg>name</arg>.
+Recorded when there is a documentation string in a <obj>defsetf</obj> of <arg>name</arg>
+(<ref definition-in-file="macros" key="defsetf-fun" title="Macro defsetf" type="mac"></ref>).
+</td></tr><tr><td><obj>flavor</obj></td><td>Documentation of the flavor named <arg>name</arg>.
+Put on by the <obj>:documentation</obj> option in a <obj>defflavor</obj> for <arg>name</arg>
+(<ref definition-in-file="flavor" key="defflavor-fun" title="Macro defflavor" type="mac"></ref>).
+</td></tr><tr><td><obj>resource</obj></td><td>Documentation of the resource named <arg>name</arg>.
+Put on when there is a documentation string in a <obj>defresource</obj> of <arg>name</arg>
+(<ref definition-in-file="resour" key="defresource-fun" title="Macro defresource" type="mac"></ref>).
+</td></tr><tr><td><obj>signal</obj></td><td>Documentation for <arg>name</arg> as a signal name.
+Put on when there is a documentation string in a <obj>defsignal</obj> or <obj>defsignal-explicit</obj>
+for <arg>name</arg> (<ref definition-in-file="errors" key="defsignal-fun" title="Macro defsignal" type="mac"></ref>).
+</td></tr></tbody></table>
+Documentation strings for any <arg>doc-type</arg> can be added to <arg>name</arg>
+by doing <obj>(setf (documentation <arg>name</arg> <arg>doc-type</arg>) <arg>string</arg>)</obj>.
+</description></definition>
+<p>The command <obj>Control-Shift-D</obj> in Zmacs and the rubout handler, used
+within a call to a function, prints the documentation of that function.
+<obj>Control-Shift-V</obj>, within a symbol, prints the documentation of that
+symbol as a variable.
+</p>
+</section><a name="hardcopy"></a>
+
+
+<section chapter-number="36" name="hardcopy" number="2" title="Hardcopy"><p>The hardcopy functions allow you to specify the printer to use on each
+call.  The default is set up by the site files for your site, but can be
+overridden for a particular machine in the <obj>LMLOCS</obj> file or by a user
+in his INIT file.  Any kind of printer can be used, no matter how it is
+actually driven, if it is hooked into the software properly as described below.
+</p>
+
+<p>A <arg>printer-type</arg> is a keyword that has appropriate properties;
+a <arg>printer</arg> is either a printer-type or a list starting with one.
+The rest of the list can specify <arg>which</arg> printer of that type you want
+to use (perhaps with a host name or filename).
+</p>
+
+<p>The printer types defined by the system are:
+
+<table><tbody><tr><td><standard>:dover printer-type</standard></td><td>This printer type is used by itself as a printer, and refers to the
+Dover at MIT.
+
+</td></tr><tr><td><standard>:xgp printer-type</standard></td><td>This printer type indicates a printer that is accessed by writing spool
+files in MIT XGP format.  A printer would be specified as a list,
+<obj>(:xgp <arg>filename</arg>)</obj>, specifying where to write the spool file.
+
+</td></tr><tr><td><standard>:press-file printer-type</standard></td><td>This printer type is used in a list together with a file name, as in
+<obj>(:press-file &quot;OZ:&lt;RMS&gt;FOO.PRESS&quot;)</obj>.  Something is ``printed'' on such
+a printer by being converted to a press file and written under that
+name.
+</td></tr></tbody></table></p>
+<definition><define key="hardcopy-file-fun" name="hardcopy-file" type="fun"><args>filename <standard>&amp;rest</standard> options</args>
+</define>
+
+<description>Print the file <arg>filename</arg> in hard copy on the specified printer or the
+default printer.  <arg>options</arg> is a list of keyword argument names and
+values.  There are only two keywords that are always meaningful:
+<obj>:format</obj> and <obj>:printer</obj>.  Everything else is up to the individual
+printer to interpret.  The list here is only a paradigm or suggestion.
+
+
+<table><tbody><tr><td><obj>:printer</obj></td><td>The value is the printer to use.  The default is the value of
+<obj>si:*default-printer*</obj>.
+
+</td></tr><tr><td><obj>:format</obj></td><td>The value is a keyword that specifies the format of file to be parsed.
+The standard possibilities are <obj>:text</obj> (an ordinary file of text),
+<obj>:xgp</obj> (a file of the sort once used by the XGP at MIT), <obj>:press</obj> (a
+Xerox-style press file) and <obj>:suds-plot</obj> (a file produced by the
+Stanford drawing program).  However, each kind of printer may define its
+own format keywords.
+
+</td></tr><tr><td><obj>:font</obj></td><td></td></tr><tr><td><obj>:font-list hardcopy-file</obj></td><td>The value of <arg>font</arg> is the name of a font to print the file in (a
+string).  Alternatively, you can give <obj>:font-list</obj> and specify a list
+of such font names, for use if the file contains font-change commands.
+The interpretation of a font name is dependent on the printer being
+used.  There is no necessary relation to Lisp machine display fonts.
+However, printers are encouraged to use, by default, fonts that are
+similar in appearance to the Lisp machine fonts listed in the file's
+attribute list, if it is a text file.
+
+</td></tr><tr><td><obj>:heading-font</obj></td><td>The value is the name of the font for use in page headers, if there are
+any.
+
+</td></tr><tr><td><obj>:vsp</obj></td><td>The value is the extra spacing to use between lines, in over and beyond
+the height of the fonts.
+
+</td></tr><tr><td><obj>:page-headings</obj></td><td>If the value is non-<obj>nil</obj>, a heading is added to each page.
+
+</td></tr><tr><td><obj>:copies</obj></td><td>The value is the number of copies to print.
+
+</td></tr><tr><td><obj>:spool</obj></td><td>If the printer provides optional spooling, this argument says whether to
+spool (default is <obj>nil</obj>).  Some printers may intrinsically always
+spool; others may have no way to spool.
+</td></tr></tbody></table></description></definition><definition><define key="set-printer-default-option-fun" name="set-printer-default-option" type="fun"><args>printer-type option value</args>
+</define>
+
+<description>Sets a default for <arg>option</arg> for printers of type
+<arg>printer-type</arg>.  Any use of the hardcopy functions
+with a printer of that type and no value specified for <arg>option</arg>
+will use the value <arg>value</arg>.  For example,
+
+<lisp>(set-printer-default-option :dover :spool t)
+</lisp>causes output to Dover printers to be spooled unless the
+<obj>:spool</obj> option is explicitly specified with value <obj>nil</obj>.
+
+Currently defaultable options are <obj>:font</obj>, <obj>:font-list</obj>,
+<obj>:heading-font</obj>, <obj>:page-headings</obj>, <obj>:vsp</obj>, <obj>:copies</obj>, and
+<obj>:spool</obj>.
+</description></definition><definition><define key="hardcopy-stream-fun" name="hardcopy-stream" type="fun"><args>stream <standard>&amp;rest</standard> options</args>
+</define>
+
+<description>Like <obj>hardcopy-file</obj> but uses the text read from <arg>stream</arg> rather
+than opening a file.  The <obj>:format</obj> option is not allowed (since
+implementing it requires the ability to open the file with unusual
+<obj>open</obj> options).
+</description></definition><definition><define key="hardcopy-bit-array-fun" name="hardcopy-bit-array" type="fun"><args>array left top right bottom <standard>&amp;rest</standard> options</args>
+</define>
+
+<description>Print all or part of the bit-array <arg>array</arg> on the specified or default
+printer.  <arg>options</arg> is a list of keyword argument names and values;
+the only standard option is <obj>:printer</obj>, which specifies the printer to
+use.  The default printer is <obj>si:*default-bit-array-printer*</obj>, or, if
+that is <obj>nil</obj>, <obj>si:*default-printer</obj>.
+
+<arg>left</arg>, <arg>top</arg>, <arg>right</arg> and <arg>bottom</arg> specify the subrectangle of
+the array to be printed.  All four numbers measure from the top left
+corner (which is element 0, 0).
+</description></definition><definition><define key="hardcopy-status-fun" name="hardcopy-status" type="fun"><args><standard>&amp;optional</standard> printer (stream <obj>*standard-output*</obj>)</args>
+</define>
+
+<description>Prints the status of <arg>printer</arg>, or the default printer.
+This should include if possible such things as whether the printer has
+paper and what is in the queue.
+</description></definition><definition>
+<define key="si:*default-printer*-var" name="si:*default-printer*" type="var"></define>
+
+<description>This is the default printer.  It is set from the <obj>:default-printer</obj>
+site option.
+</description></definition><definition>
+<define key="si:*default-bit-array-printer*-var" name="si:*default-bit-array-printer*" type="var"></define>
+
+<description>If non-<obj>nil</obj>, this is the default printer for printing bit arrays,
+overriding <obj>si:*default-printer*</obj>.  A separate default is provided for
+bit arrays since some printers that can print files cannot print bit
+arrays.  This variable is set initially from the
+<obj>:default-bit-array-printer</obj> site option.
+</description></definition><need amount="1500"></need><nopara></nopara>
+<p>Defining a printer type:
+</p>
+
+<p>A printer type is any keyword that has suitable functions on the
+appropriate properties.
+</p>
+
+<p>To be used with the function <obj>hardcopy-file</obj>, the printer type must
+have a <obj>si:print-file</obj> property.  To be used with <obj>hardcopy-stream</obj>,
+the printer type must have a <obj>si:print-stream</obj> property.
+<obj>hardcopy-bit-array</obj> uses the <obj>si:print-bit-array</obj> property.
+<obj>hardcopy-status</obj> uses the <obj>si:print-status</obj> property.
+(The hardcopy functions' names are not themselves used simply to avoid
+using a symbol in the global package as a property name of a symbol
+that might be in the global package as well).
+</p>
+
+<p>Each property, to be used, should be a function whose first argument
+will be the printer and whose remaining arguments will fit the same
+pattern as those of the hardcopy function the user called.  (They will
+not necessarily be the same arguments, as some additional keywords may be
+added to the list of keyword arguments; but they will fit the same
+description.)
+</p>
+
+<p>For example,
+
+<lisp>(hardcopy-file &quot;foo&quot; :printer '(:press-file &quot;bar.press&quot;))
+</lisp>results in the execution of
+
+<lisp>(funcall (get :press-file 'si:print-file)
+         '(:press-file &quot;bar.press&quot;)
+         &quot;foo&quot; :printer '(:press-file &quot;bar.press&quot;))
+</lisp></p>
+
+<p>A printer type need not support operations that make no sense on it.
+For example, there is no <obj>si:print-status</obj> property on
+<obj>:press-file</obj>.
+</p>
+</section><a name="meter-section"></a>
+
+
+<section chapter-number="36" name="meter-section" number="3" title="Metering"><p>The metering system is a way of finding out what parts of your program
+use up the most time.  When you run your program with metering, every
+function call and return is recorded, together with the time at which it
+took place.  Page faults are also recorded.  Afterward, the metering
+system analyzes the records and tells you how much time was spent
+executing withain each function.  Because the records are stored in the disk
+partition called <obj>METR</obj>, there is room for a lot of data.
+</p>
+
+<p>Before you meter a program, you must enable metering in some or all
+stack groups.  <obj>meter:enable</obj> is used for this.  Then you evaluate one
+or more forms with metering, perhaps by using <obj>meter:test</obj> or
+<obj>meter:run</obj>.  Finally, you use <obj>meter:analyze</obj> to summarize and
+print the metering data.
+</p>
+
+<p>There are two parameters that control whether metering data are
+recorded.  First of all, the variable <obj>sys:%meter-microcode-enables</obj>
+contains bits that enable recording of various kinds of events.  Secondly,
+each stack group has a flag that controls whether events are recorded
+while running in that stack group.
+</p>
+<definition>
+<define key="sys:%meter-microcode-enables-var" name="sys:%meter-microcode-enables" type="var"></define>
+
+<description>Enables recording of metering data.
+Each bit controls recording of one kind of event.
+
+<table><tbody><tr><td><obj>1</obj></td><td>This bit enables recording of page faults.
+</td></tr><tr><td><obj>2</obj></td><td>This bit enables recording of consing.
+</td></tr><tr><td><obj>4</obj></td><td>This bit enables recording of function entry and exit.
+</td></tr><tr><td><obj>8</obj></td><td>This bit enables recording of stack group switching.
+</td></tr></tbody></table>
+The value is normally zero, which turns off all recording.
+</description></definition><need amount="1500"></need><nopara></nopara>
+<p>These are the functions used to control which stack groups do metering:
+</p>
+<definition><define key="meter:enable-fun" name="meter:enable" type="fun"><args><standard>&amp;rest</standard> things</args>
+</define>
+
+<description>Enables metering in the stack groups specified by <arg>things</arg>.
+Each thing in <arg>things</arg> may be a stack group, a process (which
+specifies the process's stack group), or a window (which specifies the
+window's process's stack group).  <obj>t</obj> is also allowed.  It enables
+metering in all stack groups.
+</description></definition><definition><define key="meter:disable-fun" name="meter:disable" type="fun"><args><standard>&amp;rest</standard> things</args>
+</define>
+
+<description>Disables metering in the stack groups specified by <arg>things</arg>.
+The arguments allowed are the same as for <obj>meter:enable</obj>.
+<obj>(meter:disable t)</obj> turns off <obj>(meter:enable t)</obj>, but does not
+disable stack groups enabled individually.  <obj>(meter:disable)</obj> disables
+all stack groups no matter how you specified to enable them.
+</description></definition><definition>
+<define key="meter:metered-objects-var" name="meter:metered-objects" type="var"></define>
+
+<description>This is a list of all the <arg>things</arg> you have enabled with
+<obj>meter:enable</obj> and not disabled.
+</description></definition><need amount="1500"></need><nopara></nopara>
+<p>These are the functions to evaluate forms with metering:
+</p>
+<definition><define key="meter:run-fun" name="meter:run" type="fun"><args>forms</args>
+</define>
+
+<description>Clears out the metering data and evaluates the <arg>forms</arg> with
+<obj>sys:%meter-microcode-enables</obj> bound to 14 octal (record function
+entry and exit, and stack group switching).  Any of the evaluation that
+takes place in enabled stack groups will record metering data.
+</description></definition><definition><define key="meter:test-fun" name="meter:test" type="fun"><args>form (enables <obj>#o14</obj>)</args>
+</define>
+
+<description>Clears out the metering data, enables metering for the current
+stack group only, and evaluates <arg>form</arg> with
+<obj>sys:%meter-microcode-enables</obj> bound to <arg>enables</arg>.
+</description></definition><need amount="1500"></need><nopara></nopara>
+<p>This is how you print the results:
+</p>
+<definition><define key="meter:analyze-fun" name="meter:analyze" type="fun"><args><standard>&amp;key</standard> analyzer stream file buffer return info <standard>&amp;allow-other-keys</standard></args>
+</define>
+
+<description>Analyzes the data recorded by metering.
+<arg>analyzer</arg> is a keyword specifies a kind of analysis.  <obj>:tree</obj>
+is the default.  Another useful alternative is <obj>:list-events</obj>.
+Particular analyzers handle other keyword arguments in addition
+to those listed above.
+
+The output is printed on <arg>stream</arg>, written to a file named
+<arg>file</arg>, or put in an editor buffer named <arg>buffer</arg> (at most one of
+these three arguments should be specified).  The default is to print on
+<obj>*standard-output*</obj>.
+
+Analyzing the metering data involves creating a large intermediate data
+base.  Normally this is created afresh each time <obj>meter:analyze</obj> is
+called.  If you specify a non-<obj>nil</obj> value for <arg>return</arg>, the
+intermediate data structure is returned by <obj>meter:analyze</obj>, and can be
+passed in on another call as the <arg>info</arg> argument.  This can save time.
+But you can only do this if you use the same <arg>analyzer</arg> each time,
+as different analyzers use different termporary data structures.
+</description></definition>
+<p>The default analyzer <obj>:tree</obj> prints out the amount of run time and
+real time spent executing each function that was called.  The real time
+includes time spend waiting and time spent writing metering data to disk;
+for computational tasks, the latter makes the real time less useful
+than the run time.
+<obj>:tree</obj> handles these additional keyword arguments to <obj>meter:analyze</obj>:
+
+<table><tbody><tr><td><obj>:find-callers &quot;meter:analyze&quot;</obj></td><td>The argument for this keyword is a function spec or a list of function specs.
+A list of who called the specified functions,
+and how often, is printed instead of the usual output.
+
+</td></tr><tr><td><obj>:stack-group &quot;meter:analyze&quot;</obj></td><td>The argument is a stack group or a list of them;
+only the activities in those stack groups are printed.
+
+</td></tr><tr><td><obj>:sort-function &quot;meter:analyze&quot;</obj></td><td>The argument is the name of a suitable sorting function that is used to
+sort the items for the various functions that were called.  Sorting
+functions provided include <obj>meter:max-page-faults</obj>,
+<obj>meter:max-calls</obj>, <obj>meter:max-run-time</obj> (the default),
+<obj>meter:max-real-time</obj>, and <obj>meter:max-run-time-per-call</obj>.
+
+</td></tr><tr><td><obj>:summarize &quot;meter:analyze&quot;</obj></td><td>The argument is a function spec or a list of function specs;
+only those functions' statistics are printed.
+
+</td></tr><tr><td><obj>:inclusive &quot;meter:analyze&quot;</obj></td><td>If this is non-<obj>nil</obj>, the times for each function include
+the time spent in executing subroutines called from the function.
+
+Note: if a function is called recursively, the time spent in the inner
+call(s) is counted twice (or more).
+</td></tr></tbody></table></p>
+
+<p>The analyzer <obj>:list-events</obj> prints out one line about each event
+recorded.  The line contains the run time and real time (in
+microseconds), the running count of page faults, the stack group name,
+the function that was running, the stack depth, the type of event, and a
+piece of data.  For example:
+</p>
+
+<lisp>   0   0    0 ZMACS-WINDOWS  METER:TEST   202 CALL SI:EVAL
+ 115  43    0 ZMACS-WINDOWS  METER:TEST   202 RET  SI:EVAL
+ 180  87    0 ZMACS-WINDOWS  METER:TEST   202 RET  CATCH
+
+real run   pf  stack-group    function  stack event data
+time time                               level type
+</lisp>
+<p><obj>:list-events</obj> is often useful with recording of page faults
+(<obj>sys:%meter-microcode-enables</obj> set to 1).
+</p>
+<definition>
+<define key="meter:reset-fun" name="meter:reset" type="fun"></define>
+
+<description>Clears out all metering data.
+</description></definition>
+<p>Because metering records pointers to Lisp objects in a disk partition
+which is not part of the Lisp address space, garbage collection is
+inhibited (by arresting the gc process) when you turn on metering.
+</p>
+<definition>
+<define key="meter:resume-gc-process-fun" name="meter:resume-gc-process" type="fun"></define>
+
+<description>Allows garbage collection to continue (if it is already turned on) by
+unarresting it.
+</description></definition></section><a name="Poking Around in the Lisp World"></a>
+
+<section chapter-number="36" name="Poking Around in the Lisp World" number="4" title="Poking Around in the Lisp World"><definition><define key="who-calls-fun" name="who-calls" type="fun"><args>x <standard>&amp;optional</standard> package (inheritors <obj>t</obj>) (inherited <obj>t</obj>)</args>
+</define>
+
+<description><arg>x</arg> must be a symbol or a list of symbols.
+<obj>who-calls</obj> tries
+to find all of the functions in the Lisp world
+that call <arg>x</arg> as a function, use <arg>x</arg> as a variable,
+or use <arg>x</arg> as a constant.  (Constants which are lists
+containing <arg>x</arg> are not found.)  It tries to find all of the functions
+by searching all of the function cells of
+all of the symbols in <arg>package</arg> and packages that inherit
+from <arg>package</arg> (unless <arg>inheritors</arg> is <obj>nil</obj>) and packages
+<arg>package</arg> inherits from (unless <arg>inherited</arg> is <obj>nil</obj>).
+<arg>package</arg> defaults to the <obj>global</obj> package, which means that
+all normal packages are checked.
+
+If <obj>who-calls</obj> encounters an interpreted function definition, it
+simply tells you if <arg>x</arg> appears anywhere in the interpreted code.
+<obj>who-calls</obj> is smarter about compiled code, since it has been
+nicely predigested by the compiler.  Macros expanded in the compilation
+of the code can be found because they are recorded in the caller's
+debugging info alist, even though they are not actually referred to
+by the compiled code.
+
+If <arg>x</arg> is a list of symbols, <obj>who-calls</obj> does them all simultaneously,
+which is faster than doing them one at a time.
+
+<obj>who-uses</obj> is an obsolete name for <obj>who-calls</obj>.
+
+The editor has a command,<obj> Meta-X List Callers</obj>, which is similar to <obj>who-calls</obj>.
+
+The symbol <obj>:unbound-function</obj> is treated specially by <obj>who-calls</obj>.
+<obj>(who-calls :unbound-function)</obj> searches all the compiled
+code for any calls through a symbol that is not currently
+defined as a function.  This is useful for finding errors such
+as functions you misspelled the names of or forgot to write.
+
+<obj>who-calls</obj> prints one line of information for each caller it finds.  It also
+returns a list of the names of all the callers.
+</description></definition><definition><define key="what-files-call-fun" name="what-files-call" type="fun"><args>x <standard>&amp;optional</standard> package (inheritors <obj>t</obj>) (inherited <obj>t</obj>)</args>
+</define>
+
+<description>Similar to <obj>who-calls</obj> but returns a list of the pathnames of all the files
+that contain functions that <obj>who-calls</obj> would have printed out.  This is useful
+if you need to recompile and/or edit all of those files.
+</description></definition><definition><define key="apropos-fun" name="apropos" type="fun"><args>substring <standard>&amp;optional</standard> package <standard>&amp;key</standard> (inheritors <obj>t</obj>) inherited dont-print predicate boundp fboundp</args>
+</define>
+
+<description><obj>(apropos <arg>substring</arg>)</obj> tries to find all symbols whose print-names
+contain <arg>substring</arg> as a substring.  Whenever it finds a symbol, it
+prints out the symbol's name; if the symbol is defined as a function
+and/or bound to a value, it tells you so and prints the names of the
+arguments (if any) to the function.
+
+If <arg>predicate</arg> is non-<obj>nil</obj>, it should be a function; only symbols
+on which the function returns non-<obj>nil</obj> are counted.  In addition, <arg>fboundp</arg>
+non-<obj>nil</obj> means only symbols with function definitions are considered,
+and <arg>boundp</arg> non-<obj>nil</obj> means that only symbols with values are considered.
+
+<obj>apropos</obj> looks for symbols on <arg>package</arg>, and all packages that use
+<arg>package</arg> (unless <arg>inheritors</arg> is <obj>nil</obj>).  If <arg>inherited</arg> is
+non-<obj>nil</obj>, all packages used by <arg>package</arg> are searched as well.
+<arg>package</arg> can be a package or a symbol or string naming a package.  It
+can also be a list of packages, symbols and strings; all of the packages
+thus specified are searched.  <arg>package</arg> defaults to a list of all
+packages except invisible ones.
+
+<obj>apropos</obj> returns a list of all the symbols it finds.
+If <arg>dont-print</arg> is non-<obj>nil</obj>, that is all it does.
+</description></definition><definition><define key="sub-apropos-fun" name="sub-apropos" type="fun"><args>substring starting-list <standard>&amp;key</standard> predicate dont-print</args>
+</define>
+
+<description>Finds all symbols in <arg>starting-list</arg> whose names contain
+<arg>substring</arg>, and that satisfy <arg>predicate</arg>.  If <arg>predicate</arg> is
+<obj>nil</obj>, the substring is the only condition.  The symbols are printed
+if <arg>dont-print</arg> is <obj>nil</obj>.  A list of the symbols found is returned,
+in any case.
+
+This function is most useful when applied to the value of <example>*</example>, after
+<obj>apropos</obj> has returned a long list.
+</description></definition><definition><define key="where-is-fun" name="where-is" type="fun"><args>pname <standard>&amp;optional</standard> package</args>
+</define>
+
+<description>Prints the names of all packages that contain a symbol with the
+print-name <arg>pname</arg>.  If <arg>pname</arg> is a string it gets upper-cased.
+The package <arg>package</arg> and all packages that inherit from it are
+searched.  <arg>package</arg> can be a package or the name of a package, or a
+list of packages and names.  It defaults to a list of all packages
+except invisible ones.  <obj>where-is</obj> returns a list of all the symbols
+it finds.
+</description></definition><definition><define key="describe-fun" name="describe" type="fun"><args>x</args>
+</define>
+
+<description><obj>describe</obj> tries to tell you all of the interesting information
+about any object <arg>x</arg> (except for array contents).  <obj>describe</obj> knows
+about arrays, symbols, floats, packages, stack groups, closures, and FEFs, and prints
+out the attributes of each in human-readable form.  Sometimes
+objects found inside <arg>x</arg> are described also;
+such recursive descriptions are indented appropriately.  For instance,
+<obj>describe</obj> of a symbol also describes the symbol's value,
+its definition, and each of its properties.  <obj>describe</obj> of a float
+(full-size or short) shows you its internal representation in a way
+that is useful for tracking down roundoff errors and the like.
+
+If <arg>x</arg> is a named-structure, <obj>describe</obj> invokes the <obj>:describe</obj>
+operation to print the description, if that is supported.
+To understand this, you should read the section on named structures
+(see <ref definition-in-file="defstr" key="named-structure" type="page"></ref>).  If the <obj>:describe</obj> operation is not
+supported, <obj>describe</obj> looks on the named-structure symbol for information
+that might have been left by <obj>defstruct</obj>; this information would
+tell it what the symbolic names for the entries in the structure are,
+and <obj>describe</obj> knows how to use the names to print out what each field's
+name and contents is.
+
+<obj>describe</obj> of an instance always invokes the <obj>:describe</obj> operation.
+All flavors support it, since <obj>si:vanilla-flavor</obj> defines a method for it.
+
+<obj>describe</obj> always returns its argument, in case you want to do something else to it.
+</description></definition><definition><define key="inspect-fun" name="inspect" type="fun"><args>x</args>
+</define>
+
+<description>A window-oriented version of <obj>describe</obj>.  See the window system documentation
+for details, or try it and type <obj>Help</obj>.
+</description></definition><definition><define key="disassemble-fun" name="disassemble" type="fun"><args>function</args>
+</define>
+
+<description>Prints out a human-readable version of the macro-instructions in
+<arg>function</arg>.  <arg>function</arg> should be a FEF, or a function spec whose
+definition is a FEF.  The macro-code instruction set is explained in
+<ref chapter="32" definition-in-file="code" key="macro-code" section="0" title="How to Read Assembly Language" type="section"></ref>.
+</description></definition><nopara></nopara>
+<p>The <obj>grindef</obj> function (see <ref definition-in-file="rdprt" key="grindef-fun" title="Macro grindef" type="mac"></ref>) may be used to display the definition
+of a non-compiled function.
+</p>
+<definition><define key="room-fun" name="room" type="fun"><args><standard>&amp;rest</standard> areas</args>
+</define>
+
+<description>Prints a summary of memory usage.
+
+The first line of output tells you the amount of physical memory on the
+machine, the amount of available virtual memory not yet filled with data
+(that is, the portion of the available virtual memory that has not yet
+been allocated to any region of any area), and the amount of wired
+physical memory (i.e. memory not available for paging). 
+
+Following lines tell you how much room is left in some areas.  For each
+area it tells you about, it prints out the name of the area, the number
+of regions that currently make up the area, the current size of the area in kilowords,
+and the amount of the area that has been allocated, also in kilowords.
+If the area cannot grow, the percentage that is free is displayed.
+
+<obj>(room)</obj> tells you about those areas that are in the list that is the value
+of the variable <obj>room</obj>.  These are the most interesting ones.
+
+<obj>(room <arg>area1</arg> <arg>area2</arg>...)</obj> tells you about those areas, which can
+be either the names or the numbers.
+
+<obj>(room t)</obj> tells you about all the areas.
+
+<obj>(room nil)</obj> does not tell you about any areas; it only prints the
+first line of output.
+</description></definition><definition>
+<define key="room-var" name="room" type="var"></define>
+
+<description>The value of <obj>room</obj> is a list of area names and/or area numbers,
+denoting the areas that the function <obj>room</obj> should describe if given
+no arguments.  Its initial value is:
+
+<lisp>(working-storage-area macro-compiled-program)
+</lisp></description></definition></section><a name="Utility Programs"></a>
+
+<section chapter-number="36" name="Utility Programs" number="5" title="Utility Programs"><definition><define key="ed-fun" name="ed" type="fun"><args><standard>&amp;optional</standard> x</args>
+</define>
+
+<description><obj>ed</obj> is the main function for getting into the editor, Zmacs.
+The commands of Zmacs are very similar to those of Emacs.
+
+<obj>(ed)</obj> or <obj>(ed nil)</obj> simply enters the editor, leaving you in the same
+buffer as the last time you were in the editor.  It has the same effect
+as typing <obj>System E</obj>.
+
+<obj>(ed t)</obj> puts you in a fresh buffer with a generated name (like BUFFER-4).
+
+<obj>(ed <arg>pathname</arg>)</obj> edits that file.  <arg>pathname</arg> may be an actual pathname
+or a string.
+
+<obj>(ed 'foo)</obj> tries hard to edit the definition of the <obj>foo</obj> function.
+It can find a buffer or file containing the source code for <obj>foo</obj>
+and position the cursor at the beginning of the code.  In general, <obj>foo</obj>
+can be any function-spec (see <ref chapter="12" definition-in-file="fd-fun" key="function-spec" section="2" title="Function Specs" type="section"></ref>).
+
+<obj>(ed 'zwei:reload)</obj> reinitializes the editor.  It forgets about all
+existing buffers, so use this only as a last resort.
+</description></definition><definition>
+<define key="zwei:save-all-files-fun" name="zwei:save-all-files" type="fun"></define>
+
+<description>This function is useful in emergencies in which you have modified material
+in Zmacs buffers that needs to be saved, but the editor is partially broken.
+This function does what the editor's <obj>Save All Files</obj> command does, but
+it stays away from redisplay and other advanced facilities so that
+it might work if other things are broken.
+</description></definition><definition><define key="dired-fun" name="dired" type="fun"><args><standard>&amp;optional</standard> pathname</args>
+</define>
+
+<description>Puts up a window and edits the directory named by <arg>pathname</arg>, which
+defaults to the last file opened.  While editing a directory you may
+view, edit, compare, hardcopy, and delete the files and subdirectories
+it contains.  While in the directory editor type the <obj>Help</obj> key for
+further information.
+</description></definition><definition><define key="mail-fun" name="mail" type="fun"><args><standard>&amp;optional</standard> user text call-editor-anyway</args>
+</define>
+
+<description>Sends the string <arg>text</arg> as mail to <arg>user</arg>.  <arg>user</arg> should also be
+a string, of the form <obj>&quot;<arg>username<example>@</example>hostname</arg>&quot;</obj>.  Multiple
+recipients separated by commas are also allowed.
+
+If you do not provide two arguments, <obj>mail</obj> puts up an editor window
+in which you may compose the mail.  Type the <obj>End</obj> key to send the
+mail and return from the <obj>mail</obj> function.
+
+The window is also used if <arg>call-editor-anyway</arg> is non-<obj>nil</obj>.
+</description></definition><definition><define key="bug-fun" name="bug" type="fun"><args><standard>&amp;optional</standard> topic text call-editor-anyway</args>
+</define>
+
+<description>Reports a bug.  <arg>topic</arg> is the name of the faulty program (a symbol or
+a string).  It defaults to <obj>lispm</obj> (the Lisp Machine system itself).
+<arg>text</arg> is a string which contains the information to report.  If you
+do not provide two arguments, or if <arg>call-editor-anyway</arg> is
+non-<obj>nil</obj>, a window is put up for you to compose the mail.
+
+<obj>bug</obj> is like <obj>mail</obj> but includes information about the system version
+and what machine you are on in the text of the message.  This information is
+important to the maintainers of the faulty program; it aids them in reproducing
+the bug and in determining whether it is one that is already being worked on
+or has already been fixed.
+</description></definition><definition><define key="print-notifications-fun" name="print-notifications" type="fun"><args><standard>&amp;optional</standard> (from <obj>0</obj>) to</args>
+</define>
+
+<description>Reprints any notifications that have been received.  <obj>from</obj>
+and <obj>to</obj> are used to restrict which notifications are printed;
+both count from the most recent notification as number 0.  Thus,
+<obj>(print-notifications 2 8)</obj> prints six notifications after skipping
+the two most recent.
+
+The difference between notifications and sends is that sends come from
+other users, while notifications are usually asynchronous messages from
+the Lisp Machine system itself.  However, the default way for the system
+to inform you about a send is to make a notification!  So
+<obj>print-notifications</obj> <arg>normally</arg> includes all sends as well.
+
+Typing <obj>Terminal 1 N</obj> pops up a window and calls <obj>print-notifications</obj>
+to print on it.
+</description></definition><definition>
+<define key="si:print-disk-error-log-fun" name="si:print-disk-error-log" type="fun"></define>
+
+<description>Prints information about the half dozen most recent disk errors (since the last cold boot).
+</description></definition><definition><define key="peek-fun" name="peek" type="fun"><args><standard>&amp;optional</standard> character</args>
+</define>
+
+<description>Selects the PEEK utility, which displays various information about the
+system, periodically updating it.  PEEK has several modes, which are
+entered by typing a single key which is the name of the mode or by
+clicking on the menu at the top.  The initial mode is selected by the
+argument, <arg>character</arg>.  If no argument is given, PEEK starts out
+by explaining what its modes are.
+</description></definition><definition><define key="time-fun" name="time" type="fun"><args>form</args>
+</define>
+
+<description>Evaluates <arg>form</arg> and prints the length of time that the evaluation
+took.  The values of <arg>form</arg> are returned.
+
+Note that <obj>time</obj> with no argument is a function to return
+a time value counting in 60ths of a second; see <ref definition-in-file="time" key="time-fun-1" type="page"></ref>.  This unfortunate
+collision is a consequence of Common Lisp.
+</description></definition></section><a name="The Lisp Listen Loop"></a>
+
+
+<section chapter-number="36" name="The Lisp Listen Loop" number="6" title="The Lisp Listen Loop"><p indent="1">        These functions constitute the Lisp top level read-eval-print
+loop or <arg>listen loop</arg> and its associated functions.
+</p>
+
+<index-entry index="concepts" title="lisp top level"></index-entry>
+
+<index-entry index="concepts" title="read-eval-print loop"></index-entry>
+
+<index-entry index="concepts" title="listen loop"></index-entry>
+<definition>
+<define key="si:lisp-top-level-fun" name="si:lisp-top-level" type="fun"></define>
+
+<description>This is the first function called in the initial Lisp environment.
+It calls <obj>lisp-reinitialize</obj>, clears the screen, and calls <obj>si:lisp-top-level1</obj>.
+</description></definition><definition>
+<define key="lisp-reinitialize-fun" name="lisp-reinitialize" type="fun"></define>
+
+<description>This function does a wide variety of things, such as resetting the values
+of various global constants and initializing the error system.
+</description></definition><definition><define key="si:lisp-top-level1-fun" name="si:lisp-top-level1" type="fun"><args>*terminal-io*</args>
+</define>
+
+<description>This is the actual listen loop.  Within it, <obj>*terminal-io*</obj> is bound
+to the argument supplied.  This is the stream used for reading and printing
+if <obj>*standard-input*</obj> and <obj>*standard-output*</obj> are synonyms for <obj>*terminal-io*</obj>,
+as they normally are.
+
+The listen loop reads a form from <obj>*standard-input*</obj>, evaluates it,
+prints the result (with escaping) to <obj>*standard-output*</obj>, and repeats
+indefinitely.  If several values are returned by the form all of them
+are printed.  Also the values of <obj>*</obj>, <obj>+</obj>, <obj>-</obj>, <obj>//</obj>, <obj>++</obj>,
+<obj>**</obj>, <obj>+++</obj>, <obj>***</obj> and <obj>*values*</obj> are maintained (see below).
+</description></definition>
+<index-entry index="concepts" title="break loop"></index-entry>
+<definition><define key="break-fun" name="break" type="fun"><args>format-string <standard>&amp;rest</standard> format-args</args>
+</define>
+
+<description>Enters a breakpoint loop, which is similar
+to a Lisp top level loop.    <arg>format-string</arg> and the <arg>format-args</arg>
+are passed to <obj>format</obj> to print a message.
+
+<lisp>;Breakpoint <arg>message</arg>; Resume to continue, Abort to quit.
+</lisp>and then enters a loop reading, evaluating, and printing forms.  A
+difference between a break loop and the top level loop is that when
+reading a form, <obj>break</obj> checks for the following special cases: If the
+<obj>Abort</obj> key is typed, control is returned to the previous break or
+error-handler, or to top-level if there is none.  If the <obj>Resume</obj> key is
+typed, <obj>break</obj> returns <obj>nil</obj>.  If the list <obj>(return <arg>form</arg>)</obj> is typed,
+<obj>break</obj> evaluates <arg>form</arg> and returns the result, without ever
+calling the function <obj>return</obj>.
+
+Inside the <obj>break</obj> loop, the streams <obj>*standard-output*</obj>,
+<obj>*standard-input*</obj>, and <obj>query-io</obj> are bound to be synonymous
+to <obj>*terminal-io*</obj>; <obj>*terminal-io*</obj> itself is not rebound.  Several
+other internal system variables are bound, and you can add your
+own symbols to be bound by pushing elements onto the
+value of the variable <obj>sys:*break-bindings*</obj>
+(see <ref definition-in-file="fd-hac" key="sys:*break-bindings*-var" title="Variable sys:*break-bindings*" type="var"></ref>).
+
+<obj>break</obj> used to be a special form whose first argument was a string
+or symbol which was simply printed <arg>without evaluating it</arg>.
+In order to facilitate conversion, <obj>break</obj> really still is a special form.
+If the call appears to use the old conventions, it behaves in the old way,
+but the compiler issues a warning if it sees such code.
+</description></definition><definition>
+<define key="prin1-var" name="prin1" type="var"></define>
+
+<description>The value of this variable is normally <obj>nil</obj>.  If it is non-<obj>nil</obj>,
+then the read-eval-print loop uses its value instead of the
+definition of <obj>prin1</obj> to print the values returned by functions.
+This hook lets you control how things are printed by all read-eval-print
+loops--the Lisp top level, the <obj>break</obj> function, and any utility
+programs that include a read-eval-print loop.  It does not affect output
+from programs that call the <obj>prin1</obj> function or any of its relatives such
+as <obj>print</obj> and <obj>format</obj>; if you want to do that, read about
+customizing the printer, on <ref chapter="24" definition-in-file="rdprt" key="customizing-the-printer" section="1" title="What the Printer Produces" type="section"></ref>.  If you
+set <obj>prin1</obj> to a new function, remember that the read-eval-print loop
+expects the function to print the value but not to output a <obj>return</obj>
+character or any other delimiters.
+</description></definition><definition>
+<define key="--var" name="-" type="var"></define>
+
+<description>While a form is being evaluated by a read-eval-print loop,
+<obj>-</obj> is bound to the form itself.
+</description></definition><definition>
+<define key="+-var" name="+" type="var"></define>
+
+<description>While a form is being evaluated by a read-eval-print loop,
+<obj>+</obj> is bound to the previous form that was read by the loop.
+</description></definition><definition>
+<define key="*-var" name="*" type="var"></define>
+<define key="//-var" name="//" type="var"></define>
+
+<description>While a form is being evaluated by a read-eval-print loop,
+<obj>*</obj> is set to the result printed the last time through
+the loop.  If there were several values printed (because
+of a multiple-value return), <obj>*</obj> is bound to the first
+value.  <obj>//</obj> is bound to a list of all the values of the
+previous form.
+
+If evaluation of a form is aborted, <obj>*</obj> and <obj>//</obj> remain set to
+the results of the last successfully completed form.  If evaluation
+is successful but printing is aborted, <obj>*</obj> and <obj>//</obj> are already
+set for the following form.
+
+Note that when using Common Lisp syntax you would type just <obj>/</obj>.
+</description></definition><definition>
+<define key="++-var" name="++" type="var"></define>
+
+<description><obj>++</obj> holds the previous value of <obj>+</obj>, that is, the form evaluated
+two interactions ago.
+</description></definition><definition>
+<define key="+++-var" name="+++" type="var"></define>
+
+<description><obj>+++</obj> holds the previous value of <obj>++</obj>.
+</description></definition><definition>
+<define key="**-var" name="**" type="var"></define>
+<define key="////-var" name="////" type="var"></define>
+
+<description>Hold the previous values of <obj>*</obj> and <obj>//</obj>, that is, the results of
+the form evaluated two interactions ago.  Only forms whose evaluation
+is successful cause the values of <obj>*</obj> and <obj>//</obj> to move into
+<obj>**</obj> and <obj>////</obj>.
+
+Note that when using Common Lisp syntax you would type just <obj>//</obj>.
+</description></definition><definition>
+<define key="***-var" name="***" type="var"></define>
+<define key="//////-var" name="//////" type="var"></define>
+
+<description>Hold the previous values of <obj>**</obj> and <obj>////</obj>, that is, the results of
+the form evaluated three interactions ago.
+Note that when using Common Lisp syntax you would type just <obj>///</obj>.
+</description></definition><definition>
+<define key="*values*-var" name="*values*" type="var"></define>
+
+<description><obj>*values*</obj> holds a list of all lists of values produced by evaluation
+in this Lisp listener.  <obj>(car *values*)</obj> is nearly equivalent to <obj>//</obj>,
+<obj>(cadr *values*)</obj> to <obj>////</obj>, and so on.  The difference is that
+an element is pushed on <obj>*values*</obj> for each form whose evaluation
+is started.  If evaluation is aborted, the element of <obj>*values*</obj> is <obj>nil</obj>.
+</description></definition><definition>
+<define key="sys:*break-bindings*-var" name="sys:*break-bindings*" type="var"></define>
+
+<description>When <obj>break</obj> is called, it binds some special variables under control of
+the list which is the value of <obj>sys:*break-bindings*</obj>.  Each element of the
+list is a list of two elements: a variable and a form that is evaluated to
+produce the value to bind it to.  The bindings happen sequentially.  Users may
+<obj>push</obj> things on this list (adding to the front of it), but should not replace
+the list wholesale since several of the variable bindings on this list are
+essential to the operation of <obj>break</obj>.
+</description></definition><definition>
+<define key="lisp-crash-list-var" name="lisp-crash-list" type="var"></define>
+
+<description>The value of <obj>lisp-crash-list</obj> is a list of forms.
+<obj>lisp-reinitialize</obj> sequentially evaluates these
+forms, and then sets <obj>lisp-crash-list</obj> to <obj>nil</obj>.
+
+In most cases, the <arg>initialization</arg> facility should be used rather than
+<obj>lisp-crash-list</obj>.  Refer to <ref chapter="34" definition-in-file="init" key="initialization" section="0" title="Initializations" type="section"></ref>.
+</description></definition></section><a name="The Garbage Collector"></a>
+
+
+<section chapter-number="36" name="The Garbage Collector" number="7" title="The Garbage Collector"><index-entry index="concepts" title="garbage collector"></index-entry>
+<definition>
+<define key="gc-on-fun" name="gc-on" type="fun"></define>
+
+<description>Turns automatic garbage collection on.  Garbage collection will happen when
+and as needed.  Automatic garbage collection is off by default.
+
+Since garbage collection works by copying, you are asked for
+confirmation if there may not be enough space to complete a garbage
+collection even if it is started immediately.
+</description></definition><definition>
+<define key="gc-off-fun" name="gc-off" type="fun"></define>
+
+<description>Turns automatic garbage collection off.
+</description></definition><definition>
+<define key="gc-on-var" name="gc-on" type="var"></define>
+
+<description><obj>t</obj> when garbage collection is on, <obj>nil</obj> when it is not.
+You cannot control garbage collection by setting this variable;
+it exists so you can examine it.  In particular, you can tell
+if the system found it necessary to turn off garbage collection
+because it was close to running out of virtual memory.
+</description></definition>
+<p>Normally, automatic garbage collection happens in incremental mode; that
+is, scavenging happens in parallel with computation.  Each consing
+operation scavenges or copies four words per word consed.  In addition,
+scavenging goes on whenever the machine appears idle.
+</p>
+<definition>
+<define key="si:inhibit-idle-scavenging-flag-var" name="si:inhibit-idle-scavenging-flag" type="var"></define>
+
+<description>If this is non-<obj>nil</obj>, scavenging is not done during idle time.
+</description></definition>
+<p>If you are running a noninteractive crunching program, the incremental
+nature of garbage collection may not be helpful.  Then you can make
+garbage collection more efficient by making it a batch process.
+</p>
+<definition>
+<define key="si:gc-reclaim-immediately-var" name="si:gc-reclaim-immediately" type="var"></define>
+
+<description>If this variable is non-<obj>nil</obj>,
+automatic garbage collection is done as a batch operation:
+when the garbage collection process decides that the time has come,
+it copies all the useful data and discards the old address space,
+running full blast.  (It is still possible to use the machine while this is
+going on, but it is slow.)  More specifically, the
+garbage collection process scavenges and reclaims oldspace immediately
+right after a flip happens, using all of the machine's
+physical memory.  This variable is only relevant if you have turned on
+automatic garbage collection with <obj>(gc-on)</obj>.
+
+A batch garbage collection requires less free space than an incremental
+one.  If there is not enough space to complete an incremental garbage
+collection, you may be able to win by selecting batch garbage collection
+instead.
+</description></definition><definition>
+<define key="si:gc-reclaim-immediately-if-necessary-var" name="si:gc-reclaim-immediately-if-necessary" type="var"></define>
+
+<description>If this variable is non-<obj>nil</obj>, then automatic garbage collection is
+done in batch mode if, when the flip is done, there does not seem to
+be enough space left to do it incrementally.  This variable's value is
+relevant only if <obj>si:gc-reclaim-immediately</obj> is <obj>nil</obj>.
+</description></definition><definition>
+<define key="si:gc-flip-ratio-var" name="si:gc-flip-ratio" type="var"></define>
+
+<description>This variable tells the garbage collector what fraction of the data it
+should expect to have to copy, after each flip.  It should be a positive
+number no larger than one.  By default, it is one.  But if your program
+is consing considerable amounts of garbage, a value less than one may be
+safe.  The garbage collector uses this variable to figure how much space
+it will need to copy all the living data, and therefore indirectly how often
+garbage collection must be done.
+</description></definition><definition>
+<define key="si:gc-flip-minimum-ratio-var" name="si:gc-flip-minimum-ratio" type="var"></define>
+
+<description>This value is used, when non-<obj>nil</obj>, to control warnings about having
+too little space to garbage collect.  Its value is a positive number
+no greater than one, just like that of <obj>si:gc-flip-ratio</obj>.  The
+difference between the two is that <obj>si:gc-flip-ratio</obj> controls when
+garbage collection is <arg>recommended</arg>, whereas
+<obj>si:gc-flip-minimum-ratio</obj> controls when the system considers the
+last possible time to do so.  If <obj>si:gc-flip-minimum-ratio</obj> is
+<obj>nil</obj>, <obj>si:gc-flip-ratio</obj> serves both purposes.
+</description></definition>
+<p>Garbage collection is turned off if it appears to be about to run out of
+memory.  You get a notification if this happens.  You also get a
+notification when you are nearly at the point of not having enough space
+to guarantee garbage collecting successfully.
+</p>
+
+<p>In addition to turning on automatic garbage collection, you can also
+manually request one immediate complete collection with the function
+<obj>si:full-gc</obj>.  The usual reason for doing this is to make a band smaller
+before saving it.  <obj>si:full-gc</obj> also resets all temporary areas (see
+<obj>si:reset-temporary-area</obj>, <ref definition-in-file="areas" key="si:reset-temporary-area-fun" title="Function si:reset-temporary-area" type="fun"></ref>).
+</p>
+<definition>
+<define key="si:full-gc-fun" name="si:full-gc" type="fun"></define>
+
+<description>Performs a complete garbage collection immediately.
+This does not turn automatic garbage collection on or off;
+it performs the garbage collection in the process you call it in.
+A full gc of the standard system takes about 7 minutes, currently.
+</description></definition><definition><define key="si:clean-up-static-area-fun" name="si:clean-up-static-area" type="fun"><args>area-number</args>
+</define>
+
+<description>This is a more selective way of causing static areas to be garbage
+collected once.  The argument is the area number of a static area; that
+particular area will be garbage collected the next time a garbage
+collection is done (more precisely, it will be copied and discarded after the next
+flip).  If you then call <obj>si:full-gc</obj>, it will happen then.
+</description></definition><definition>
+<define key="gc-status-fun" name="gc-status" type="fun"></define>
+
+<description>The function <obj>gc-status</obj> prints information related to garbage
+collection.  When scavenging is in progress, it tells you how the task is
+progressing.  While scavenging is not in progress and
+oldspace does not exist, it prints information about how soon a new flip
+will be required.
+</description></definition>
+<p>While a garbage collection is not in progress, the output from
+<obj>gc-status</obj> looks like this:
+
+<lisp>Dynamic (new+copy) space 557,417, Old space 0, Static 3,707,242,
+Free space 10,453,032, with 10,055,355 needed for garbage collection
+ assuming 100% live data (SI:GC-FLIP-RATIO = 1).
+If GC is turned on, a flip will happen in 397,677 words.
+Scavenging during cons Off, Idle scavenging On,
+Automatic garbage collection Off.
+GC Flip Ratio 1, GC Reclaim Immediately Off
+</lisp>
+<lisp><exdent amount="96"><caption>or </caption>Dynamic (new+copy) space 561,395, Old space 0, Static 3,707,242,
+Free space 10,453,032, with 10,058,670 needed for garbage collection
+ assuming 100% live data (SI:GC-FLIP-RATIO = 1).
+A flip will happen in 394,362 words.
+Scavenging during cons On, Idle scavenging On,
+Automatic garbage collection On.
+GC Flip Ratio 1, GC Reclaim Immediately Off
+</exdent></lisp></p>
+
+<p>The ``dynamic space'' figure is the amount of garbage collectable space
+and the ``static'' figure is the amount of static space used.
+There is no old space since an old space only exists during garbage collection.
+</p>
+
+<p>The amount of space needed for garbage collection represents an estimate
+of how much space user programs will use up while scavenging is in
+progress.  It includes a certain amount of padding.  The difference
+between the free space and that amount is how much consing you can do
+before a garbage collection will begin (if automatic garbage collection
+is on).
+</p>
+
+<p>The amount needed for a garbage collection depends on the value of
+<obj>si:*gc-reclaim-immediately*</obj>; more if it is <obj>nil</obj>.
+</p>
+
+<p>While a garbage collection is in progress, the output looks like this:
+
+<lisp>Incremental garbage collection now in progress.
+Dynamic (new+copy) space 45,137, Old space 972,514, Static 3,707,498,
+Between 3,701,440 and 4,629,998 words of scavenging left to do.
+Free space 9,289,795 (of which 928,558 might be needed for copying).
+Ratio scavenging work/free space = 0.55.
+Scavenging during cons On, Idle scavenging On,
+Automatic garbage collection On.
+GC Flip Ratio 1, GC Reclaim Immediately Off
+</lisp></p>
+
+<p>Notice that most of the dynamic space has become old space and new
+space is small.  Not much has been copied since the flip took place.
+The maximum and minimum estimates for the amount of scavenging are based
+on different limits for how much of old space may need to be copied; as
+scavenging progresses, the maximum decreases steadily, but the
+minimum may increase.  The free space is smaller now, but it will get
+larger when scavenging is finished and old space is freed up.  (The total
+amounts are not the same now because unused parts of regions may not be
+included in any of the figures.)
+</p>
+<definition><define key="si:set-scavenger-ws-fun" name="si:set-scavenger-ws" type="fun"><args>number-of-pages</args>
+</define>
+
+<description>Incremental scavenging is restricted to a fixed
+amount of physical memory to reduce its interference with your other
+activities.
+
+This function specifies the number of pages of memory that incremental garbage
+collection can use.  256 is a good value for a 256k machine.  If
+the garbage collector gets very poor paging performance, use of this
+function may fix it.
+</description></definition></section><a name="lispm-init-file"></a>
+
+
+<section chapter-number="36" name="lispm-init-file" number="8" title="Logging In"><p indent="1">        Logging in tells the Lisp Machine who you are, so that
+other users can see who is logged in, you can receive messages,
+and your INIT file can be run.  An INIT file is a Lisp program
+which gets loaded when you log in; it can be used to set up
+a personalized environment.
+</p>
+
+<p indent="1">        When you log out, it should be possible to undo any
+personalizations you have made so that they do not affect the next user
+of the machine.  Therefore, anything done by an INIT file should be
+undoable.  In order to do this, for every form in the INIT file, a Lisp
+form to undo its effects should be added to the list that is the value
+of <obj>logout-list</obj>.  The <obj>login-forms</obj> construct
+helps make this easy; see below.
+</p>
+<definition>
+<define key="user-id-var" name="user-id" type="var"></define>
+
+<description>The value of <obj>user-id</obj> is either the name of the logged in user, as a string,
+or else an empty string if there is no user logged in.
+It appears in the who-line.
+</description></definition><definition>
+<define key="logout-list-var" name="logout-list" type="var"></define>
+
+<description>The value of <obj>logout-list</obj> is a list of forms to be evaluated
+when the user logs out.
+</description></definition><definition><define key="login-fun" name="login" type="fun"><args>name <standard>&amp;optional</standard> host inhibit-init-file</args>
+</define>
+
+<description>Sets your name (the variable <obj>user-id</obj>) to <arg>name</arg> and logs in a file
+server on <arg>host</arg>.  <arg>host</arg> also becomes your default file host.  The default
+value of <arg>host</arg> depends on which Lisp Machine you use using; it is
+called the associated machine (see <ref definition-in-file="fd-hac" key="si:associated-machine-var" title="Variable si:associated-machine" type="var"></ref>).
+<obj>login</obj> also runs the <obj>:login</obj> initialization list (see
+<ref definition-in-file="init" key="login-init-list" type="page"></ref>).
+
+If <arg>host</arg> requires passwords for logging in you are asked for a
+password.  Adding an asterisk at the front of your password enables any
+special capabilities you may be authorized to use, by calling
+<obj>fs:enable-capabilities</obj> (<ref definition-in-file="files" key="fs:enable-capabilities-fun" title="Function fs:enable-capabilities" type="fun"></ref>).
+
+Unless <arg>inhibit-init-file</arg> is specified as non-<obj>nil</obj>, <obj>login</obj> loads
+your init file if it exists.  On ITS, your init file is <arg>name</arg> <obj>LISPM</obj>
+on your home directory.  On TOPS-20 your init file is <obj>LISPM.INIT</obj> on your
+directory.  On VMS, it is <obj>LISPM.INI</obj>.  On Unix, it is <obj>lispm.init</obj>.
+
+If anyone is logged into the machine already, <obj>login</obj> logs him out
+before logging in <arg>name</arg>.  (See <obj>logout</obj>.)  Init files should be
+written using the <obj>login-forms</obj> construct so that <obj>logout</obj> can undo
+them.  Usually, however, you cold-boot the machine before logging in, to
+remove any traces of the previous user.  <obj>login</obj> returns <obj>t</obj>.
+</description></definition><definition><define key="log1-fun" name="log1" type="fun"><args><standard>&amp;rest</standard> options</args>
+</define>
+
+<description>Like <obj>login</obj> but the arguments are specified differently.
+<arg>options</arg> is a list of keywords and values; the keywords
+<obj>:host</obj> and <obj>:init</obj> specify the host to log in on and whether
+to load the init file if any.  Any other keywords are also allowed.
+<obj>log1</obj> itself ignores them, but the init file can act on them.
+The purpose of <obj>log1</obj>, as opposed to <obj>login</obj>, is to enable you
+to specify other keywords for your init file's sake.
+</description></definition><definition>
+<define key="si:user-init-options-var" name="si:user-init-options" type="var"></define>
+
+<description>During the execution of the user's init file, inside <obj>log1</obj>,
+this variable contains the arguments given to <obj>log1</obj>.
+Options not meaningful to <obj>log1</obj> itself can be specified, so that
+the init file can find them here and act on them.
+</description></definition><definition>
+<define key="logout-fun" name="logout" type="fun"></define>
+
+<description>First, <obj>logout</obj> evaluates the forms on <obj>logout-list</obj>.
+Then it sets <obj>user-id</obj> to an empty string and <obj>logout-list</obj>
+to <obj>nil</obj>.  Then it runs the <obj>:logout</obj> initialization list
+(see <ref definition-in-file="init" key="login-init-list" type="page"></ref>), and returns <obj>t</obj>.
+</description></definition><definition><define key="login-forms-fun" name="login-forms" type="mac"><args>undoable-forms...</args>
+</define>
+
+<description>The body of a <obj>login-forms</obj> is composed of forms to be evaluated,
+whose effects are to be undone if you log out.  For example,
+
+<lisp>(login-forms
+  (setq fs:*defaults-are-per-host* t))
+</lisp>would set the variable immediately but arrange for its previous value
+to be restored if you log out.
+
+<obj>login-forms</obj> is not an AI program; it must be told how to undo each
+function that will be used immediately inside it.  This is done by
+giving the function name (such as <obj>setq</obj>) a <obj>:undo-function</obj>
+property which is a function that takes a form as an argument and
+returns a form to undo the original form.  For <obj>setq</obj>, this is done as
+follows:
+
+<lisp>(defun (setq :undo-function) (form &amp;aux results)
+  (do ((l (cdr form) (cddr l)))
+      ((null l))
+    (cond ((boundp (car l))
+           (push `(setq ,(car l) ',(symeval (car l))) results))
+          (t (push `(makunbound ',(car l)) results))))
+  `(progn . ,results))
+</lisp>
+Undo functions are standardly provided for the functions <obj>setq</obj>,
+<obj>pkg-goto-globally</obj>, <obj>setq-globally</obj>, <obj>add-initialization</obj>,
+<obj>deff</obj>, <obj>defun</obj>, <obj>defsubst</obj>, <obj>macro</obj>, <obj>advise</obj> and
+<obj>zwei:set-comtab</obj>.  Constructs which macroexpand into uses of those
+functions are also supported.
+
+Note that setting <obj>*read-base*</obj> and <obj>*print-base*</obj> should be done with <obj>setq-globally</obj>
+rather than <obj>setq</obj>, since those variables are likely to be bound by the
+<obj>load</obj> function while the init file is executed.
+</description></definition><definition><define key="login-setq-fun" name="login-setq" type="mac"><args>{variable value}...</args>
+</define>
+
+<description><obj>login-setq</obj> is like <obj>setq</obj> except that it puts
+a <obj>setq</obj> form on <obj>logout-list</obj> to set the variables
+to their previous values.  <obj>login-setq</obj> is obsolete; use <obj>login-forms</obj>
+around a <obj>setq</obj> instead.
+</description></definition><definition><define key="login-eval-fun" name="login-eval" type="fun"><args>x</args>
+</define>
+
+<description><obj>login-eval</obj> is used for functions that are ``meant to be called''
+from INIT files, such as <obj>zwei:set-comtab-return-undo</obj>, which conveniently
+return a form to undo what they did.  <obj>login-eval</obj> pushes
+the result of the form <arg>x</arg> onto <obj>logout-list</obj>.  It is obsolete now
+because <obj>login-forms</obj> is a cleaner interface.
+</description></definition><definition><define key="si:undoable-forms-1-fun" name="si:undoable-forms-1" type="fun"><args>undo-list-name forms <standard>&amp;optional</standard> complaint-string</args>
+</define>
+
+<description>This is what <obj>login-forms</obj> uses.
+<arg>forms</arg> is a list of forms; they are evaluated and forms for
+undoing their effects are pushed onto the value of the symbol
+<arg>undo-list-name</arg>.  If an element of <arg>forms</arg> has no known
+way to be undone, a message is printed using the string <arg>complaint-string</arg>.
+For <obj>login-forms</obj>, the string supplied is <obj>&quot;at logout&quot;</obj>.
+</description></definition></section><a name="Dribble Files"></a>
+
+
+<section chapter-number="36" name="Dribble Files" number="9" title="Dribble Files"><index-entry index="concepts" title="dribble file"></index-entry>
+<definition><define key="dribble-fun" name="dribble" type="fun"><args><standard>&amp;optional</standard> filename</args>
+</define>
+
+<description>With an argument, <obj>dribble</obj> opens <arg>filename</arg> as a `dribble file' (also
+known as a `wallpaper file') and then enters a Lisp listen loop
+in which <obj>*standard-input*</obj>
+and <obj>*standard-output*</obj> are rebound to direct all the output and
+echoing they do to the file as well as to the terminal.
+
+Dribble output can be sent to an editor buffer by using a suitable
+pathname; see <ref chapter="25" definition-in-file="pathnm" key="editor-hosts" section="7" title="Host File Systems Supported" type="section"></ref>.
+
+Calling <obj>dribble</obj> with no arguments terminates dribbling; it throws to
+the original call to <obj>dribble</obj>, which closes the file and returns.
+</description></definition><definition><define key="dribble-all-fun" name="dribble-all" type="fun"><args><standard>&amp;optional</standard> filename</args>
+</define>
+
+<description>Like <obj>dribble</obj> except that all input and
+output goes to the dribble file, including break loops, queries,
+warnings and sessions in the debugger.  This works by binding
+<obj>*terminal-io*</obj> instead of <obj>*standard-output*</obj> and <obj>*standard-input*</obj>.
+</description></definition></section><a name="Version Information"></a>
+
+
+<section chapter-number="36" name="Version Information" number="10" title="Version Information"><p>Common Lisp defines several standard ways of inquiring about
+the identity and capabilities of the Lisp system you are using.
+</p>
+<definition>
+<define key="*features*-var" name="*features*" type="var"></define>
+
+<description>A list of atoms which describe the software and hardware features
+of the Lisp implementation.  By default, this is
+
+<lisp>(:loop :defstruct :lispm :cadr :mit :chaos :sort :fasload :string
+ :newio :roman :trace :grindef :grind :common)
+</lisp>Most important is the symbol <obj>:lispm</obj>; this indicates that the program
+is executing on the Lisp Machine.  <obj>:cadr</obj> indicates the type of
+hardware, <obj>:mit</obj> which version of the Lisp Machine operating system,
+and <obj>:chaos</obj> that the Chaosnet protocol is available.  <obj>:common</obj>
+indicates that Common Lisp is supported.
+
+Most of the other elements are for Maclisp compatibility.  Common Lisp
+defines the variable <obj>*features*</obj> but does not define what should
+appear in the list.  The order of elements in the list has no
+significance.  Membership checks should use <obj>string-equal</obj> so that
+packages are not significant
+
+The <example>#+</example> and <example>#-</example> read constructs (<ref definition-in-file="rdprt" key="sharp-plus" type="page"></ref>) check for the
+presence of an element in this list.  Thus, <example>#+</example><obj>lispm</obj> when read by
+a Lisp Machine causes the following expression to be significant,
+because <obj>:lispm</obj> is present in the features list.
+</description></definition>
+<p>The remaining standard means of inquiry are specified by Common Lisp to
+be functions rather than variables, for reasons that seem poorly thought
+out.
+</p>
+<definition>
+<define key="lisp-implementation-type-fun" name="lisp-implementation-type" type="fun"></define>
+
+<description>Returns a string saying what kind of Lisp implementation you are using.
+On the Lisp Machine it is always <obj>&quot;Zetalisp&quot;</obj>.
+</description></definition><definition>
+<define key="lisp-implementation-version-fun" name="lisp-implementation-version" type="fun"></define>
+
+<description>Returns a string saying the version numbers of the Lisp implementation.
+On the Lisp Machine it looks something like
+
+<lisp><obj>&quot;System 98.3, CADR 3.0, ZMAIL 52.2&quot;</obj>.
+</lisp></description></definition><definition>
+<define key="machine-type-fun" name="machine-type" type="fun"></define>
+
+<description>Returns a string describing the kind of hardware in use.
+It is <obj>&quot;CADR&quot;</obj> or <obj>&quot;LAMBDA&quot;</obj>.
+</description></definition><definition>
+<define key="machine-version-fun" name="machine-version" type="fun"></define>
+
+<description>Returns a string describing the kind of hardware and microcode version.
+It starts with the value of <obj>machine-type</obj>.
+It might be <obj>&quot;CADR Microcode 309&quot;</obj>.
+</description></definition><definition>
+<define key="machine-instance-fun" name="machine-instance" type="fun"></define>
+
+<description>Returns a string giving the name of this machine.  Do not be confused;
+the value is a string, not an instance.  Example:  <obj>&quot;CADR-18&quot;</obj>.
+</description></definition><definition>
+<define key="software-type-fun" name="software-type" type="fun"></define>
+
+<description>Returns a string describing the type of operating system software that Lisp
+is working with.  On the Lisp Machine, it is always <obj>&quot;Zetalisp&quot;</obj>, since the
+Lisp Machine Lisp software is the operating system.
+</description></definition><definition>
+<define key="software-version-fun" name="software-version" type="fun"></define>
+
+<description>Returns a string describing the version numbers of the operating system software
+in use.  This is the same as <obj>lisp-implementation-version</obj> on the Lisp Machine
+since the same software is being described.
+</description></definition><definition>
+<define key="short-site-name-fun" name="short-site-name" type="fun"></define>
+
+<description>Returns a string giving briefly the name of the site you are at.
+A site is an institution which has a group of Lisp Machines.
+The string you get is the value of the <obj>:short-site-name</obj> site option
+as given in <obj>SYS: SITE; SITE LISP</obj>.  See <ref chapter="36" definition-in-file="fd-hac" key="site-files" section="12" title="Site Options and Host Table" type="section"></ref> for more
+information.  Example: <obj>&quot;MIT AI Lab&quot;</obj>.
+</description></definition><definition>
+<define key="long-site-name-fun" name="long-site-name" type="fun"></define>
+
+<description>Returns a string giving a verbose name for the site you are at.  This
+string is specified by the site option <obj>:long-site-name</obj>.  Example:
+<obj>&quot;Massachusetts Institute of Technology, Artificial Intelligence
+Laboratory&quot;</obj>.
+</description></definition></section><a name="disk-partition"></a>
+
+
+<section chapter-number="36" name="disk-partition" number="11" title="Booting and Disk Partitions"><index-entry index="concepts" title="band"></index-entry>
+
+<index-entry index="concepts" title="partition"></index-entry>
+
+<index-entry index="concepts" title="booting"></index-entry>
+
+<p>A Lisp Machine disk is divided into several named <arg>partitions</arg> (also
+called <arg>bands</arg> sometimes).  Partitions can be used for many things.
+Every disk has a partition named <obj>PAGE</obj>, which is used to implement
+the virtual memory of the Lisp Machine.  When you run Lisp, this is
+where the Lisp world actually resides.  There are also partitions that
+hold saved images of the Lisp Machine microcode, conventionally named
+<obj>MCR<arg>n</arg></obj> (where <arg>n</arg> is a digit), and partitions that hold saved
+images of Lisp worlds, conventionally named <obj>LOD<arg>n</arg></obj>.  A saved image
+of a Lisp world is also called a <arg>virtual memory load</arg> or <arg>system load</arg>.
+The microcode and system load are stored separately so that the
+microcode can be changed without going through the time-consuming
+process of generating a new system load.
+</p>
+
+<p>The directory of partitions is in a special block on the disk called the
+label.  The label names one of the partitions as the current microcode
+and one as the current system load.  When you cold-boot, the contents
+of the current microcode band are loaded into the microcode memory, and
+then the contents of the current saved image of the Lisp world is copied
+into the <obj>PAGE</obj> partition.  Then Lisp starts running.  When you
+warm-boot, the contents of the current microcode band are loaded, but
+Lisp starts running using the data already in the <obj>PAGE</obj> partition.
+</p>
+
+<p>For each partition, the directory of partitions contains a brief textual
+description of the contents of the partition.  For microcode partitions,
+a typical description might be <obj>&quot;UCADR 310&quot;</obj>; this means that version
+<obj>310</obj> of the microcode is in the partition.  For saved Lisp images, it
+is a little more complicated.  Ideally, the description would say which
+versions of which systems are loaded into the band.  Unfortunately,
+there isn't enough room for that in most cases.  A typical description
+is <obj>&quot;99.4 Daed 5.1&quot;</obj>, meaning that this band contains version
+<obj>99.4</obj> of <obj>System</obj> and version <obj>5.1</obj> of <obj>Daedalus</obj>.  The description
+is created when a Lisp world is saved away by <obj>disk-save</obj> (see below).
+</p>
+
+
+<subsection name="NIL" title="Manipulating the Label"><definition><define key="print-disk-label-fun" name="print-disk-label" type="fun"><args><standard>&amp;optional</standard> (unit <obj>0</obj>) (stream <obj>*standard-output*</obj>)</args>
+</define>
+
+<description>Prints a description of the label of the disk specified by <arg>unit</arg> onto
+<arg>stream</arg>.  The description starts with the name of the disk pack,
+various information about the disk that is generally uninteresting, and
+the names of the two current load partitions (microcode and saved Lisp
+image).  This is followed by one line of description for each
+partition.  Each one has a name, disk address, size, and textual
+comment.  The current microcode partition and the current system
+load partition are marked with asterisks, each at the beginning of the line.
+
+<arg>unit</arg> may be the unit number of the disk (most Lisp machines just
+have one unit, number 0), or the host name of another Lisp Machine on
+the Chaosnet, as a string (in which case the label of unit <obj>0</obj> on that
+machine is printed, and the user of that machine is notified that you
+are looking at his label), or, for CADRs only, the string <obj>&quot;CC&quot;</obj>
+(which prints the label of unit 0 of the machine connected to this
+machine's debugging hardware).
+
+Use of <obj>&quot;CC&quot;</obj> as the <arg>unit</arg> is the way to examine or fix up
+the label of a machine which cannot work because of problems with the
+label.  On a Lambda, this must be done through the SDU.
+</description></definition><definition><define key="set-current-band-fun" name="set-current-band" type="fun"><args>partition-name <standard>&amp;optional</standard> (unit <obj>0</obj>)</args>
+</define>
+
+<description>Sets the current saved Lisp image partition to be <arg>partition-name</arg>.
+If <arg>partition-name</arg> is a number, the name <obj>LOD<arg>n</arg></obj> is used.
+
+<arg>unit</arg> can be a disk drive number, the host name of another Lisp
+Machine, or the string <obj>&quot;CC&quot;</obj>.  See the comments under
+<obj>print-disk-label</obj>, above.
+
+If the partition you specify goes with a version of microcode different
+from the one that is current, this function offers to select the
+an appropriate microcode partition as well.  Normally you should
+answer <obj>Y</obj>.
+</description></definition><definition><define key="set-current-microload-fun" name="set-current-microload" type="fun"><args>partition-name <standard>&amp;optional</standard> (unit <obj>0</obj>)</args>
+</define>
+
+<description>Sets the current microcode partition to be <arg>partition-name</arg>.
+If <arg>partition-name</arg> is a number, the name <obj>MCR<arg>n</arg></obj> is used.
+
+<arg>unit</arg> can be a disk drive number, the host name of another Lisp
+Machine, or the string <obj>&quot;CC&quot;</obj>.  See the comments under
+<obj>print-disk-label</obj>, above.
+</description></definition><definition><define key="si:current-band-fun" name="si:current-band" type="fun"><args><standard>&amp;optional</standard> (unit <obj>0</obj>)</args>
+</define><define key="si:current-microload-fun" name="si:current-microload" type="fun"><args><standard>&amp;optional</standard> (unit <obj>0</obj>)</args>
+</define>
+
+<description>Return, respectively, the name of the current band and the current microload on the
+specified unit.
+</description></definition>
+<p>When using the functions to set the current load partitions, be extra
+sure that you are specifying the correct partition.  Having done it,
+cold-booting the machine will reload from those partitions.  Some
+versions of the microcode will not work with some versions of the Lisp
+system, and if you set the two current partitions incompatibly,
+cold-booting the machine will fail.  To fix this, on a CADR, use
+another CADR's debugging hardware, running
+<obj>print-disk-label</obj> and <obj>set-current-band</obj> on the other CADR and
+giving <obj>&quot;CC&quot;</obj> as the <arg>unit</arg> argument.  On a Lambda, this is done
+via the SDU.
+</p>
+<definition><define key="si:edit-disk-label-fun" name="si:edit-disk-label" type="fun"><args>unit <standard>&amp;optional</standard> init-p</args>
+</define>
+
+<description>Runs an interactive label editor on the specified unit.
+This editor allows you to change any field in the label.  The
+<obj>Help</obj> key documents the commands.  You have to be an expert
+to need this and to understand what it does, so the commands
+are not documented here.  Ask someone if you need help.
+You can screw yourself very badly with this function.
+</description></definition><definition><define key="disk-restore-fun" name="disk-restore" type="fun"><args><standard>&amp;optional</standard> partition</args>
+</define>
+
+<description>Allows booting from a band other than the current one.  <arg>partition</arg>
+may be the name or the number of a disk partition containing a
+virtual-memory load, or <obj>nil</obj> or omitted, meaning to use the current
+partition.  The specified partition is copied into the paging area of
+the disk and then started.
+
+Although you can use this to boot a different Lisp image than the installed
+one, this does not provide a way to boot a different microcode image.
+<obj>disk-restore</obj> brings up the new band with the currently running microcode.
+
+<obj>disk-restore</obj> asks the user for confirmation before doing it.
+</description></definition><definition><define key="describe-partition-fun" name="describe-partition" type="fun"><args>partition <standard>&amp;optional</standard> unit</args>
+</define>
+
+<description>Tells you various useful things about a partition; including where on
+disk the partition begins, and how long it is.
+
+If you specify a saved Lisp system partition, such as <obj>LOD3</obj>, it also
+tells you important information about the contents of the partition: the
+microcode version which the partition goes with, the size of the data in
+the partition and the highest virtual address used.  The size of the partition
+tells how large a partition you need to make a copy of this one, and the
+highest virtual address used (which is measured in units of disk
+blocks) tells you how large a <obj>PAGE</obj> partition you need in order to run
+this partition.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Updating Software"><p>Of all the procedures described in this section, the most common one is
+to take a partition containing a Lisp image, update it to have all the
+latest patches (see <ref chapter="29" definition-in-file="patch" key="patch-facility" section="8" title="The Patch Facility" type="section"></ref>), and save it away in a disk
+partition.  The function <obj>load-and-save-patches</obj> does it all
+conveniently for you.
+</p>
+<definition>
+<define key="load-and-save-patches-fun" name="load-and-save-patches" type="fun"></define>
+
+<description>Loads patches and saves a band, with a simple user interface.  Run this
+function immediately after cold booting, without logging in first; it
+logs in automatically as <obj>LISPM</obj> (or whatever is specified in the site files).
+The first thing it does is print the list of disk partitions and ask you
+which one to save in.  Answer <obj>LOD<arg>n</arg></obj>, using the name of a partition
+from the printed list.  You must then confirm.  Then the patches are loaded
+and the resulting world is saved with no further user interaction, as long
+as no problem arises.
+
+It is convenient to use this function just before you depart, allowing
+it to finish unattended.
+</description></definition>
+<p>If you wish to do something other than loading all and only the latest
+patches, you must perform the steps by hand.  Start by cold-booting the
+machine, to get a fresh, empty system.  Next, you must log in as
+something whose INIT file does not affect the Lisp world noticably (so
+that when you save away the Lisp image, the side-effects of the INIT
+file won't get saved too); on MIT-OZ, for example, you can log in as
+<obj>LISPM</obj> with password <obj>LISPM</obj>.  Now you can load in any new software
+you want; usually you should also do <obj>(load-patches)</obj> for good
+measure.  You may also want to call <obj>si:set-system-status</obj> to change
+the release status of the system.
+</p>
+
+<p>When you're done loading everything, do <obj>(print-disk-label)</obj> to find
+a band in which to save your new Lisp world.  It is best not to reuse
+the current band, since if something goes wrong during the saving of
+the partition, while you have written, say, half of the band that is
+current, it may be impossible to cold-boot the machine.  Once you have
+found the partition, you use the <obj>disk-save</obj> function to save
+everything into that partition.
+</p>
+<definition><define key="disk-save-fun" name="disk-save" type="fun"><args>partition-name <standard>&amp;optional</standard> no-query incremental</args>
+</define>
+
+<description>Saves the current Lisp world in the designated partition.
+<arg>partition-name</arg> may be a partition name (a string), or it may be a
+number in which case the name <obj>LOD<arg>n</arg></obj> is used.
+
+The user is first asked for yes-or-no confirmation that he really wants to
+reuse the named partition.  A non-<obj>nil</obj> value for <arg>no-query</arg> prevents
+this question.  This is only for callers that have already asked.
+
+Next it is necessary to figure out what to put into the textual
+description of the band, for the disk label.  This starts with the brief
+version of <obj>si:system-version-info</obj> (see
+<ref definition-in-file="patch" key="si:system-version-info-fun" title="Function si:system-version-info" type="fun"></ref>).  Then comes a string of additional
+information; if <arg>no-query</arg> is <obj>nil</obj>, the user is offered the chance
+to provide a new string.  The current value of this string is returned
+by <obj>si:system-version-info</obj> and printed by booting.  The version info
+and the string both go in the comment field of the disk label for this
+band.  If they don't together fit into the fixed size available, the
+user is asked to retype the whole thing (the version info as well as
+your comment) in a compressed form that does fit.
+
+The Lisp environment is then saved away into the designated partition,
+and then the equivalent of a cold-boot from that partition is done.
+</description></definition>
+<p>Once the patched system has been successfully saved and the system
+comes back up, you can make it current with <obj>set-current-band</obj>.
+</p>
+
+<p>When you do a <obj>disk-save</obj>, it may tell you that the band you wish to save
+in is not big enough to hold all the data in your current world.  It may be
+possible for you to reduce the size of the data so that it will fit in that
+band, by garbage collecting.  Simply do <obj>(si:full-gc)</obj>.
+</p>
+
+<p>Try to avoid saving patched systems after running the editor or the
+compiler.  This works, but it makes the saved system a lot bigger.  In
+order to produce a clean saved environment, you should try to do as
+little as possible between the time you cold-boot and the time you save
+the partition.
+</p>
+<definition>
+<define key="si:login-history-var" name="si:login-history" type="var"></define>
+
+<description>The value of <obj>si:login-history</obj> is a list of entries, one for each person who
+has logged into this world since it was created.  This makes it possible to
+tell who <obj>disk-saved</obj> a band with something broken in it.  Each entry is
+a list of the user ID, the host logged into, the Lisp Machine on which the
+world was being executed, and the date and time.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Saving Personal Software"><p>If you have a large application system which takes a while to load,
+you may wish to save a band containing it.
+</p>
+
+<p>To do this, boot a fresh band, log in without running your init file,
+do <obj>make-system</obj> to load the application system, and then invoke
+<obj>disk-save</obj>.  When <obj>disk-save</obj> asks for an additional comment,
+give your name or the name of the application system you loaded,
+and a date.  This will tell other people who to ask whether the
+band is still in use if they would like to save other things.
+</p>
+
+<p>You can greatly reduce the amount of disk space needed for the saved
+band by making it an <arg>incremental</arg> band; that is, a band which
+contains the differences between the Lisp world you want to save and the
+system band you originally loaded.  Since all the pages of the system
+which your application program did not change do not have to be saved,
+an incremental band is generally much smaller--perhaps by a factor of ten.
+</p>
+
+<p>To make an incremental band, give a non-<obj>nil</obj> third argument to
+<obj>disk-save</obj>, as in
+
+<lisp>(disk-save &quot;lod4&quot; nil t)
+</lisp>Figuring out which pages need to be saved in the incremental band
+takes a couple of extra minutes.
+</p>
+
+<p>You can restore the incremental band with <obj>disk-restore</obj> or boot it like
+any other band.  This works by first booting the original band and then
+copying in the differences that the incremental band records.  It takes
+only a little longer than booting the original system band.
+</p>
+
+<p>The original band to which an incremental band refers must be a complete load.
+When you update a standard system band (loading patches, for instance) you
+should always make a complete load, so that the previous system band is not
+needed for the new one to function.
+</p>
+
+<p>The incremental band records the partition name of the original system
+band.  That original band must still exist, with the same contents, in
+order for the incremental band to work properly.  The incremental band
+contains some error check data which is used to verify this.  The error checking is
+done by the microcode when the incremental band is booted, but it is
+also done by <obj>set-current-band</obj>, so that you are not permitted to select
+an incremental band if it is not going to work.
+</p>
+
+<p>When using incremental bands, it is important to preserve the system bands
+that they depend on.  Therefore, system bands should not be updated too
+frequently.  <obj>describe-partition</obj> on an incremental band says which
+full band it depends on; you can use this to determine which bands should
+be kept for the sake of incremental bands that depend on them.
+</p>
+
+<p>In order to realize the maximum savings in disk space possible because
+of incremental bands, you must make the partition you saved in smaller
+once the save is finished and you know how much space was actually used.
+This is done with <obj>si:edit-disk-label</obj>.
+The excess space at the end of the partition can be used to make another
+partition which is used for the next incremental band saved.  Eventually
+when some of the incremental bands are no longer needed the rest must
+be shuffled so that the free space can be put together into larger partitions.
+This can be done with <obj>si:copy-disk-partition</obj>.
+</p>
+
+<p>An easier technique is to divide a couple of the initial partitions into
+several equal-sized partitions of about 4000 pages, and use these for
+all incremental saving.  You can easily provide room for 12 incremental
+bands this way in addition to a few system bands and file system.
+</p>
+
+<p>You must not do a garbage collection to reduce the size of the world
+before you make an an incremental band.  This is because garbage
+collection alters so many pages that an incremental band would be as big
+as a complete band.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Copying Bands"><p>The normal way to install new software on a machine is
+to copy the microcode and world load bands from another machine.
+</p>
+
+<p>The first step is to find a machine that is not in use and has the
+desired system.  Let us call this the source machine.  The machine
+where the new system is to be installed is the target machine.  You
+can use <obj>finger</obj> to see which machines are free, and use
+<obj>print-disk-label</obj> with an argument to examine the label of that
+machine's disk and see if it has the system you want.
+</p>
+
+<p>Then you should do a <obj>(print-disk-label)</obj> to find suitable
+partitions to copy them into.  It is advisable not to copy them
+into the selected partitions; if you did that, and the machine
+crashed in the middle, you would be unable to boot it.
+</p>
+
+<p>Before copying a band from another machine, double-check the partition
+names by printing the labels of both machines, and make sure no one is
+using the other machine.  Also double-check with
+<obj>describe-partition</obj> that the world load and microcode go together.
+Then use this function:
+</p>
+<definition><define key="si:receive-band-fun" name="si:receive-band" type="fun"><args>source-host source-band target-band <standard>&amp;optional</standard> subset-start subset-size</args>
+</define>
+
+<description>Copies the partition on <arg>source-host</arg>'s partition named
+<arg>source-band</arg> onto the local machine's partition named
+<arg>target-band</arg>.  This takes about ten minutes.  It types out the size
+of the partition in pages, and types a number every 100 pages telling
+how far it has gotten.  It displays an entry in the who line on the
+remote machine saying what's going on.
+
+The <arg>subset-start</arg> and <arg>subset-size</arg> arguments can be used to
+transfer only part of a partition.  They are measured in blocks.
+The default for the first is zero, and the default for the second is
+to continue to the end of the data in the band.  These arguments are useful for
+restarting a transfer that was aborted due to network problems or a crash,
+based on the count of hundreds of blocks that was printed out before
+the crash.
+</description></definition>
+<p>To go the other direction, use <obj>si:transmit-band</obj>.
+</p>
+<definition><define key="si:transmit-band-fun" name="si:transmit-band" type="fun"><args>source-band target-host target-band <standard>&amp;optional</standard> subset-start subset-size</args>
+</define>
+
+<description>This is just like <obj>si:receive-band</obj>, except you use it on
+the source machine instead of the target machine.  It copies
+the local machine's partition named <arg>source-band</arg> onto
+<arg>target-machine</arg>'s partition named <arg>target-band</arg>.
+
+It is preferable to use <obj>si:receive-band</obj> so that you are present
+at the machine being written on. 
+</description></definition>
+<p>After transferring the band, it is good practice to make sure that it really
+was copied successfully by comparing the original and the copy.  All of the
+known reasons for errors during band transfer have (of course) been corrected,
+but peace of mind is valuable.  If the copy was not perfectly faithful, you
+might not find out about it until a long time later, when you use whatever part
+of the system that had not been copied properly.
+</p>
+<definition><define key="si:compare-band-fun" name="si:compare-band" type="fun"><args>source-host source-band target-band <standard>&amp;optional</standard> subset-start subset-size</args>
+</define>
+
+<description>This is like <obj>si:receive-band</obj>, except that it does not change anything.
+It compares the two bands and complains about any differences.
+</description></definition>
+<p>Having gotten the current microcode load and system load copied into
+partitions on your machine, you can make them current for booting using
+<obj>set-current-band</obj>.
+</p>
+</subsection></section><a name="site-files"></a>
+
+
+<section chapter-number="36" name="site-files" number="12" title="Site Options and Host Table"><index-entry index="concepts" title="site options"></index-entry>
+
+<p>The Lisp Machine system has options that are set at each site.  These
+include the network addresses of other hosts, which hosts have file
+servers, which host to find the system source files and patch files on,
+where to send bug reports, what timezone the site is located in, and many
+other things.
+</p>
+
+<p>The per-site information is defined by three files: <obj>SYS: SITE; SITE LISP</obj>,
+<obj>SYS: SITE; LMLOCS LISP</obj>, and <obj>SYS: CHAOS; HOSTS TXT</obj>.
+
+<index-entry index="concepts" title="host table"></index-entry>
+</p>
+
+<p><obj>SYS: CHAOS; HOSTS TXT</obj> is the network host table.  It gives the names
+and addresses of all hosts that are to be known to the Lisp Machine for any
+purposes.  It also says what type of machine the host is, and what operating
+system runs on it.
+</p>
+
+<p><obj>SYS: SITE; LMLOCS LISP</obj> specifies various information about the Lisp
+Machines at your site, including its name, where it is physically located,
+and what the default machine for logging in should be.
+</p>
+
+<p><obj>SYS: SITE; SITE LISP</obj> specifies all other site-specific information.
+Primarily, this is contained in a call to the special form <obj>defsite</obj>.
+</p>
+<definition><define key="defsite-fun" name="defsite" type="mac"><args>site-name (site-option value)...</args>
+</define>
+
+<description>This special form defines the values of site-specific options, and also
+gives the name of the site.  Each <arg>site-option</arg> is a symbol, normally in
+the keyword package, which is the name of some site option.  <arg>value</arg> is
+the value for that option; it is evaluated.  Here is a list of
+standardly defined site options:
+
+
+<table><tbody><tr><td><obj>:sys-host</obj></td><td>The value is a string, the name of the host on which the system source
+files are stored.  This host becomes the translation of logical host <obj>SYS</obj>.
+
+</td></tr><tr><td><obj>:sys-host-translation-alist</obj></td><td>The value is an alist mapping host names into translation-list variables.
+Each translation list variable's value should be an alist suitable for being
+the third argument to <obj>fs:add-logical-pathname-host</obj> (see
+<ref definition-in-file="pathnm" key="fs:add-logical-pathname-host-fun" title="Function fs:add-logical-pathname-host" type="fun"></ref>).  The car of an element may be <obj>nil</obj>
+instead of a host name; then this element applies to all hosts not
+mentioned.
+
+The normal place to find the system sources is on the host specified by the
+<obj>:sys-host</obj> keyword, in the directories specified by the translation list
+variable found by looking that host up in the value of the
+<obj>:sys-host-translation-alist</obj> keyword.  If you specify a different host
+as the system host with <obj>si:set-sys-host</obj>, that host is also looked
+up in this alist to find out what directories to use there.
+
+
+<lisp><exdent amount="96"><caption>Here is what is used at MIT: </caption>
+(defsite :mit
+  ...
+  (:sys-host-translation-alist
+    '((&quot;AI&quot; . its-sys-pathname-translations)
+      (&quot;OZ&quot; . oz-sys-pathname-translations)
+      (&quot;FS&quot; . its-sys-pathname-translations)
+      (&quot;LM&quot; . its-sys-pathname-translations)
+      (nil . its-sys-pathname-translations)))
+  ...)
+</exdent></lisp>
+<lisp>(defconst oz-sys-pathname-translations
+  '((&quot;CC;&quot; &quot;&lt;L.CC&gt;&quot;)
+    (&quot;CHAOS;&quot; &quot;&lt;L.CHAOS&gt;&quot;)
+    (&quot;DEMO;&quot; &quot;&lt;L.DEMO&gt;&quot;)
+    ...
+    (&quot;SITE;&quot; &quot;&lt;L.SITE&gt;&quot;)
+    (&quot;SYS;&quot; &quot;&lt;L.SYS&gt;&quot;)
+    (&quot;SYS2;&quot; &quot;&lt;L.SYS2&gt;&quot;)
+    ...
+    (&quot;ZMAIL;&quot; &quot;&lt;L.ZMAIL&gt;&quot;)
+    (&quot;ZWEI;&quot; &quot;&lt;L.ZWEI&gt;&quot;)
+    ))
+</lisp>
+</td></tr><tr><td><obj>:sys-login-name</obj></td><td></td></tr><tr><td><obj>:sys-login-password defsite</obj></td><td>These specify the username and password to use to log in automatically to read system
+patch files, microcode symbol tables and error tables.
+The values should be strings.
+
+</td></tr><tr><td><obj>:chaos</obj></td><td><obj>nil</obj> if the site has no Chaosnet; otherwise, a string,
+the name of the Chaosnet that the site is on.  Names for Chaosnets
+will eventually be used to permit communication between Chaosnets,
+probably through special gateway servers.  Except when multiple
+sites are on a single Chaosnet, normally the Chaosnet name
+should be the same as the site name (but as a string, not a symbol).
+
+</td></tr><tr><td><obj>:standalone</obj></td><td>The value should be <obj>t</obj> for a Lisp Machine that is operated without
+a network connection.  This causes the Lisp Machine to not to try to
+use the Chaosnet for getting the time.  On the Lambda, the time will
+obtained from the SDU's clock.  On the CADR, the time will be obtained
+from the user.
+
+</td></tr><tr><td><obj>:default-associated-machine</obj></td><td>This should be a string which is the name of a host to use as the
+associated host for any Lisp Machine not mentioned in the LMLOCS file.
+
+</td></tr><tr><td><obj>:usual-lm-name-prefix</obj></td><td>This should be a string which is the typical beginning of host names of
+Lisp Machines at your site.  At MIT, it is <obj>&quot;CADR-&quot;</obj>.
+
+</td></tr><tr><td><obj>:chaos-file-server-hosts</obj></td><td>This should be a list of names of hosts that have file servers, including
+Lisp Machines which other Lisp Machines should know about.
+
+</td></tr><tr><td><obj>:lmfile-server-hosts</obj></td><td>This should be a list of names of Lisp Machines that provide servers for
+the LMFILE file system.  The entry for such a machine should be one of
+the nicknames of that machine.  By virtue of its presence in this list,
+it becomes the name by which the LMFILE file system there can be
+accessed remotely.
+
+</td></tr><tr><td><obj>:chaos-time-server-hosts</obj></td><td>This should be a list of names of hosts that support TIME servers.
+These are hosts that the Lisp Machine can ask the time of day from
+when you boot.
+
+</td></tr><tr><td><obj>:chaos-host-table-server-hosts</obj></td><td>This should be a list of names of hosts that support host-table servers,
+which can be used to inquire about hosts on networks that the Lisp Machine
+does not know about in its own host table.
+
+</td></tr><tr><td><obj>:chaos-mail-server-hosts</obj></td><td>This should be a list of names of hosts that support mail servers which are
+capable of forwarding mail to any known host.
+
+</td></tr><tr><td><obj>:timezone</obj></td><td>This should be a number, the number of hours earlier than GMT of standard
+time in the timezone where this site is located.
+
+</td></tr><tr><td><obj>:host-for-bug-reports</obj></td><td>This should be a string, the name of the host at which bug-report mailboxes
+are located.
+
+</td></tr><tr><td><obj>:local-mail-hosts</obj></td><td>This should be a list of names of hosts that ZMail should consider ``local''
+and omit from its summary display.
+
+</td></tr><tr><td><obj>:spell-server-hosts</obj></td><td>This should be a list of hosts that have spelling corrector servers.
+
+</td></tr><tr><td><obj>:comsat</obj></td><td>This should be <obj>t</obj> if mail can be sent through the COMSAT mail demon.
+This is true only at MIT.
+
+</td></tr><tr><td><obj>:default-mail-mode</obj></td><td>This should be the default mode for use in sending mail.
+The options are <obj>:file</obj> (use COMSAT), <obj>:chaos</obj> (use one of the
+<obj>:chaos-mail-server-hosts</obj>), or <obj>:chaos-direct</obj> (like <obj>:chaos</obj>, but
+go direct to the host that the mail is addressed to whenever possible).
+
+</td></tr><tr><td><obj>:gmsgs</obj></td><td>This should be <obj>t</obj> if GMSGS servers are available.
+
+</td></tr><tr><td><obj>:arpa-gateways</obj></td><td>This should be a list of names of hosts that can be used as gateways to the
+Arpanet.  These hosts must provide a suitable Chaosnet server which will
+make Arpanet connections.  It should be <obj>nil</obj> if your site does not have
+an Arpanet connection.
+
+</td></tr><tr><td><obj>:arpa-contact-name</obj></td><td>If you have Arpanet gateways, this is the Chaosnet contact name to use.
+Nowadays, it should be <obj>&quot;TCP&quot;</obj>.
+
+</td></tr><tr><td><obj>:dover</obj></td><td>This should be <obj>t</obj> if your site has a Dover printer.
+
+</td></tr><tr><td><obj>:default-printer</obj></td><td>This should be a keyword which describes
+the default printer for hardcopy
+commands and functions to use.  Possible values include <obj>:dover</obj>,
+<obj>nil</obj>, or any other printer type that you define (see <ref chapter="36" definition-in-file="fd-hac" key="hardcopy" section="2" title="Hardcopy" type="section"></ref>).
+
+</td></tr><tr><td><obj>:default-bit-array-printer</obj></td><td>Like <obj>:default-printer</obj>, but this is the default for only <obj>hardcopy-bit-array</obj> to use.
+
+</td></tr><tr><td><obj>:esc-f-arg-alist</obj></td><td>This says what various numeric arguments to the <obj>Terminal F</obj> command
+mean.  It is a list of elements, one for each possible argument.
+The car of an element is either a number or <obj>nil</obj> (which applies to
+<obj>Terminal F</obj> with no argument).  The cdr is either <obj>:login</obj>
+(finger the login host), <obj>:lisp-machines</obj> (finger all Lisp Machines at
+this site), <obj>:read</obj> (read some hosts from the keyboard), or a list of
+host names.
+
+</td></tr><tr><td><obj>:verify-lm-dumps</obj></td><td>If the value is <obj>t</obj>, Lisp Machine file system dump tapes are
+verified.
+</td></tr></tbody></table>
+Other site options are allowed, and your own software can look for them.
+</description></definition>
+
+
+<subsection name="NIL" title="Updating Site Information"><p>To update the site files, you must first recompile the sources.
+Do this by
+
+<lisp>(make-system 'site 'compile)
+</lisp>This also loads the site files.
+</p>
+
+<p>To just load the site files, assuming they are compiled, do
+
+<lisp>(make-system 'site)
+</lisp></p>
+
+<p><obj>load-patches</obj> does that automatically.
+</p>
+
+<p>You should never load any site file directly.  All the files must be loaded
+in the proper fashion and sequence, or the machine may stop working.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Accessing Site Options"><p>Programs examine the site options using these variables and functions:
+</p>
+<definition>
+<define key="site-name-var" name="site-name" type="var"></define>
+
+<description>The value of this variable is the name of the site you are running at, as
+defined in the <obj>defsite</obj> in the <obj>SITE</obj> file.  You can use this in run-time
+conditionals for various sites.
+</description></definition><definition><define key="get-site-option-fun" name="get-site-option" type="fun"><args>keyword</args>
+</define>
+
+<description>Returns the value of the site option <arg>keyword</arg>.
+The value is <obj>nil</obj> if <arg>keyword</arg> is not mentioned in the <obj>SITE</obj> file.
+</description></definition><definition><define key="define-site-variable-fun" name="define-site-variable" type="mac"><args>variable keyword [documentation]</args>
+</define>
+
+<description>Defines a variable named <arg>variable</arg> whose value is always the same as
+that of the site option <arg>keyword</arg>.  When new site files are loaded,
+the variable's value is updated.  <arg>documentation</arg> is the variable's
+documentation string, as in <obj>defvar</obj>.
+</description></definition><definition><define key="define-site-host-list-fun" name="define-site-host-list" type="mac"><args>variable keyword [documentation]</args>
+</define>
+
+<description>Defines a variable named <arg>variable</arg> whose value is a list of host objects
+specified by the site option <arg>keyword</arg>.  The value actually specified in
+the <obj>SITE</obj> file should be a list of host names.  When new site files are
+loaded, the variable's value is updated.  <arg>documentation</arg> is the
+variable's documentation string, as in <obj>defvar</obj>.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="The LMLOCS File"><p>The <obj>LMLOCS</obj> file contains an entry for each Lisp Machine at your
+site, and tells the system whatever it needs to know about the
+particular machine it is running on.  It contains one form, a
+<obj>defconst</obj> for the variable <obj>machine-location-alist</obj>.  The value
+should have an element for each Lisp Machine, of this form:
+</p>
+
+<lisp>(&quot;MIT-LISPM-1&quot;  &quot;Lisp Machine One&quot;
+ &quot;907 [Son of CONS] CADR1's Room x6765&quot;
+ (MIT-NE43 9) &quot;OZ&quot; ((:default-printer :dover)))
+
+<exdent amount="96"><caption>The general pattern is </caption>
+(<arg>host-full-name</arg> <arg>pretty-name</arg>
+ <arg>location-string</arg>
+ (<arg>building</arg> <arg>floor</arg>) <arg>associated-machine</arg> <arg>site-options</arg>) 
+</exdent></lisp>
+<p>The <arg>host-full-name</arg> is the same as in the host table.
+</p>
+
+<p>The <arg>pretty-name</arg> is simply for printing out for users on certain occasions.
+</p>
+
+<p>The <arg>location-string</arg> should say where to find the machine's console,
+preferably with a telephone number.  This is for the <obj>FINGER</obj> server
+to provide to other hosts.
+</p>
+
+<p>The <arg>building</arg> and <arg>floor</arg> are a somewhat machine-understandable
+version of the location.
+</p>
+
+<p>The <arg>associated-machine</arg> is the default file server host name for
+login on this Lisp Machine.
+</p>
+
+<p><arg>site-options</arg> is a list of site options, just like what goes in the
+<obj>defsite</obj>.  These site options apply only to the particular machine,
+overriding what is present in the <obj>SITE</obj> file.  In our example, the
+site option <obj>:default-printer</obj> is specified as being <obj>:dover</obj>, on
+this machine only.
+</p>
+<definition>
+<define key="si:associated-machine-var" name="si:associated-machine" type="var"></define>
+
+<description>The host object for the associated machine of this Lisp Machine.
+</description></definition></subsection></section></chapter>
+</document-part>

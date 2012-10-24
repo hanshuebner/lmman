@@ -1,0 +1,349 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="symbol-chapter"></a>
+<chapter name="symbol-chapter" number="7" title="Symbols"><index-entry index="concepts" title="symbol"></index-entry>
+
+<p>This chapter discusses the symbol as a Lisp data type.  The Lisp system uses
+symbols as variables and function names, but these applications of symbols
+are discussed in chapter <ref chapter="3" definition-in-file="fd-eva" key="evaluator-chapter" title="Evaluation" type="chapter"></ref>.
+</p>
+<a name="The Value Cell"></a>
+
+
+<section chapter-number="7" name="The Value Cell" number="1" title="The Value Cell"><index-entry index="concepts" title="value cell"></index-entry>
+
+<p indent="1">        Each symbol has associated with it a <arg>value cell</arg>, which refers to
+one Lisp object.  This object is called the symbol's <arg>value</arg>, since it is
+what you get when you evaluate the symbol as a dynamic variable in a program.
+Variables and how they work are described in <ref chapter="3" definition-in-file="fd-eva" key="variable-section" section="1" title="Variables" type="section"></ref>.  We also say
+the the symbol <arg>is bound to</arg> the object which is its value.  The symbols
+<obj>nil</obj> and <obj>t</obj> are always bound to themselves; they may not be assigned,
+bound, or otherwise used as variables.  The same is true of symbols in the
+keyword package.
+</p>
+
+<p indent="1">        The value cell can also be <arg>void</arg>, referring to <arg>no</arg> Lisp object,
+in which case the symbol is said to be void or <arg>unbound</arg>.  This is the
+initial state of a symbol when it is created.  An attempt to evaluate a
+void symbol causes an error.
+</p>
+
+<p>Lexical variable bindings are not stored in symbol value cells.
+The functions in this section have no interaction with lexical bindings.
+</p>
+<definition><define key="symeval-fun" name="symeval" type="fun"><args>symbol</args>
+</define><define key="symbol-value-fun" name="symbol-value" type="fun"><args>symbol</args>
+</define>
+
+<description><obj>symeval</obj> is the basic primitive for retrieving a symbol's value.
+<obj>(symeval <arg>symbol</arg>)</obj> returns <arg>symbol</arg>'s current binding.
+This is the function called by <obj>eval</obj> when it is given a symbol to
+evaluate.  If the symbol is unbound, then <obj>symeval</obj> signals an
+error.  <obj>symbol-value</obj> is the Common Lisp name for this function.
+</description></definition><definition><define key="set-fun" name="set" type="fun"><args>symbol value</args>
+</define>
+
+<description><obj>set</obj> is the primitive for assignment of symbols.  The <arg>symbol</arg>'s value
+is changed to <arg>value</arg>; <arg>value</arg> may be any Lisp object.  <obj>set</obj> returns
+<arg>value</arg>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(set (cond ((eq a b) 'c)
+           (t 'd))
+     'foo)
+</exdent></lisp>either sets <obj>c</obj> to <obj>foo</obj> or sets <obj>d</obj> to <obj>foo</obj>.
+
+<obj>(setf (symeval <arg>symbol</arg>) <arg>value</arg>)</obj> is a more modern
+way to do this.
+</description></definition><definition><define key="boundp-fun" name="boundp" type="fun"><args>symbol</args>
+</define>
+
+<description><obj>t</obj> if <arg>symbol</arg>'s value cell is not void.
+</description></definition><definition><define key="makunbound-fun" name="makunbound" type="fun"><args>symbol</args>
+</define>
+
+<description>Makes <arg>symbol</arg>'s value cell void.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(setq a 1)
+a =&gt; 1
+(makunbound 'a)
+a =&gt; <standard>causes an error.</standard>
+</exdent></lisp><obj>makunbound</obj> returns its argument.
+</description></definition><definition><define key="value-cell-location-fun" name="value-cell-location" type="fun"><args>symbol</args>
+</define>
+
+<description>Returns a locative pointer to <arg>symbol</arg>'s value cell.
+See the section on locatives (<ref chapter="15" definition-in-file="fd-loc" key="locative" section="0" title="Locatives" type="section"></ref>).  It is preferable to write
+
+<lisp>(locf (symeval <arg>symbol</arg>))
+</lisp>which is equivalent, instead of calling this function explicitly.
+
+This is actually the internal value cell; there can also be an external
+value cell.  For details, see the section on closures (<ref chapter="13" definition-in-file="fd-clo" key="closure" section="0" title="Closures" type="section"></ref>).
+
+For historical compatibility, <obj>value-cell-location</obj> of a quoted symbol is
+recognized specially by the compiler and treated like <obj>variable-location</obj>
+(<ref definition-in-file="fd-eva" key="variable-location-fun" title="Special Form variable-location" type="spec"></ref>).  However, such usage results in a compiler warning,
+and eventually this compatibility feature will be removed.
+</description></definition></section><a name="The Function Cell"></a>
+
+
+<section chapter-number="7" name="The Function Cell" number="2" title="The Function Cell"><index-entry index="concepts" title="function cell"></index-entry>
+
+<p indent="1">        Every symbol also has associated with it a <arg>function cell</arg>.  The <arg>function</arg>
+cell is similar to the <arg>value</arg> cell; it refers to a Lisp object.
+When a function is referred to by name, that is, when a symbol is passed to <obj>apply</obj>
+or appears as the car of a form to be evaluated, that symbol's function cell
+is used to find its <arg>definition</arg>, the functional object which is to be applied.
+For example, when evaluating <obj>(+ 5 6)</obj>, 
+the evaluator looks in <obj>+</obj>'s function cell to find the definition of <obj>+</obj>,
+in this case a compiled function object, to apply to 5 and 6.
+</p>
+
+<p indent="1">        Maclisp does not have function cells; instead, it looks for special
+properties on the property list.  This is one of the major incompatibilities
+between the two dialects.
+</p>
+
+<p indent="1">        Like the value cell, a function cell can be void, and it can be bound
+or assigned.  (However, to bind a function cell you must use the
+<obj>%bind</obj> subprimitive; see <ref definition-in-file="fd-sub" key="%bind-fun" title="Function %bind" type="fun"></ref>.)
+The following functions are analogous to the value-cell-related
+functions in the previous section.
+</p>
+<definition><define key="fsymeval-fun" name="fsymeval" type="fun"><args>symbol</args>
+</define><define key="symbol-function-fun" name="symbol-function" type="fun"><args>symbol</args>
+</define>
+
+<description>Returns <arg>symbol</arg>'s definition, the contents of its
+function cell.  If the function cell is void, <obj>fsymeval</obj>
+signals an error.  <obj>symbol-function</obj> is the Common Lisp name for this function.
+</description></definition><definition><define key="fset-fun" name="fset" type="fun"><args>symbol definition</args>
+</define>
+
+<description>Stores <arg>definition</arg>, which may be any Lisp object, into <arg>symbol</arg>'s
+function cell.  It returns <arg>definition</arg>.
+
+<obj>(setf (fsymeval <arg>symbol</arg>) <arg>definition</arg>)</obj> is a more modern
+way to do this.
+</description></definition><definition><define key="fboundp-fun" name="fboundp" type="fun"><args>symbol</args>
+</define>
+
+<description><obj>nil</obj> if <arg>symbol</arg>'s function cell is void,
+i.e. if <arg>symbol</arg> is undefined.
+Otherwise it returns <obj>t</obj>.
+</description></definition><definition><define key="fmakunbound-fun" name="fmakunbound" type="fun"><args>symbol</args>
+</define>
+
+<description>Causes <arg>symbol</arg> to be undefined, i.e. its
+function cell to be void.
+It returns <arg>symbol</arg>.
+</description></definition><definition><define key="function-cell-location-fun" name="function-cell-location" type="fun"><args>symbol</args>
+</define>
+
+<description>Returns a locative pointer to <arg>symbol</arg>'s
+function cell.  See the section on locatives (<ref chapter="15" definition-in-file="fd-loc" key="locative" section="0" title="Locatives" type="section"></ref>).  It is
+preferable to write
+
+<lisp>(locf (fsymeval <arg>symbol</arg>))
+</lisp>rather than calling this function explicitly.
+</description></definition>
+<p>Since functions are the basic building block of Lisp programs,
+the system provides a variety of facilities for dealing with functions.
+Refer to chapter <ref chapter="12" definition-in-file="fd-fun" key="function-chapter" title="Functions" type="chapter"></ref> for details.
+</p>
+</section><a name="symbol-plist-section"></a>
+
+
+<section chapter-number="7" name="symbol-plist-section" number="3" title="The Property List"><p>Every symbol has an associated property list.  See <ref chapter="5" definition-in-file="fd-con" key="plist" section="10" title="Property Lists" type="section"></ref> for
+documentation of property lists.  When a symbol is created, its property
+list is initially empty.
+</p>
+
+<p>The Lisp language itself does not use a symbol's property list for
+anything.  (This was not true in older Lisp implementations, where the
+print-name, value-cell, and function-cell of a symbol were kept on its
+property list.)  However, various system programs use the property list to
+associate information with the symbol.  For instance, the editor uses
+the property list of a symbol which is the name of a function to
+remember where it has the source code for that function, and the
+compiler uses the property list of a symbol which is the name of a
+special form to remember how to compile that special form.
+</p>
+
+<p>Because of the existence of print-name, value, function, and package cells,
+none of the Maclisp system property names (<obj>expr</obj>, <obj>fexpr</obj>, <obj>macro</obj>, <obj>array</obj>,
+<obj>subr</obj>, <obj>lsubr</obj>, <obj>fsubr</obj>, and in former times <obj>value</obj> and
+<obj>pname</obj>) exist in Zetalisp.
+</p>
+<definition><define key="plist-fun" name="plist" type="fun"><args>symbol</args>
+</define>
+<define key="symbol-plist-fun" name="symbol-plist" type="fun"></define>
+
+<description>Returns the list which represents the property list of <arg>symbol</arg>.
+Note that this is not actually a property list; you cannot do <obj>get</obj>
+on it.  This value is like what would be the cdr of a property list.
+
+<obj>symbol-plist</obj> is the Common Lisp name.
+</description></definition><definition><define key="setplist-fun" name="setplist" type="fun"><args>symbol list</args>
+</define>
+
+<description>Sets the list which represents the property list of <arg>symbol</arg> to <arg>list</arg>.
+<obj>setplist</obj> is to be used with caution (or not at all),
+since property lists sometimes contain internal system properties, which
+are used by many useful system functions.  Also it is inadvisable to have the property
+lists of two different symbols be <obj>eq</obj>, since the shared list structure will
+cause unexpected effects on one symbol if <obj>putprop</obj> or <obj>remprop</obj> is done to the other.
+
+<obj>setplist</obj> is equivalent to
+
+<lisp>(setf (plist <arg>symbol</arg>) <arg>list</arg>)
+</lisp></description></definition><definition><define key="property-cell-location-fun" name="property-cell-location" type="fun"><args>symbol</args>
+</define>
+
+<description>Returns a locative pointer to the location of <arg>symbol</arg>'s
+property-list cell.  This locative pointer may be passed to <obj>get</obj> or
+<obj>putprop</obj> with the same results as if as <arg>symbol</arg> itself had been
+passed.  It is preferable to write
+
+<lisp>(locf (plist <arg>symbol</arg>))
+</lisp>rather than using this function.
+</description></definition></section><a name="The Print Name"></a>
+
+
+<section chapter-number="7" name="The Print Name" number="4" title="The Print Name"><index-entry index="concepts" title="print name"></index-entry>
+
+<p>Every symbol has an associated string called the <arg>print-name</arg>, or <arg>pname</arg>
+for short.  This string is used as the external representation of the symbol:
+if the string is typed in to <obj>read</obj>, it is read as a reference to that symbol
+(if it is interned), and if the symbol is printed, <obj>print</obj> types out the
+print-name.
+</p>
+
+<p>If a symbol is uninterned, <example>#:</example> is normally printed as a prefix
+before the symbol's print-name.  If the symbol is interned, a package
+prefix may be printed, depending on the current package and how it relates
+to the symbol's home package.
+</p>
+
+<p>For more information, see the sections on the <arg>reader</arg>
+(see <ref chapter="24" definition-in-file="rdprt" key="reader" section="3" title="What The Reader Accepts" type="section"></ref>), <arg>printer</arg> (see <ref chapter="24" definition-in-file="rdprt" key="printer" section="1" title="What the Printer Produces" type="section"></ref>), and packages
+(see <ref chapter="28" definition-in-file="packd" key="package" section="0" title="Packages" type="section"></ref>).
+</p>
+<definition><define key="symbol-name-fun" name="symbol-name" type="fun"><args>symbol</args>
+</define><define key="get-pname-fun" name="get-pname" type="fun"><args>symbol</args>
+</define>
+
+<description>Returns the print-name of the symbol <arg>symbol</arg>.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(symbol-name 'xyz) =&gt; &quot;XYZ&quot;
+</exdent></lisp><obj>get-pname</obj> is an older name for this function.
+</description></definition></section><a name="The Package Cell"></a>
+
+
+<section chapter-number="7" name="The Package Cell" number="5" title="The Package Cell"><p>Every symbol has a <arg>package cell</arg> which, for interned
+symbols, is used to point to the package which the symbol belongs to.  For an
+uninterned symbol, the package cell contains <obj>nil</obj>.  For
+information about packages in general, see the chapter on packages, <ref chapter="28" definition-in-file="packd" key="package" section="0" title="Packages" type="section"></ref>.
+For information about package cells, see <ref definition-in-file="packd" key="symbol-package-cell-discussion" type="page"></ref>.
+</p>
+</section><a name="number"></a>
+
+
+<section chapter-number="7" name="number" number="6" title="Creating Symbols"><p>The functions in this section are primitives for creating symbols.
+However, before discussing them, it is important to point out that most
+symbols are created by a higher-level mechanism, namely the reader and
+the <obj>intern</obj> function.  Nearly all symbols in Lisp are created
+by virtue of the reader's having seen a sequence of input characters that
+looked like the printed representation (p.r.) of a symbol.  When the
+reader sees such a p.r., it calls <obj>intern</obj> (see <ref definition-in-file="packd" key="intern-fun" title="Function intern" type="fun"></ref>),
+which looks up the sequence of characters in a big table and sees whether any symbol
+with this print-name already exists.  If it does, <obj>read</obj> uses the
+already-existing symbol.  If it does not, then <obj>intern</obj> creates a new
+symbol and puts it into the table; <obj>read</obj> uses that new symbol.
+</p>
+
+<p>A symbol that has been put into such a table is called an <arg>interned</arg>
+symbol.  Interned symbols are normally created automatically; the first
+time that someone (such as the reader) asks for a symbol with a given
+print-name, that symbol is automatically created.
+</p>
+
+<p>These tables are called <arg>packages</arg>.  For more information, turn
+to the chapter on packages (<ref chapter="28" definition-in-file="packd" key="package" section="0" title="Packages" type="section"></ref>).
+</p>
+
+<index-entry index="concepts" title="uninterned symbol"></index-entry>
+
+<p>An <arg>uninterned</arg> symbol is a symbol that has not been recorded
+or looked up in a package.  It is used simply as a data object,
+with no special cataloging.  An uninterned symbol prints with a
+prefix <example>#:</example> when escaping is in use, unless <obj>*print-gensym*</obj> is <obj>nil</obj>.
+This allows uninterned symbols to be distinguishable and to read back in as
+uninterned symbols.  See <ref definition-in-file="rdprt" key="*print-gensym*-var" title="Variable *print-gensym*" type="var"></ref>.
+</p>
+
+<p>The following functions can be used to create uninterned symbols
+explicitly.
+</p>
+<definition><define key="make-symbol-fun" name="make-symbol" type="fun"><args>pname <standard>&amp;optional</standard> permanent-p</args>
+</define>
+
+<description>Creates a new uninterned symbol, whose print-name is the string
+<arg>pname</arg>.  The value and function cells are void and the
+property list is empty.  If <arg>permanent-p</arg> is specified, it is
+assumed that the symbol is going to be interned and probably kept around
+forever; in this case it and its pname are put in the proper areas.
+If <arg>permanent-p</arg> is <obj>nil</obj> (the default), the symbol goes in the
+default area and the pname is not copied.  <arg>permanent-p</arg> is mostly
+for the use of <obj>intern</obj> itself.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(setq a (make-symbol &quot;foo&quot;)) =&gt; foo
+(symeval a) =&gt; ERROR!
+</exdent></lisp>Note that the symbol is <arg>not</arg> interned; it is simply created and returned.
+</description></definition><definition><define key="copysymbol-fun" name="copysymbol" type="fun"><args>symbol copy-props</args>
+</define><define key="copy-symbol-fun" name="copy-symbol" type="fun"><args>symbol copy-props</args>
+</define>
+
+<description>Returns a new uninterned symbol with the same print-name
+as <arg>symbol</arg>.  If <arg>copy-props</arg> is non-<obj>nil</obj>, then the
+value and function-definition of the new symbol are
+the same as those of <arg>symbol</arg>, and the property list of
+the new symbol is a copy of <arg>symbol</arg>'s.  If <arg>copy-props</arg>
+is <obj>nil</obj>, then the new symbol's function and value are void, and
+its property list is empty.
+</description></definition><definition><define key="gensym-fun" name="gensym" type="fun"><args><standard>&amp;optional</standard> x</args>
+</define>
+
+<description>Invents a print-name and creates a new symbol with that print-name.
+It returns the new, uninterned symbol.
+
+        The invented print-name is a prefix (the value of <obj>si:*gensym-prefix</obj>)
+followed by the decimal representation of a number (the value of <obj>si:*gensym-counter</obj>),
+e.g. <obj>g0001</obj>.  The number is increased by one every time <obj>gensym</obj> is called.
+
+        If the argument <arg>x</arg> is present and is a fixnum, then <obj>si:*gensym-counter</obj> is
+set to <arg>x</arg>.  If <arg>x</arg> is a string or a symbol, then <obj>si:*gensym-prefix</obj> is set to it,
+so it becomes the prefix for this and successive calls to <obj>gensym</obj>.
+After handling the argument, <obj>gensym</obj> creates a symbol as it would with no argument.
+
+<lisp><exdent amount="96"><caption>Examples: </caption><standard>if</standard>  (gensym) =&gt; #:g0007
+<standard>then</standard>        (gensym 'foo) =&gt; #:foo0008
+        (gensym 32.) =&gt; #:foo0032
+        (gensym) =&gt; #:foo0033
+</exdent></lisp>        Note that the number is in decimal and always has four digits.
+<example>#:</example> is the prefix normally printed before uninterned symbols.
+
+        <obj>gensym</obj> is usually used to create a symbol which should not normally
+be seen by the user, and whose print-name is unimportant, except to
+allow easy distinction by eye between two such symbols.
+The optional argument is rarely supplied.
+The name comes from `generate symbol', and the symbols produced by it
+are often called ``gensyms''.
+</description></definition><definition><define key="gentemp-fun" name="gentemp" type="fun"><args><standard>&amp;optional</standard> (prefix <obj>&quot;t&quot;</obj>) (a-package <obj>package</obj>)</args>
+</define>
+
+<description>Creates and returns a new symbol whose name starts with <arg>prefix</arg>,
+interned in <arg>a-package</arg>, and distinct from any symbol already present
+there.  This is done by trying names one by one until a name not already
+in use is found, which may be very slow.
+</description></definition></section></chapter>
+</document-part>

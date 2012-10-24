@@ -1,0 +1,1847 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="file-io-chapter"></a>
+<chapter name="file-io-chapter" number="26" title="Accessing Files"><index-entry index="concepts" title="file"></index-entry>
+
+<p>The Lisp Machine can access files on a variety of remote file servers,
+which are typically (but not necessarily) accessed through the Chaosnet,
+as well as accessing files on the Lisp Machine itself, if the machine
+has its own file system.  You are not allowed to refer to files
+without first logging in, and you may also need to specify a username
+and password for the host on which the file is stored; see <ref definition-in-file="fd-hac" key="login-fun" title="Function login" type="fun"></ref>.
+</p>
+
+<p>The way to read or write a file's contents is to <arg>open</arg> the file to
+get an input or output stream, use the standard stream I/O functions or
+operations described in chapters <ref chapter="23" definition-in-file="ios" key="io-chapter" title="The I/O System" type="chapter"></ref> and
+<ref chapter="24" definition-in-file="rdprt" key="expression-io-chapter" title="Expression Input and Output" type="chapter"></ref>, and then close the stream.  The first section
+of this chapter tells how to open and close the stream.  The rest of the
+chapter describes things specific to files such as deleting and
+renaming, finding out the true name of the file that has been opened,
+and listing a directory.
+</p>
+
+<p>Files are named with <arg>pathnames</arg>.  There is much to know about
+pathnames aside from accessing files with them; all this is described
+in the previous chapter.
+</p>
+
+<p>Many functions in this chapter take an argument called <arg>file</arg> which
+is intended to specify a file to be operated on.  This argument may be
+given as a pathname (which is defaulted), a namestring (which is
+parsed into a pathname and then defaulted), or a stream open to a file
+(the same file is used).
+</p>
+<a name="Opening and Closing File Streams"></a>
+
+<section chapter-number="26" name="Opening and Closing File Streams" number="1" title="Opening and Closing File Streams"><definition><define key="with-open-file-fun" name="with-open-file" type="mac"><args>(stream file options...) body...</args>
+</define>
+
+<description>Evaluates the <arg>body</arg> forms with the variable <arg>stream</arg> bound to a stream that
+reads or writes the file named by the value of <arg>file</arg>.  The <arg>options</arg>
+forms evaluate to the file-opening options to be used; see <ref definition-in-file="files" key="file-opening-options" type="page"></ref>.
+
+When control leaves the body, either normally or abnormally (via <obj>throw</obj>),
+the file is closed.  If a new output file is being written and control leaves
+abnormally, the file is aborted and it is as if it were never written.  Because
+it always closes the file, even when an error exit is taken, <obj>with-open-file</obj>
+is preferred over <obj>open</obj>.  Opening a large number of files and forgetting to
+close them tends to break some remote file servers, ITS's for example.
+
+If an error occurs in opening the file, the result depends on the
+values of the <arg>error</arg> option, the <arg>if-exists</arg> option, and the
+<arg>if-does-not-exist</arg> option.  An error may be signaled (and possibly
+corrected with a new pathname), or <arg>stream</arg> may be bound to a condition
+object or even <obj>nil</obj>.
+</description></definition><definition><define key="with-open-file-case-fun" name="with-open-file-case" type="mac"><args>(stream file options...) clauses...</args>
+</define>
+
+<description>This opens and closes the file like <obj>with-open-file</obj>, but what happens
+afterward is determined by <arg>clauses</arg> that are like the clauses of a
+<obj>condition-case</obj> (<ref definition-in-file="errors" key="condition-case-fun" title="Macro condition-case" type="mac"></ref>).  Each clause begins with a
+condition name or a list of condition names and is executed if <obj>open</obj>
+signals a condition that possesses any of those names.  A clause
+beginning with the symbol <obj>:no-error</obj> is executed if the file is
+opened successfully.  This would be where the reading or writing of the
+file would be done.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(with-open-file-case (stream (send generic-pathname
+                                   :source-pathname))
+  (sys:remote-network-error (format t &quot;~&amp;Host down.&quot;))
+  (fs:file-not-found (format t &quot;~&amp;(New file)&quot;))
+  (:no-error (setq list (read stream))))
+</exdent></lisp></description></definition><definition><define key="file-retry-new-pathname-fun" name="file-retry-new-pathname" type="mac"><args>(pathname-var condition-names...) body...</args>
+</define><define key="file-retry-new-pathname-if-fun" name="file-retry-new-pathname-if" type="mac"><args>cond-form (pathname-var condition-names...) body...</args>
+</define>
+
+<description><obj>file-retry-new-pathname</obj> executes <arg>body</arg>.  If <arg>body</arg> does not
+signal any of the conditions in <arg>condition-names</arg>, <arg>body</arg>'s values
+are simply returned.  If any of <arg>condition-names</arg> is signaled,
+<obj>file-retry-new-pathname</obj> reads a new pathname, <obj>setq</obj>'s
+<arg>pathname-var</arg> to it, and executes <arg>body</arg> again.
+
+The user can type <obj>End</obj> instead of a pathname if he wishes
+to let the condition be handled by the debugger.
+
+<obj>file-retry-new-pathname-if</obj> is similar, but the conditions are
+handled only if <arg>cond-form</arg>'s value is non-<obj>nil</obj>.
+
+For an example, see the example of the following macro.
+</description></definition><definition><define key="with-open-file-retry-fun" name="with-open-file-retry" type="mac"><args>(stream (pathname-var condition-names...) options...) body...</args>
+</define>
+
+<description>Like <obj>with-open-file</obj> inside of a <obj>file-retry-new-pathname</obj>.  If an
+error occurs while opening the file and it has one of the specified
+<arg>condition-names</arg>, a new pathname is read, the variable
+<arg>pathname-var</arg> is <obj>setq</obj>'d to it, and another attempt is made to
+open a file with the newly specified name.  Example:
+
+<lisp>(with-open-file-retry (instream (infile fs:file-not-found))
+  ...)
+</lisp><obj>infile</obj> should be a variable whose value is a pathname or namestring.
+The example is equivalent to
+
+<lisp>(file-retry-new-pathname (infile fs:file-not-found)
+  (with-open-file (instream infile)
+    ...))
+</lisp></description></definition><definition>
+<define key="with-open-file-search-fun" name="with-open-file-search" type="mac"></define>
+
+<description>Opens a file, trying various pathnames until one of them succeeds.  The
+pathnames tried differ only in their type components.  For example,
+<obj>load</obj> uses this macro to search for either a compiled file or a
+source file.  The calling sequence looks like
+
+<lisp>(with-open-file-search
+   (<arg>streamvar</arg> (<arg>operation</arg> <arg>defaults</arg> <arg>auto-retry</arg>)
+              <arg>types-and-pathname</arg> <arg>options</arg>...)
+  <arg>body</arg>...)
+</lisp>
+<obj>with-open-file-search</obj>
+tries opening various files until one succeeds; then binds <arg>streamvar</arg> to the stream
+and executes <arg>body</arg>, closing the stream on exit.  The values of <arg>body</arg> are returned.
+
+<arg>types-and-pathname</arg> specifies which files to open.  It should be a form
+which evaluates to two values, the first being a list of types to try
+and the second being a pathname called the base pathname.  Each pathname to try
+is made by merging the base pathname with the defaults <arg>defaults</arg> and one of the types.
+The types may be strings or canonical type keywords (see <ref chapter="25" definition-in-file="pathnm" key="canonical-types" section="2" title="Pathname Components" type="section"></ref>).
+
+<arg>options</arg> are forms whose values should be alternating to keywords and
+values, which are passed to <obj>open</obj> each time.
+
+If all the names to be tried fail, a <obj>fs:multiple-file-not-found</obj> error is signaled.
+<arg>operation</arg> is provided just so that the <obj>:operation</obj> operation on the condition
+object can return it.  Usually the value given for <arg>operation</arg> should be the
+user-level function for which the <obj>with-open-file-search</obj> is being done.
+
+If <arg>auto-retry</arg> is non-<obj>nil</obj>, an error causes the user to be
+prompted for a new base pathname.  The entire set of types specified is
+tried anew with the new pathname.
+</description></definition><definition><define key="open-fun" name="open" type="fun"><args>file <standard>&amp;rest</standard> options</args>
+</define>
+
+<description>Returns a stream that is connected to the specified file.  Unlike
+Maclisp, the <obj>open</obj> function creates streams only for <arg>files</arg>;
+streams of other kinds are created by other functions.  The <arg>file</arg>
+and <arg>options</arg> arguments are the same as in <obj>with-open-file</obj>; see above.
+
+When the caller is finished with the stream, it should close the file by using
+the <obj>:close</obj> operation or the <obj>close</obj> function.  The <obj>with-open-file</obj>
+special form does this automatically and so is usually preferred.  <obj>open</obj>
+should only be used when the control structure of the program necessitates opening
+and closing of a file in some way more complex than the simple way provided
+by <obj>with-open-file</obj>.  Any program that uses <obj>open</obj> should set up
+<obj>unwind-protect</obj> handlers (see <ref definition-in-file="fd-flo" key="unwind-protect-fun" title="Special Form unwind-protect" type="spec"></ref>) to close its files
+in the event of an abnormal exit.
+</description></definition><definition><define key="close-fun" name="close" type="fun"><args>stream <standard>&amp;optional</standard> option</args>
+</define>
+
+<description>The <obj>close</obj> function simply sends the <obj>:close</obj> message to <arg>stream</arg>.
+If <arg>option</arg> is <obj>:abort</obj> for a file output stream, the file is discarded.
+</description></definition><definition><define key="cli:close-fun" name="cli:close" type="fun"><args>stream <standard>&amp;key</standard> abort</args>
+</define>
+
+<description>The Common Lisp version of <obj>close</obj> is the same as <obj>close</obj> except for
+its calling convention.  If <arg>abort</arg> is non-<obj>nil</obj> for a file output
+stream, the file is discarded.
+</description></definition><definition>
+<define key="fs:close-all-files-fun" name="fs:close-all-files" type="fun"></define>
+
+<description>Closes all open files.  This is useful when a program has run wild opening
+files and not closing them.  It closes all the files in <obj>:abort</obj> mode
+(see <ref definition-in-file="stream" key="close-message" type="page"></ref>), which means that files open for output are
+deleted.  Using this function is dangerous, because you may close files
+out from under various programs like Zmacs and ZMail; only use it if you
+have to and if you feel that you know what you're doing.
+</description></definition>
+<p>The <arg>options</arg> used when opening a file are normally alternating keywords and
+values, like any other function that takes keyword arguments.  In addition,
+for compatibility with the Maclisp <obj>open</obj> function, if only a single option
+is specified it is either a keyword or a list of keywords (not alternating with
+values).
+</p>
+
+<p>The file-opening options control things like whether the stream is for input
+from a existing file or output to a new file, whether the file is text or binary, etc.
+</p>
+
+<p>The following keyword arguments are standardly recognized; additional keywords
+can be implemented by particular file system hosts.
+</p>
+
+<table><tbody><tr><td><arg>direction</arg></td>
+<td><index-entry index="keywords" title=":direction open"></index-entry>
+Controls which direction of I/O can be done on the resulting stream.
+The possible values are <obj>:input</obj> (the default), <obj>:output</obj>, <obj>nil</obj>,
+<obj>:probe</obj>, <obj>:probe-directory</obj> and <obj>:probe-link</obj>.  The first two
+should be self-explanatory.  <obj>nil</obj> or <obj>:probe</obj> means that this is a
+``probe'' opening; no data are to be transferred, the file is being opened
+only to verify its existence or access its properties.  The stream
+created in this case does not permit any I/O.  <obj>nil</obj> and <obj>:probe</obj>
+differ in causing different defaults for the argument <arg>if-does-not-exist</arg>.
+If that argument is specified explicitly, <obj>nil</obj> and <obj>:probe</obj> are equivalent.
+
+<obj>:probe-directory</obj> is used to see whether a directory exists.  If the
+directory specified for the file to be opened is found, then the
+<obj>open</obj> completes (returning a non-I/O stream) as if the specified file
+existed whether it really exists or not.
+
+<obj>:probe-link</obj> is used to find out the truename of a link.  If the file
+specified exists as a link, then the <obj>open</obj> completes returning a
+non-I/O stream which describes the link itself rather than the file
+linked to.  If the file exists and is not a link, the <obj>open</obj> also
+completes for it as with any probe.
+
+Common Lisp defines the value <obj>:io</obj> for this argument, requesting a stream
+that can do input and output, but no file system
+supported by the Lisp Machine has this capability.
+
+</td></tr><tr><td><arg>characters</arg></td>
+<td><index-entry index="keywords" title=":characters open"></index-entry>
+The possible values are <obj>t</obj> (the default), <obj>nil</obj>, which means that the
+file is a binary file, and <obj>:default</obj>, which means that the file system should
+decide whether the file contains characters or binary data and open it in the
+appropriate mode.
+
+</td></tr><tr><td><arg>byte-size</arg></td>
+<td><index-entry index="keywords" title=":byte-size open"></index-entry>
+The possible values are <obj>nil</obj> (the default), a number, which is the number
+of bits per byte, and <obj>:default</obj>, which means that the file system should
+choose the byte size based on attributes of the file.  If the file is being
+opened as characters, <obj>nil</obj> selects the appropriate system-dependent byte
+size for text files; it is usually not useful to use a different byte size.
+If the file is being opened as binary, <obj>nil</obj> selects the default byte size
+of 16 bits.
+
+</td></tr><tr><td><arg>element-type</arg></td><td>This is the Common Lisp way to specify what kind of objects the stream wants to
+read or write.  This combines the effect of the <arg>characters</arg> and <arg>byte-size</arg>
+arguments.  The value is a type specifier; it must be one of the following:
+
+<table><tbody><tr><td><obj>string-char</obj></td><td>Read or write characters as usual.  The default.
+</td></tr><tr><td><obj>character</obj></td><td>Read or write characters, dealing with characters
+that are more than 8 bits.  You can succeed in writing out any
+sequence of character objects and reading it back, but the file
+does not look anything like a text file.
+</td></tr><tr><td><obj>(unsigned-byte <arg>n</arg>)</obj></td><td>Read or write <arg>n</arg>-bit bytes.
+Like <arg>characters</arg> = <obj>nil</obj>, <arg>byte-size</arg> = <arg>n</arg>.
+</td></tr><tr><td><obj>unsigned-byte</obj></td><td>Similar, but uses the byte size that the file was originally written with.
+This is the same as <arg>characters</arg> = <obj>nil</obj>, <arg>byte-size</arg> = <obj>:default</obj>.
+</td></tr><tr><td><obj>(signed-byte <arg>n</arg>)</obj></td><td>Read or write <arg>n</arg>-bit bytes, sign-extending on input.
+Each byte read from the file is sign-extended so that its most
+significant bit serves as a sign bit.
+</td></tr><tr><td><obj>signed-byte</obj></td><td>Similar, but uses the byte size that the file was originally written with.
+</td></tr><tr><td><obj>(mod <arg>n</arg>)</obj></td><td>Like <obj>unsigned-byte</obj> for a big enough byte size to hold all numbers
+less than <arg>n</arg>.  <obj>bit</obj> is also accepted, and means <obj>(mod 2)</obj>.
+</td></tr><tr><td><obj>:default</obj></td><td>Is allowed, even though it is not a type specifier.
+It is the same as using <obj>:default</obj> as the value of <arg>characters</arg>.
+</td></tr></tbody></table>
+</td></tr><tr><td><arg>if-exists</arg></td>
+<td><index-entry index="keywords" title=":if-exists open"></index-entry>
+For output opens, <arg>if-exists</arg> specifies what to do if a file with the specified
+name already exists.  There are several values you can use:
+
+<table><tbody><tr><td><obj>:new-version</obj></td><td>Create a new version.  This makes sense only when the pathname has
+<obj>:newest</obj> as its version, and it is the default in that case.
+</td></tr><tr><td><obj>:supersede</obj></td><td>Make a new file which, when closed, replaces the old one.
+</td></tr><tr><td><obj>:overwrite</obj></td><td>Write over the data of the existing file, starting
+at the beginning, and set the file's length to the length of the
+newly written data.
+</td></tr><tr><td><obj>:truncate</obj></td><td>Like <obj>:overwrite</obj> except that it discards the old contents
+of the file immediately, making it empty except for what is written into
+it this time.
+</td></tr><tr><td><obj>:append</obj></td><td>Add new data onto the existing file at the end.
+</td></tr><tr><td><obj>:rename</obj></td><td>Rename the existing file and then create a new one.
+</td></tr><tr><td><obj>:rename-and-delete</obj></td><td>Rename the existing file, create a new one,
+and delete the old file when the new one is closed.
+</td></tr><tr><td><obj>:error</obj></td><td>Signal an error (<obj>fs:file-already-exists</obj>).
+This is the default when the pathname's version is not <obj>:newest</obj>.
+The further handling of the error is controlled by the <arg>error</arg> argument.
+</td></tr><tr><td><obj>nil</obj></td><td>Return <obj>nil</obj> from <obj>open</obj> in this case.
+The <arg>error</arg> argument is irrelevant in this case.
+</td></tr></tbody></table>
+</td></tr><tr><td><arg>if-does-not-exist</arg></td><td>Specifies what to do when the file requested does not
+exist.  There are three allowed values:
+
+<table><tbody><tr><td><obj>:create</obj></td><td>Create a file.  This is the default for output opens, except when <arg>if-exists</arg>
+is <obj>:append</obj>, <obj>:overwrite</obj> or <obj>:truncate</obj>.  This silly exception
+is part of the Common Lisp specifications.
+</td></tr><tr><td><obj>:error</obj></td><td>Signal an error.  This is the default for input opens,
+and also for output opens when <arg>if-exists</arg> is <obj>:append</obj>, <obj>:overwrite</obj>
+or <obj>:truncate</obj>.
+The further handling of the error is controlled by the <arg>error</arg> argument.
+</td></tr><tr><td><obj>nil</obj></td><td>Return <obj>nil</obj> from <obj>open</obj>.  This is the default for <obj>:probe</obj> opens.
+The <arg>error</arg> argument is irrelevant in this case.
+</td></tr></tbody></table>
+</td></tr><tr><td><arg>error</arg></td>
+<td><index-entry index="keywords" title=":error open"></index-entry>
+Specifies what to do if an error is signaled for any reason.
+(Note that the values of the <arg>if-exists</arg> and <arg>if-does-not-exist</arg> arguments
+control whether an error is signaled in certain circumstances.)
+The possible values are <obj>t</obj> (the default), <obj>:reprompt</obj> and <obj>nil</obj>.
+<obj>t</obj> means that nothing special is done, so the error invokes the
+debugger if the caller does not handle it.  <obj>nil</obj> means that the
+condition object should be returned as the value of <obj>open</obj>.  <obj>:reprompt</obj>
+means that a new file name should be read and opened.
+
+Any caller which need not know reliably which file was ultimately opened
+might as well specify <obj>:reprompt</obj> for this argument.  Callers which
+need to know if a different file is substituted should never specify
+<obj>:reprompt</obj>; they may use <obj>with-open-file-retry</obj> or
+<obj>file-retry-new-pathname</obj> (see <ref definition-in-file="files" key="file-retry-new-pathname-fun" title="Macro file-retry-new-pathname" type="mac"></ref>) if they
+wish to permit an alternative file name to be substituted.
+
+</td></tr><tr><td><arg>:submit</arg></td>
+<td><index-entry index="keywords" title=":submit open"></index-entry>
+If specified as <obj>t</obj> when opening a file for output, the file is
+submitted as a batch job if it is closed normally.  The default is
+<obj>nil</obj>.  You must specify <obj>:direction</obj> <obj>:output</obj> as well.
+
+</td></tr><tr><td><arg>deleted</arg></td>
+<td><index-entry index="keywords" title=":deleted open"></index-entry>
+The default is <obj>nil</obj>.  If <obj>t</obj> is specified, and the file system has the
+concept of deleted but not expunged files, it is possible to open a deleted
+file.  Otherwise deleted files are invisible.
+
+</td></tr><tr><td><arg>temporary</arg></td>
+<td><index-entry index="keywords" title=":temporary open"></index-entry>
+If <obj>t</obj> is specified, the file is marked as
+temporary, if the file system has that concept.  The default is <obj>nil</obj>.
+
+</td></tr><tr><td><arg>preserve-dates</arg></td>
+<td><index-entry index="keywords" title=":preserve-dates open"></index-entry>
+If <obj>t</obj> is specified, the file's reference and
+modification dates are not updated.  The default is <obj>nil</obj>.
+
+</td></tr><tr><td><arg>flavor</arg></td>
+<td><index-entry index="keywords" title=":flavor open"></index-entry>
+This controls the kind of file to be opened.  The default is <obj>nil</obj>, a
+normal file.  Other possible values are <obj>:directory</obj> and <obj>:link</obj>.
+Only certain file systems recognize this keyword.
+
+</td></tr><tr><td><arg>link-to</arg></td>
+<td><index-entry index="keywords" title=":link-to open"></index-entry>
+When creating a file with <arg>flavor</arg> <obj>:link</obj>, this argument must be
+specified; its value is a pathname or namestring that becomes the target of the link.
+
+</td></tr><tr><td><arg>submit</arg></td>
+<td><index-entry index="keywords" title=":submit open"></index-entry>
+The value can be either <obj>nil</obj> (the default) or <obj>t</obj>.
+If the value is <obj>t</obj>, and the <obj>:direction</obj> is <obj>:output</obj>, the
+resulting file will be submitted as a batch job.
+Currently, this option is implemented only for Twenex and VMS.
+
+</td></tr><tr><td><arg>estimated-size</arg></td>
+<td><index-entry index="keywords" title=":estimated-size open"></index-entry>
+The value may be <obj>nil</obj> (the default), which means there is no estimated
+size, or a number of bytes.  Some file systems use this to optimize disk
+allocation.
+
+</td></tr><tr><td><arg>physical-volume</arg></td>
+<td><index-entry index="keywords" title=":physical-volume open"></index-entry>
+The value may be <obj>nil</obj> (the default), or a string that is the name
+of a physical volume on which the file is to be stored.  This is not meaningful
+for all file systems.
+
+</td></tr><tr><td><arg>logical-volume</arg></td>
+<td><index-entry index="keywords" title=":logical-volume open"></index-entry>
+The value may be <obj>nil</obj> (the default), or a string that is the name
+of a logical volume on which the file is to be stored.  This is not meaningful
+for all file systems.
+
+</td></tr><tr><td><arg>super-image</arg></td>
+<td><index-entry index="keywords" title=":super-image open"></index-entry>
+The value may be <obj>nil</obj> (the default), or <obj>t</obj>, which
+disables the special treatment of rubout in ASCII files.  Normally, rubout is
+an escape which causes the following character to be interpreted specially,
+allowing all characters from 0 through 376 (octal) to be stored.  This applies to
+ASCII file servers only.
+
+</td></tr><tr><td><arg>raw</arg></td>
+<td><index-entry index="keywords" title=":raw open"></index-entry>
+The value may be <obj>nil</obj> (the default), or <obj>t</obj>, which
+disables all character set translation in ASCII files.  This applies to ASCII
+file servers only.
+
+</td></tr></tbody></table>
+<p>In the Maclisp compatibility mode, there is only one <arg>option</arg>, and it
+is either a symbol or a list of symbols.  These symbols are recognized no
+matter what package they are in, since Maclisp does not have packages.
+The following symbols are recognized:
+
+<table><tbody><tr><td><obj>in, read</obj></td><td>Select opening for input (the default).
+
+</td></tr><tr><td><obj>out, write, print</obj></td><td>Select opening for output; a new file is to be created.
+
+</td></tr><tr><td><obj>binary, fixnum</obj></td><td>Select binary mode; otherwise character mode is used.  Note that fixnum mode
+uses 16-bit binary words and is not compatible with Maclisp fixnum mode, which
+uses 36-bit words.  On the PDP-10, fixnum files are stored with two 16-bit words
+per PDP-10 word, left-justified and in PDP-10 byte order.
+
+</td></tr><tr><td><obj>character, ascii</obj></td><td>The opposite of fixnum.  This is the default.
+
+</td></tr><tr><td><obj>single, block</obj></td><td>Ignored for compatibility with the Maclisp <obj>open</obj> function.
+
+</td></tr><tr><td><obj>byte-size</obj></td><td>Must be followed by a number in the options list, and must be used in combination
+with <obj>fixnum</obj>.  The number is the number of bits per byte, which can be from
+1 to 16.  On a PDP-10 file server these bytes will be packed into words in the
+standard way defined by the <obj>ILDB</obj> instruction.  The <obj>:tyi</obj> stream operation
+will (of course) return the bytes one at a time.
+
+</td></tr><tr><td><obj>probe, error, noerror, raw, super-image, deleted, temporary</obj></td><td>These are not available in Maclisp.  The corresponding keywords in the
+normal form of file-opening options are preferred over these.
+
+</td></tr></tbody></table></p>
+</section><a name="file-stream-operations-section"></a>
+
+
+<section chapter-number="26" name="file-stream-operations-section" number="2" title="File Stream Operations"><p>The following functions and operations may be used on file streams, in addition to the normal I/O
+operations which work on all streams.  Note that several of these operations are
+useful with file streams that have been closed.  Some operations
+use pathnames; refer to <ref chapter="25" definition-in-file="pathnm" key="pathname" section="0" title="Naming of Files" type="section"></ref> for an explanation of pathnames.
+</p>
+<definition><define key="file-length-fun" name="file-length" type="fun"><args>file-stream</args>
+</define>
+
+<description>Returns the length of the file open on <arg>file-stream</arg>, in terms of the units
+in which I/O is being done on that stream.  (A stream is needed, rather than
+just a pathname, in order to specify the units.)
+</description></definition><definition><define key="file-position-fun" name="file-position" type="fun"><args>file-stream <standard>&amp;optional</standard> new-position</args>
+</define>
+
+<description>With one argument, returns the current position in the file of <arg>file-stream</arg>,
+using the <obj>:read-pointer</obj> stream operation.  It may return <obj>nil</obj> meaning that
+the position cannot be determined.  In fact, it always returns <obj>nil</obj>
+for a stream open in character mode and not at the beginning of the file.
+
+With two arguments, sets the position using the <obj>:set-pointer</obj> stream
+operation, if possible, and returns <obj>t</obj> if the setting was possible
+and <obj>nil</obj> if not.  You can specify <obj>:start</obj> as the <arg>new-position</arg>
+to position to the beginning of the file, or <obj>:end</obj> to position to the
+end.
+</description></definition><definition><define key="&quot;file-method" name="&quot;file" type="metamethod"><args>streams&quot; :pathname</args>
+</define>
+
+<description>Returns the pathname that was opened to get this stream.  This may not be
+identical to the argument to <obj>open</obj>, since missing components will have been
+filled in from defaults.  The pathname may have been replaced wholesale if
+an error occurred in the attempt to open the original pathname.
+</description></definition><definition><define key="&quot;file-method" name="&quot;file" type="metamethod"><args>streams&quot; :truename</args>
+</define>
+
+<description>Returns the pathname of the file actually open on this stream.  This can be
+different from what <obj>:pathname</obj> returns because of file links, logical
+devices, mapping of version <obj>:newest</obj> to a particular version number, etc.  For
+an output stream the truename is not meaningful until after the stream has been
+closed, at least when the file server is an ITS.
+</description></definition><definition><define key="&quot;file-method" name="&quot;file" type="metamethod"><args>streams&quot; :generic-pathname</args>
+</define>
+
+<description>Returns the generic pathname of the pathname that was opened to get this
+stream.  Normally this is the same as the result of sending the
+<obj>:generic-pathname</obj> message to the value of the <obj>:pathname</obj>
+operation on the stream; however, it does special things when the Lisp
+system is bootstrapping itself.
+</description></definition><definition><define key="&quot;file-method" name="&quot;file" type="metamethod"><args>streams&quot; :qfaslp</args>
+</define>
+
+<description>Returns <obj>t</obj> if the file has a magic flag at the front that says it is a QFASL file,
+<obj>nil</obj> if it is an ordinary file.
+</description></definition><definition><define key="&quot;file-method" name="&quot;file" type="metamethod"><args>streams&quot; :length</args>
+</define>
+
+<description>Returns the length of the file, in bytes or characters.  For text files on
+ASCII file servers, this is the number of ASCII characters, not Lisp Machine
+characters.  The numbers are different because of character-set translation;
+see <ref chapter="26" definition-in-file="files" key="character-set-differences" section="8" title="File Servers" type="section"></ref> for a full explanation.
+For an output stream the length is not meaningful until after the stream has
+been closed, at least when the file server is an ITS.
+</description></definition><definition><define key="&quot;file-method" name="&quot;file" type="metamethod"><args>streams&quot; :creation-date</args>
+</define>
+
+<description>Returns the creation date of the file, as a number that is a universal time.
+See the chapter on the time package (<ref chapter="35" definition-in-file="time" key="time" section="0" title="Dates and Times" type="section"></ref>).
+</description></definition><definition><define key="&quot;file-method" name="&quot;file" type="metamethod"><args>streams&quot; :info</args>
+</define>
+
+<description>Returns a cons of the file's truename and its creation date.  This can
+be used to tell if the file has been modified between two <obj>open</obj>'s.
+For an output stream the information is not guaranteed to be correct
+until after the stream has been closed.
+</description></definition><definition><define key="&quot;file-method" name="&quot;file" type="metamethod"><args>streams&quot; :properties <standard>&amp;optional</standard> (error-p <obj>t</obj>)</args>
+</define>
+
+<description>This returns two values: a property list (like an element of the list
+returned by <obj>fs:directory-list</obj>), and a list of the settable
+properties.   See the section on standard file properties (<ref chapter="26" definition-in-file="files" key="directory-list" section="6" title="Accessing Directories" type="section"></ref>) for a
+description of the ones that may possible found in the list.
+</description></definition><definition><define key="&quot;file-method" name="&quot;file" type="metamethod"><args>streams&quot; :set-byte-size new-byte-size</args>
+</define>
+
+<description>This is only allowed on binary file streams.  The byte size
+can be changed to any number of bits from 1 to 16.
+</description></definition><definition><define key="&quot;file-method" name="&quot;file" type="metamethod"><args>streams&quot; :delete <standard>&amp;optional</standard> (error-p <obj>t</obj>)</args>
+</define>
+
+<description>Deletes the file open on this stream.  For the meaning of <arg>error-p</arg>, see the <obj>deletef</obj>
+function.  The file doesn't really go away until the stream is closed.
+</description></definition><definition><define key="&quot;file-method" name="&quot;file" type="metamethod"><args>streams&quot; :undelete <standard>&amp;optional</standard> (error-p <obj>t</obj>)</args>
+</define>
+
+<description>If you have used the <obj>:deleted</obj> option in <obj>open</obj> to open a deleted
+file, this operation undeletes the file.
+</description></definition><definition><define key="&quot;file-method" name="&quot;file" type="metamethod"><args>streams&quot; :rename new-name <standard>&amp;optional</standard> (error-p <obj>t</obj>)</args>
+</define>
+
+<description>Renames the file open on this stream.  For the meaning of <arg>error-p</arg>, see the <obj>renamef</obj>
+function.
+</description></definition><nopara></nopara>
+<p>File output streams implement the <obj>:finish</obj> and <obj>:force-output</obj> operations.
+</p>
+</section><a name="Manipulating Files"></a>
+
+
+<section chapter-number="26" name="Manipulating Files" number="3" title="Manipulating Files"><p>This section describes functions for doing things to files aside from
+reading or writing their contents.
+</p>
+<definition><define key="truename-fun" name="truename" type="fun"><args>object</args>
+</define>
+
+<description>Returns the truename of the file specified somehow by <arg>object</arg>.  If
+<arg>object</arg> is a plausible stream, it is asked for the truename with the
+<obj>:truename</obj> operation.  Otherwise, <arg>object</arg> is converted to a
+pathname and that pathname is opened to get its file's truename.
+</description></definition><definition><define key="delete-file-fun" name="delete-file" type="fun"><args>file <standard>&amp;key</standard> (error-p <obj>t</obj>) query?</args>
+</define><define key="deletef-fun" name="deletef" type="fun"><args>file <standard>&amp;optional</standard> (error-p <obj>t</obj>) query?</args>
+</define>
+
+<description>Both delete the specified file.  The two functions differ in accepting
+keyword arguments versus positional arguments.  <arg>file</arg> may contain
+wildcard characters, in which case multiple files are deleted.
+
+If <arg>query?</arg> is non-<obj>nil</obj>, the user is queried about each file
+(whether there are wildcards or not).  Only the files that the user
+confirms are actually deleted.
+
+If <arg>error-p</arg> is <obj>t</obj>, then if an error occurs it is signaled as
+a Lisp error.  If <arg>error-p</arg> is <obj>nil</obj> and an error occurs, the error
+message is returned as a condition object.  Otherwise, the value is a list of
+elements, one for each file considered.  The car of each element is
+the truename of the file, and the cadr is non-<obj>nil</obj> if the file
+was actually deleted (it is always <obj>t</obj> unless querying was done).
+</description></definition><definition><define key="undelete-file-fun" name="undelete-file" type="fun"><args>file <standard>&amp;key</standard> (error-p <obj>t</obj>) query?</args>
+</define><define key="undeletef-fun" name="undeletef" type="fun"><args>file <standard>&amp;optional</standard> (error-p <obj>t</obj>) query?</args>
+</define>
+
+<description>Both undelete the specified file.  Wildcards are allowed, just as in
+<obj>deletef</obj>.  The rest of the calling conventions are the same as well.
+The two functions differ in taking keyword arguments versus positional
+arguments.
+
+Not all file systems support undeletion, and if it is not supported on
+the one you are using, it gets an error or returns a string according to
+<arg>error-p</arg>.  To find out whether a particular file system supports
+this, send the <obj>:undeletable-p</obj> operation to a pathname.  If it
+returns <obj>t</obj>, the file system of that pathname supports undeletion.
+</description></definition><definition><define key="rename-file-fun" name="rename-file" type="fun"><args>file new-name <standard>&amp;key</standard> (error-p <obj>t</obj>) query?</args>
+</define><define key="renamef-fun" name="renamef" type="fun"><args>file new-name <standard>&amp;optional</standard> (error-p <obj>t</obj>) query?</args>
+</define>
+
+<description>Both rename the specified file to <arg>new-name</arg> (a pathname or string).
+The two functions differ in taking keyword arguments versus positional
+arguments.  <arg>file</arg> may contain wildcards, in which case multiple files
+are renamed.  Each file's new name is produced by passing <arg>new-name</arg>
+to <obj>merge-pathname-defaults</obj> with the file's truename as the defaults.
+Therefore, <arg>new-name</arg> should be a string in this case.
+
+If <arg>query?</arg> is non-<obj>nil</obj>, the user is queried about each file
+(whether there are wildcards or not).  Only the files that the user
+confirms are actually renamed.
+
+If <arg>error-p</arg> is <obj>t</obj>, then if an error occurs it is signaled as
+a Lisp error.  If <arg>error-p</arg> is <obj>nil</obj> and an error occurs, the error
+message is returned as a condition object.  Otherwise, the value is a list of
+elements, one for each file considered.  The car of each element is
+the original truename of the file, the cadr is the name it was to be
+renamed to, and the caddr is non-<obj>nil</obj> if the file was renamed.
+The caddr is <obj>nil</obj> if the user was queried and said no.
+</description></definition><definition><define key="copy-file-fun" name="copy-file" type="fun"><args>file new-name <standard>&amp;key</standard> (error <obj>t</obj>) (copy-creation-date <obj>t</obj>) (copy-author <obj>t</obj>) report-stream (create-directories <obj>:query</obj>) (characters <obj>:default</obj>) (byte-size <obj>:default</obj>)</args>
+</define>
+
+<description>Copies the file specified by <arg>file</arg> to the name <arg>new-name</arg>.
+
+<arg>characters</arg> and <arg>byte-size</arg> specify what mode of I/O to use to transfer the data.
+<arg>characters</arg> can be
+
+<table><tbody><tr><td><obj>t</obj></td><td>to specify character input and output.
+</td></tr><tr><td><obj>nil</obj></td><td>for binary input and output,
+</td></tr><tr><td><obj>:ask</obj></td><td>meaning ask the user which one
+</td></tr><tr><td><obj>:maybe-ask</obj></td><td>meaning ask if it is not  possible to tell with certainty which method is best,
+</td></tr><tr><td><obj>:default</obj></td><td>meaning to guess as well as possible automatically.
+</td></tr></tbody></table>
+If binary transfer is done, <arg>byte-size</arg> specifies the byte size to
+use; <obj>:default</obj> means to ask the file system for the byte size that
+the old file is stored in, just as it does in <obj>open</obj>.
+
+<arg>copy-author</arg> and <arg>copy-creation-date</arg> say whether to set those
+properties of the new file to be the same as those of the old file.  If
+a property is not copied, it is set to your login name or the current
+date and time.
+
+<arg>report-stream</arg>, if non-<obj>nil</obj>, is a stream on which a message should
+be printed describing the file copied, where it is copied to, and which
+mode was used.
+
+<arg>create-directories</arg> says what to do if the output filename specifies a directory that
+does not exist.  It can be <obj>t</obj> meaning create the directory, <obj>nil</obj> meaning treat it as
+an error, or <obj>:query</obj> meaning ask the user which one to do.  The default is <obj>:query</obj>.
+
+<arg>error</arg>, if <obj>nil</obj>, means that if an error happens then this function
+should just return an error indication.
+
+If the pathname to copy from contains wildcards, multiple files are
+copied.  The new name for each file is obtained by merging <arg>new-name</arg>
+(parsed into a pathname) with that file's truename as a default.  The
+mode of copy is determined for each file individually, and each copy is
+reported on the <arg>report-stream</arg> if there is one.  If <arg>error</arg> is <obj>nil</obj>,
+an error in copying one file does not prevent the others from being
+copied.
+
+There are four values.  If wildcards were used, each value is a list with
+one element describing each file that matched; otherwise, each value describes the
+single file specified (though the value may be a list anyway).  The values,
+for each file, are:
+
+<table><tbody><tr><td><arg>output-file</arg></td><td>The defaulted pathname to be opened for output in copying this file.
+</td></tr><tr><td><arg>truename</arg></td><td>The truename of the file copied
+</td></tr><tr><td><arg>outcome</arg></td><td>The truename of the new file, If the file was successfully copied.
+A condition object, if there was an error and <arg>error</arg> was <obj>nil</obj>.
+<obj>nil</obj> if the user was asked whether to copy this file and said no.
+</td></tr><tr><td><arg>mode</arg></td><td>A Common Lisp type descriptor such as <obj>string-char</obj> or <obj>(unsigned-byte 8)</obj>
+saying how the file was copied.
+</td></tr></tbody></table></description></definition><definition><define key="probe-file-fun" name="probe-file" type="fun"><args>file</args>
+</define><define key="probef-fun" name="probef" type="fun"><args>file</args>
+</define>
+
+<description>Returns <obj>nil</obj> if there is no file named <arg>file</arg>; otherwise returns a
+pathname that is the true name of the file, which can be different from
+<arg>file</arg> because of file links, version numbers, etc.  If <arg>file</arg> is
+a stream, this function cannot return <obj>nil</obj>.
+
+Any problem in opening the file except for <obj>fs:file-not-found</obj> signals
+an error.
+
+<obj>probef</obj> is the Maclisp name; <obj>probe-file</obj> is the Common Lisp name.
+</description></definition><definition><define key="file-write-date-fun" name="file-write-date" type="fun"><args>file</args>
+</define>
+
+<description>Returns the creation date/time of <arg>file</arg>, as a universal time.
+</description></definition><definition><define key="file-author-fun" name="file-author" type="fun"><args>file</args>
+</define>
+
+<description>Returns the name of the author of <arg>file</arg> (the user who wrote it), as a
+string.
+</description></definition><definition><define key="viewf-fun" name="viewf" type="fun"><args><arg>file</arg> <standard>&amp;optional</standard> (output-stream <obj>*standard-output*</obj>) leader</args>
+</define>
+
+<description>Copies the contents of the specified file, opened in character
+mode, onto <obj>output-stream</obj>.  Normally this has the effect of printing
+the file on the terminal.  <arg>leader</arg> is passed along to
+<obj>stream-copy-until-eof</obj> (see <ref definition-in-file="ios" key="stream-copy-until-eof-fun" title="Function stream-copy-until-eof" type="fun"></ref>).
+</description></definition><definition><define key="fs:create-link-fun" name="fs:create-link" type="fun"><args>link-name link-to <standard>&amp;key</standard> (error <obj>t</obj>)</args>
+</define>
+
+<description>Creates a link named <arg>link-name</arg> which points to a file named <arg>link-to</arg>.
+An error happens if the host specified in <arg>link-name</arg> does not support links,
+or for any of the usual problems that can happen in creating a file.
+</description></definition>
+
+
+<subsection name="NIL" title="Loading Files"><index-entry index="concepts" title="loading"></index-entry>
+
+<p>To <arg>load</arg> a file is to read through the file, evaluating each form
+in it.  Programs are typically stored in files; the expressions in the file are mostly
+special forms such as <obj>defun</obj> and <obj>defvar</obj> which define the functions and
+variables of the program.
+</p>
+
+<p>Loading a compiled (or QFASL) file is similar, except that the file does not
+contain text but rather pre-digested expressions created by the
+compiler which can be loaded more quickly.
+</p>
+
+<p>These functions are for loading single files.  There is a system for keeping track
+of programs which consist of more than one file; for further information refer
+to <ref chapter="29" definition-in-file="maksys" key="system-system" section="0" title="Maintaining Large Systems" type="section"></ref>.
+</p>
+<definition><define key="load-fun" name="load" type="fun"><args>file <standard>&amp;key</standard> verbose print (if-does-not-exist <obj>t</obj>) set-default-pathname package</args>
+</define>
+
+<description>Loads the specified file into the Lisp environment.  If
+<arg>file</arg> is a stream, <obj>load</obj> reads from it; otherwise <arg>file</arg>
+is defaulted from the default pathname defaults and the result
+specifies a file to be opened.  If the file is a QFASL file, <obj>fasload</obj>
+is used; otherwise <obj>readfile</obj> is used.  If <arg>file</arg> specifies a name
+but no type, <obj>load</obj> looks first for the canonical type <obj>:qfasl</obj> and
+then for the canonical type <obj>:lisp</obj>.
+
+Normally the file is read into the package specified in its attribute
+list, but if <arg>package</arg> is supplied then the file is read in that
+package.  If <arg>package</arg> is <obj>nil</obj> and <arg>verbose</arg> is <obj>nil</obj>, <obj>load</obj>
+prints a message saying what file is being loaded and what package is
+being used.  <arg>verbose</arg> defaults to the value of <obj>*load-verbose*</obj>.
+
+If <arg>if-does-not-exist</arg> is <obj>nil</obj>, <obj>load</obj> just returns <obj>nil</obj> if no
+file with the specified name exists.  Error conditions other than
+<obj>fs:file-not-found</obj> are not handled by this option.
+
+If a file is loaded, <obj>load</obj> returns the file's truename.
+
+If <arg>print</arg> is non-<obj>nil</obj>, the value of each expression evaluated from
+the file is printed on <obj>*standard-output*</obj>.
+
+<arg>pathname</arg> is defaulted from the default pathname defaults.  If
+<arg>set-default-pathname</arg> is non-<obj>nil</obj>, the pathname defaults are set
+to the name of the file loaded.  The default for
+<arg>set-default-pathname</arg> is <obj>t</obj>.
+
+<obj>load</obj> used to be called with a different calling sequence:
+
+<lisp>(load <arg>pathname</arg> <arg>pkg</arg> <arg>nonexistent-ok</arg>
+      <arg>dont-set-default</arg>)
+</lisp>This calling sequence is detected and still works, but it is obsolete.
+</description></definition><definition>
+<define key="*load-verbose*-var" name="*load-verbose*" type="var"></define>
+
+<description>Is the default value for the <arg>verbose</arg> argument to <obj>load</obj>.
+</description></definition><definition><define key="readfile-fun" name="readfile" type="fun"><args>file <standard>&amp;optional</standard> pkg no-msg-p</args>
+</define>
+
+<description><obj>readfile</obj> is the version of <obj>load</obj> for text files.  It reads and evaluates
+each expression in the file.  As with <obj>load</obj>, <arg>pkg</arg> can specify what package
+to read the file into.  Unless <arg>no-msg-p</arg> is <obj>t</obj>, a message is printed
+indicating what file is being read into what package.
+</description></definition><definition><define key="fasload-fun" name="fasload" type="fun"><args>file <standard>&amp;optional</standard> pkg no-msg-p</args>
+</define>
+
+<description><obj>fasload</obj> is the version of <obj>load</obj> for QFASL files.  It defines
+functions and performs other actions as directed by the specifications
+inserted in the file by the compiler.  As with <obj>load</obj>, <arg>pkg</arg> can
+specify what package to read the file into.  Unless <arg>no-msg-p</arg> is
+<obj>t</obj>, a message is printed indicating what file is being read into what
+package.
+</description></definition></subsection></section><a name="pathname-file-operations"></a>
+
+
+<section chapter-number="26" name="pathname-file-operations" number="4" title="Pathname Operations That Access Files"><p>Here are the operations that access files.  Many accept an argument
+<arg>error</arg> or <arg>error-p</arg> which specifies whether to signal an error or
+to return a condition instance, if the file cannot be accessed.  For
+these arguments, <obj>nil</obj> and non-<obj>nil</obj> are the only significant values.
+<obj>:reprompt</obj> has no special meaning as a value.  That value when passed
+to one of the file accessing functions (<obj>open</obj>, <obj>deletef</obj>, etc.)
+has its special significance at a higher level.
+</p>
+<definition>
+<define key="pathname-truename-method" name="pathname" type="method"></define>
+
+<description>Returns a pathname object describing the exact name of the file specified
+by the pathname the object is sent to.
+
+This may be different from the original pathname.  For example, the
+original pathname may have <obj>:newest</obj> as the version, but the truename
+always has a number as the version if the file system supports versions.
+</description></definition><definition><define key="pathname-open-method" name="pathname" type="method"><args>pathname <standard>&amp;rest</standard> options</args>
+</define>
+
+<description>Opens a stream for the file named by the pathname.
+The argument <arg>pathname</arg> is what the <obj>:pathname</obj> operation on the
+resulting stream should return.  When a logical pathname is opened,
+<arg>pathname</arg> is that logical pathname, but <obj>self</obj> is
+its translated pathname.
+
+<arg>options</arg> is a list of alternating keywords and values, as would be
+passed to <obj>open</obj>.  The old style of <obj>open</obj> keywords are not allowed;
+when they are used with <obj>open</obj>, <obj>open</obj> converts them to the new
+style before sending the <obj>:open</obj> message.
+</description></definition><definition><define key="pathname-delete-method" name="pathname" type="method"><args><standard>&amp;optional</standard> (error-p <obj>t</obj>)</args>
+</define><define key="pathname-undelete-method" name="pathname" type="method"><args><standard>&amp;optional</standard> (error-p <obj>t</obj>)</args>
+</define>
+
+<description>Respectively delete or undelete the file specified by the pathname.
+
+All file systems support <obj>:delete</obj> but not all support <obj>:undelete</obj>.
+
+If <arg>error-p</arg> is <obj>nil</obj>, problems such as nonexistent files cause a
+string describing the problem to be returned.  Otherwise, they signal an
+error.
+</description></definition><definition>
+<define key="pathname-undeletable-p-method" name="pathname" type="method"></define>
+
+<description>Returns <obj>t</obj> if this pathname is for a file system which allows
+deletion to be undone.  Such pathnames support the <obj>:undelete</obj>
+and <obj>:expunge</obj> operations.
+</description></definition><definition><define key="pathname-rename-method" name="pathname" type="method"><args>new-name <standard>&amp;optional</standard> (error-p <obj>t</obj>)</args>
+</define>
+
+<description>Renames the file specified by the pathname.  <arg>new-name</arg>, a string or
+pathname, specifies the name to rename to.  If it is a string, it is
+parsed using <obj>self</obj> as the defaults.
+
+If <arg>error-p</arg> is <obj>nil</obj>, problems such as nonexistent files cause a
+string describing the problem to be returned.  Otherwise, they signal an
+error.
+</description></definition><definition><define key="pathname-complete-string-method" name="pathname" type="method"><args>string options</args>
+</define>
+
+<description>Attempts to complete the filename <arg>string</arg>, returning the results.
+This operation is used by the function <obj>fs:complete-pathname</obj> (see
+<ref definition-in-file="files" key="fs:complete-pathname-fun" title="Function fs:complete-pathname" type="fun"></ref>).  The pathname the message is sent to is
+used for defaults.  <arg>options</arg> is a list whose elements may include
+<obj>:deleted</obj>, <obj>:read</obj> (file is for input), <obj>:write</obj> (it's for
+output), <obj>:old</obj> (only existing files allowed), or <obj>:new-ok</obj> (new files
+are allowed too).
+
+There are two values: a string, which is the completion as far as possible,
+and a flag, which can be <obj>:old</obj>, <obj>:new</obj> or <obj>nil</obj>.
+<obj>:old</obj> says that the returned string names an existing file,
+<obj>:new</obj> says that the returned string is no file but some completion was done,
+<obj>nil</obj> says that no completion was possible.
+</description></definition><definition><define key="pathname-change-properties-method" name="pathname" type="method"><args>error-p <standard>&amp;rest</standard> properties</args>
+</define>
+
+<description>Changes the properties of the file specified by the
+pathname.  <arg>properties</arg> should be an
+alternating list of property names and values.
+</description></definition><definition><define key="pathname-directory-list-method" name="pathname" type="method"><args>options</args>
+</define>
+
+<description>Performs the work of <obj>(fs:directory-list <arg>this-pathname</arg> <arg>options</arg>...)</obj>.
+</description></definition><definition>
+<define key="pathname-properties-method" name="pathname" type="method"></define>
+
+<description>Returns a property list (in the form
+of a directory-list element) and a list of settable properties.
+See <ref chapter="26" definition-in-file="files" key="directory-list" section="6" title="Accessing Directories" type="section"></ref> for more information on file properties.
+</description></definition><definition><define key="pathname-wildcard-map-method" name="pathname" type="method"><args>function plistp dir-list-options <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Maps <arg>function</arg> over all the
+files specified by this pathname (which may contain wildcards).
+Each time <arg>function</arg> is called, its first argument is a pathname
+with no wildcards, or else a directory-list element (whose car is a
+pathname and whose cdr contains property names and values).
+The elements of <arg>args</arg> are given to <arg>function</arg> as additional
+arguments.
+
+<arg>plistp</arg> says whether <arg>function</arg>'s first argument should be a
+directory-list element or just a pathname.  <obj>t</obj> specifies a
+directory-list element.  That provides more information, but it makes it
+necessary to do extra work if the specified pathname does <arg>not</arg>
+contain wildcards.
+
+<arg>dir-list-options</arg> is passed to <obj>fs:directory-list</obj>.  You can use this
+to get deleted files mentioned in the list, for example.
+</description></definition><need amount="1500"></need><nopara></nopara>
+<p>The remaining file-access operations are defined only on certain file
+systems.
+</p>
+<definition><define key="pathname-expunge-method" name="pathname" type="method"><args><standard>&amp;key</standard> (error <obj>t</obj>)</args>
+</define>
+
+<description>Expunges the directory specified by the host, device and directory
+components of the pathname.
+
+The argument <arg>error</arg> says whether to signal an error if the directory
+does not exist.  <obj>nil</obj> means just return a string instead.
+</description></definition><definition><define key="pathname-create-directory-method" name="pathname" type="method"><args><standard>&amp;key</standard> (error <obj>t</obj>)</args>
+</define>
+
+<description>Creates the directory specified in this pathname.
+</description></definition><definition><define key="pathname-remote-connect-method" name="pathname" type="method"><args><standard>&amp;key</standard> (error <obj>t</obj>) access</args>
+</define>
+
+<description>Performs the work of <obj>fs:remote-connect</obj> with the same arguments
+on this pathname's host.
+</description></definition></section><a name="file-attributes-list"></a>
+
+
+<section chapter-number="26" name="file-attributes-list" number="5" title="File Attribute Lists"><index-entry index="concepts" title="file attribute list"></index-entry>
+
+<index-entry index="concepts" title="attribute list, file"></index-entry>
+
+<p>Any text file can contain an <arg>attribute list</arg> that specifies several attributes
+of the file.  The above loading functions, the compiler, and the editor look
+at this property list.  Attribute lists are especially useful in program
+source files, i.e. a file that is intended to be loaded (or compiled and
+then loaded).  QFASL files also contain attribute lists, copied from
+their source files.
+</p>
+
+<p>If the first non-blank line in a text file contains the three characters
+`<example>-*-</example>',
+some text, and `<example>-*-</example>' again, the text is recognized as the file's attribute list.
+Each attribute consists of the attribute name, a colon, and the attribute value.
+If there is more than one attribute they are separated by semicolons.  An example
+of such an attribute list is:
+
+<lisp>; -*- Mode:Lisp; Package:Cellophane; Base:10 -*-
+</lisp>This defines three attributes: mode, package, and base.
+The initial semicolon makes the line look like a comment rather than a Lisp expression.
+Another example is:
+
+<lisp>.c Part of the Lisp Machine manual.  -*- Mode:Bolio -*-
+</lisp></p>
+
+<p>An attribute name is made up of letters, numbers, and otherwise-undefined
+punctuation characters such as hyphens.  An attribute value can be such a
+name, or a decimal number, or several such items separated by commas.
+Spaces may be used freely to separate tokens.  Upper and lower-case
+letters are not distinguished.  There is <arg>no</arg> quoting convention for
+special characters such as colons and semicolons.
+</p>
+
+<p>If the attribute list text contains no colons, it is an old Emacs
+format, containing only the value of the <obj>Mode</obj> attribute.
+</p>
+
+<p>The file attribute list format actually has nothing to do with Lisp; it
+is just a convention for placing some information into a file that is
+easy for a program to interpret.  The Emacs editor on the PDP-10 knows
+how to interpret these attribute lists (primarily in order to look at the
+<obj>Mode</obj> attribute).
+</p>
+
+<p>The Lisp Machine handles the attribute list stored in the file by
+parsing it into a Lisp data structure, a property list.  Attribute names
+are interpreted as Lisp symbols and are interned on the keyword package.
+Numbers are interpreted as Lisp fixnums and are read in decimal.  If a
+attribute value contains any commas, then the commas separate several
+expressions that are formed into a list.
+</p>
+
+<p>When a file is compiled, its attribute list data structure is stored in
+the QFASL file.  It can be loaded back from the QFASL file as well.
+The representation in the QFASL file resembles nothing described here,
+but when the attribute list is extracted from there, the same Lisp data
+structure described above is obtained.
+</p>
+
+<p>When a file is edited, loaded, or compiled, its file attribute list is
+read in and the properties are stored on the property list of the
+generic pathname (see <ref chapter="25" definition-in-file="pathnm" key="generic-pathname" section="5" title="Generic Pathnames" type="section"></ref>) for that file, where they can
+be retrieved with the <obj>:get</obj> and <obj>:plist</obj> messages.  This is done
+using the function <obj>fs:read-attribute-list</obj>, below.  So the way you
+examine the properties of a file is usually to use messages to a
+pathname object that represents the generic pathname of a file.  Note
+that there are other properties there, too.
+</p>
+
+<p>Here the attribute names with standard meanings:
+
+<table><tbody><tr><td><standard>Mode</standard></td><td>The editor major mode to be used when editing this file.  This is typically
+the name of the language in which the file is written.  The most common values
+are <obj>Lisp</obj> and <obj>Text</obj>.
+
+</td></tr><tr><td><standard>Package</standard></td><td>This attribute specifies the package in which symbols in the file should
+be interned.  The attribute may be either the name of a package, or a
+list that specifies both the package name and how to create the package
+if it does not exist.  If it is a list, it should look like
+<obj>(<arg>name</arg> <arg>superpackage</arg> <arg>initial-size</arg> <arg>...options...</arg>)</obj>.  See <ref chapter="28" definition-in-file="packd" key="package" section="0" title="Packages" type="section"></ref>
+for more information about packages.
+
+</td></tr><tr><td><standard>Base</standard></td><td>The number base in which the file is written (remember, it is
+always parsed in decimal).  This affects both <obj>*read-base*</obj> and <obj>*print-base*</obj>,
+since it is confusing to have the input and output bases be different.
+The most common values are 8 and 10.
+
+</td></tr><tr><td><standard>Readtable</standard></td><td>The value specifies the syntax (that is, the choice of readtable)
+to use for reading Lisp objects from this file.
+The defined values are <obj>t</obj> or <obj>traditional</obj> for traditional
+Lisp Machine syntax, and <obj>cl</obj> or <obj>common-lisp</obj> for Common Lisp syntax.
+If you do not specify this option, the objects in the file are read
+using whatever readtable is current in the program that reads them.
+
+</td></tr><tr><td><standard>Lowercase</standard></td><td>If the attribute value is not <obj>nil</obj>, the file is written in lower-case letters
+and the editor does not translate to upper case.  (The editor does not translate
+to upper case by default unless the user enables Electric Shift Lock mode.)
+
+</td></tr><tr><td><standard>Fonts</standard></td><td>The attribute value is a list of font names, separated by commas.  The editor
+uses this for files that are to be displayed in a specific font, or
+contain multiple fonts.  If this attribute is present,
+the file is actually stored in the file system with font-change indicators.
+A font-change indicator is an epsilon (<example>ε</example>) followed by a digit or <example>*</example>.
+<example>ε</example><arg>n</arg> means to enter font <arg>n</arg>.  The previous font is saved on a stack
+and <example>ε</example><arg>*</arg> means to pop the stack, returning to the previous font.
+If the file includes an epsilon as part of its contents, it is stored as
+<example>εε</example>.
+
+When expressions are read from such files, font-change indicators
+are ignored, and <example>εε</example> is treated as a single <example>ε</example>.
+
+</td></tr><tr><td><standard>Backspace</standard></td><td>If the attribute value is not <obj>nil</obj>, <obj>Overstrike</obj> characters in the
+file should cause characters to overprint on each other.  The default is
+to disallow overprinting and display <obj>Overstrike</obj> the way other
+special function keys are displayed.  This default is to prevent the
+confusion that can be engendered by overstruck text.
+
+</td></tr><tr><td><standard>Patch-File</standard></td><td>If the attribute value is not <obj>nil</obj>, the file is a <arg>patch file</arg>.  When it is loaded
+the system will not complain about function redefinitions.  In a patch
+file, the <obj>defvar</obj> special-form turns into <obj>defconst</obj>; thus patch files
+always reinitialize variables.  Patch files are usually created by special
+editor commands described in <ref chapter="29" definition-in-file="patch" key="patch-facility" section="8" title="The Patch Facility" type="section"></ref>.
+
+</td></tr><tr><td><standard>Cold-Load</standard></td><td>A non-<obj>nil</obj> value for this attribute identifies files that are part of
+the cold load, the core from which a new system version is built.
+Certain features that do not work in the cold load check this flag to
+give an error or a compiler warning if used in such files, so that the
+problem can be detected sooner.
+
+</td></tr></tbody></table></p>
+
+<p>You are free to define additional file attributes of your own.  However,
+to avoid accidental name conflicts, you should choose names that are
+different from all the names above, and from any names likely to be
+defined by anybody else's programs.
+</p>
+
+<p>The following functions are used to examine file attribute lists:
+</p>
+<definition><define key="fs:file-attribute-list-fun" name="fs:file-attribute-list" type="fun"><args>pathname</args>
+</define>
+
+<description>Returns the attribute list of the file specified by the pathname.
+This works on both text files and QFASL files.
+</description></definition><definition><define key="fs:extract-attribute-list-fun" name="fs:extract-attribute-list" type="fun"><args>stream</args>
+</define>
+
+<description>Returns the attribute list read from the specified stream, which should
+be pointing to the beginning of a file.  This
+works on both text streams and QFASL file binary streams.
+After the attribute list is read, the stream's pointer is set back to
+the beginning of the file using the <obj>:set-pointer</obj> file
+stream operation (see <ref definition-in-file="stream" key="streams-set-pointer-method" title="Meta-Method streams :set-pointer" type="metamethod"></ref>).
+</description></definition><definition><define key="fs:read-attribute-list-fun" name="fs:read-attribute-list" type="fun"><args>pathname stream</args>
+</define>
+
+<description><arg>pathname</arg> should be a pathname object (<arg>not</arg> a string or namelist,
+but an actual pathname); usually it is a generic pathname (see
+<ref chapter="25" definition-in-file="pathnm" key="generic-pathname" section="5" title="Generic Pathnames" type="section"></ref>).  <arg>stream</arg> should be a stream that has been
+opened and is pointing to the beginning of the file whose file attribute
+list is to be parsed.  The attribute list is read from the stream and
+then corresponding properties are placed on the specified <arg>pathname</arg>.
+The attribute list is also returned.
+</description></definition>
+<p>The fundamental way that programs in the Lisp Machine notice the
+presence of properties on a file's attribute list is by examining the
+property list in the generic pathname.  However, there is another way
+that is more convenient for some applications.  File attributes can
+cause special variables to be bound whenever Lisp expressions are being
+read from the file--when the file is being loaded, when it is being
+compiled, when it is being read from by the editor, and when its QFASL
+file is being loaded.  This is how the <obj>Package</obj> and <obj>Base</obj> attributes work.
+You can also deal with attributes this way, by using the following function:
+</p>
+<definition><define key="fs:file-attribute-bindings-fun" name="fs:file-attribute-bindings" type="fun"><args>pathname</args>
+</define>
+
+<description>Returns values describing the special variables that should be bound
+before reading expressions from file <arg>pathname</arg>.
+It examines the property list of <arg>pathname</arg> and finds all
+those property names that have <obj>fs:file-attribute-bindings</obj> properties.
+Each such property name specifies a set of variables to bind and
+a set of values to which to bind them.  This function returns two values,
+a list of all the variables and a list of all the corresponding values.
+Usually you use this function by calling it on a generic pathname
+that has had <obj>fs:read-attribute-list</obj> done on it, and then
+you use the two returned values as the first two arguments of a
+<obj>progv</obj>
+special form (see <ref definition-in-file="fd-eva" key="progv-fun" title="Special Form progv" type="spec"></ref>).  Inside the body of the <obj>progv</obj> the
+specified bindings will be in effect.
+
+<arg>pathname</arg> may be anything acceptable as the first argument of <obj>get</obj>.
+Usually it is a generic pathname.
+
+Of the standard attribute names, the following ones have
+<obj>fs:file-attribute-bindings</obj>, with the following effects.  <obj>Package</obj>
+binds the variable <obj>package</obj> (see <ref definition-in-file="packd" key="package-var" title="Variable package" type="var"></ref>) to the package.
+<obj>Base</obj> binds the variables <obj>*print-base*</obj> (see <ref definition-in-file="rdprt" key="base-var" title="Variable base" type="var"></ref>) and <obj>*read-base*</obj>
+(see <ref definition-in-file="rdprt" key="ibase-var" title="Variable ibase" type="var"></ref>) to the value.  <obj>Readtable</obj> binds the variable <obj>readtable</obj>
+to a value computed from the specified attribute.  <obj>Patch-file</obj> binds
+<obj>fs:this-is-a-patch-file</obj> to the value.  <obj>Cold-load</obj> binds
+<obj>si:file-in-cold-load</obj> to the value.  <obj>Fonts</obj> binds
+<obj>si:read-discard-font-changes</obj> to <obj>t</obj>.
+
+Any properties whose names do not have <obj>fs:file-attribute-bindings</obj>
+properties are ignored completely.
+
+You can also add your own attribute names that affect bindings.  If
+an indicator symbol has an <obj>fs:file-attribute-bindings</obj> property, the
+value of that property is a function that is called when a file with a
+file attribute of that name is going to be read from.  The function is
+given three arguments: the file pathname, the attribute name, and the
+attribute value.  It must return two values: a list of variables to be
+bound and a list of values to bind them to.  The function for the
+<obj>Base</obj> keyword could have been defined by:
+
+<lisp>(defun (:base file-attribute-bindings) (file ignore bse)
+  (if (not (and (typep bse 'fixnum)
+                (&gt; bse 1)
+                (&lt; bse 37.)))
+      (ferror 'fs:invalid-file-attrbute
+              &quot;File ~A has an illegal -*- Base:~D -*-&quot;
+              file bse))
+  (values (list 'base 'ibase) (list bse bse)))
+</lisp></description></definition><definition><define key="fs:extract-attribute-bindings-fun" name="fs:extract-attribute-bindings" type="fun"><args>stream</args>
+</define>
+
+<description>Returns two values: a list of variables, and a corresponding list of values to bind them to,
+giving the attribute bindings of the attribute list found on <arg>stream</arg>
+</description></definition><definition><define key="fs:invalid-file-attribute-condition" name="fs:invalid-file-attribute" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>An attribute in the file attribute list had a bad value.  This is detected within
+<obj>fs:file-attribute-bindings</obj>.
+</description></definition></section><a name="directory-list"></a>
+
+
+<section chapter-number="26" name="directory-list" number="6" title="Accessing Directories"><p>To understand the functions in this section, it is vital to have read
+the chapter on <arg>pathnames</arg>.  The <arg>filespec</arg> argument in many of
+these functions may be a pathname or a namestring; its name, type and
+version default to <obj>:wild</obj>.
+</p>
+
+<index-entry index="concepts" title="file directory"></index-entry>
+
+<index-entry index="concepts" title="directory (of files)"></index-entry>
+<definition><define key="listf-fun" name="listf" type="fun"><args>filespec</args>
+</define>
+
+<description>Prints on <obj>*standard-output*</obj> the names of the files that match
+<arg>filespec</arg>, and their sizes, creation dates, and other information
+that comes in the directory listing.
+</description></definition><definition><define key="fs:directory-list-fun" name="fs:directory-list" type="fun"><args>filespec <standard>&amp;rest</standard> options</args>
+</define>
+
+<description>Finds all the files that match <arg>filespec</arg> and returns a list with one
+element for each file.  Each element is a list whose car is the pathname
+of the file and whose cdr is a list of the properties of the file; thus the element
+is a disembodied property list and <obj>get</obj> may be used to access the file's
+properties.  The car of one element is <obj>nil</obj>; the properties in this element
+are properties of the file system as a whole rather than of a specific file.
+
+<arg>filespec</arg> normally contains wildcards, and the data returned
+describe all existing files that match it.  If it contains no wildcards,
+it specifies a single file and only that file is described
+in the data that are returned.
+
+The <arg>options</arg> are keywords which modify the operation.  The following options
+are currently defined:
+
+<table><tbody><tr><td><obj>:noerror</obj></td>
+<td><index-entry index="keywords" title=":noerror fs:directory-list"></index-entry>
+If a file-system error (such as no such directory) occurs during the operation,
+normally an error is signaled and the user is asked to supply a new pathname.
+However, if <obj>:noerror</obj> is specified then, in the event of an error,
+a condition object describing the error is returned as the result of <obj>fs:directory-list</obj>.
+This is identical to the <obj>:noerror</obj> option to <obj>open</obj>.
+
+</td></tr><tr><td><obj>:deleted</obj></td>
+<td><index-entry index="keywords" title=":deleted fs:directory-list"></index-entry>
+This is for file servers on which deletion is not permanent.  It specifies
+that deleted (but not yet expunged) files are to be included in the
+directory listing.
+
+</td></tr><tr><td><obj>:sorted</obj></td>
+<td><index-entry index="keywords" title=":sorted fs:directory-list"></index-entry>
+This requests that the directory list be sorted by filenames before it
+is returned.
+</td></tr></tbody></table>
+The properties that may appear in the list of property lists returned by
+<obj>fs:directory-list</obj> are host-dependent to some extent.  The following
+properties are those that are defined for both ITS and TOPS-20 file servers.  This set of
+properties is likely to be extended or changed in the future.
+
+<index-entry index="concepts" title="file properties"></index-entry>
+
+<table><tbody><tr><td><obj>:length-in-bytes</obj></td><td>The length of the file expressed in terms of the basic units in which it is written
+(characters in the case of a text file).
+</td></tr><tr><td><obj>:byte-size</obj></td><td>The number of bits in one of those units.
+</td></tr><tr><td><obj>:length-in-blocks</obj></td><td>The length of the file in terms of the file system's unit of storage allocation.
+</td></tr><tr><td><obj>:block-size</obj></td><td>The number of bits in one of those units.
+</td></tr><tr><td><obj>:creation-date</obj></td><td>The date the file was created, as a universal time.  See <ref chapter="35" definition-in-file="time" key="time" section="0" title="Dates and Times" type="section"></ref>.
+</td></tr><tr><td><obj>:reference-date</obj></td><td>The most recent date on which the file was used, as a universal time or
+<obj>nil</obj>, meaning the file was never referenced.
+</td></tr><tr><td><obj>:modification-date</obj></td><td>The most recent date on which the file's contents were changed, as a
+universal time.
+</td></tr><tr><td><obj>:author</obj></td><td>The name of the person who created the file, as a string.
+</td></tr><tr><td><obj>:reader</obj></td><td>The name of the person who last read the file, as a string.
+</td></tr><tr><td><obj>:not-backed-up</obj></td><td><obj>t</obj> if the file exists only on disk, <obj>nil</obj> if it has been backed up on magnetic tape.
+</td></tr><tr><td><obj>:directory</obj></td><td><obj>t</obj> if this file is actually a directory.
+</td></tr><tr><td><obj>:temporary</obj></td><td><obj>t</obj> if this file is temporary.
+</td></tr><tr><td><obj>:deleted</obj></td><td><obj>t</obj> if this file is deleted.  Deleted files are included in the
+directory list only if you specify the <obj>:deleted</obj> option.
+</td></tr><tr><td><obj>:dont-delete</obj></td><td><obj>t</obj> indicates that the file is not allowed to be deleted.
+</td></tr><tr><td><obj>:dont-supersede</obj></td><td><obj>t</obj> indicates that the file may not be superseded; that is, a file
+with the same name and higher version may not be created.
+</td></tr><tr><td><obj>:dont-reap</obj></td><td><obj>t</obj> indicates that this file is not supposed to be deleted
+automatically for lack of use.
+</td></tr><tr><td><obj>:dont-dump</obj></td><td><obj>t</obj> indicates that this file is not supposed to be dumped onto
+magnetic tape for backup purposes.
+</td></tr><tr><td><obj>:characters</obj></td><td><obj>t</obj> indicates that this file contains characters (that is, text).
+<obj>nil</obj> indicates that the file contains binary data.
+This property, rather than the file's byte size, should be used to
+decide whether it is a text file.
+</td></tr><tr><td><obj>:link-to</obj></td><td>If the file is a link, this property is a string containing the name that
+the link points to.
+</td></tr><tr><td><obj>:offline</obj></td><td><obj>T</obj> if the file's contents are not online.
+</td></tr><tr><td><obj>:incremental-dump-date</obj></td><td>The last time this file was dumped during an incremental dump (a
+universal time).
+</td></tr><tr><td><obj>:incremental-dump-tape</obj></td><td>The tape on which the last was saved in that incremental dump (a
+string).
+</td></tr><tr><td><obj>:complete-dump-date</obj></td><td>The last time this file was dumped during an full dump (a
+universal time).
+</td></tr><tr><td><obj>:complete-dump-tape</obj></td><td>The tape on which the last was saved in that full dump (a
+string).
+</td></tr><tr><td><obj>:generation-retention-count</obj></td><td>The number of files differing in version that are kept around.
+</td></tr><tr><td><obj>:default-generation-retention-count</obj></td><td>The generation-retention-count that a file ordinarily gets when it is
+created in this directory.
+</td></tr><tr><td><obj>:auto-expunge-interval</obj></td><td>The interval at which files are expunged from this directory, in
+seconds.
+</td></tr><tr><td><obj>:date-last-expunged</obj></td><td>The last (universal) time this directory was expunged, or <obj>nil</obj>.
+</td></tr><tr><td><obj>:account</obj></td><td>The account to which the file belongs, a string.
+</td></tr><tr><td><obj>:protection</obj></td><td>A system-dependent description of the protection of this file as a
+string.
+</td></tr><tr><td><obj>:physical-volume</obj></td><td>A string naming the physical volume on which the file is found.
+</td></tr><tr><td><obj>:volume-name</obj></td><td>A string naming the logical volume on which the file is found.
+</td></tr><tr><td><obj>:pack-number</obj></td><td>A string describing the pack on which this file is found.
+</td></tr><tr><td><obj>:disk-space-description</obj></td><td>A system-dependent description of the space usage on the file system.
+This usually appears in the plist that applies to the entire directory
+list.
+</td></tr></tbody></table>
+The element in the directory list that has <obj>nil</obj> instead of a file's
+pathname describes the directory as a whole.
+
+
+<table><tbody><tr><td><obj>:physical-volume-free-blocks</obj></td><td>This property is an alist in which each element maps a physical volume
+name (a string) into a number, that is the number of free blocks on that volume.
+</td></tr><tr><td><obj>:settable-properties</obj></td><td>This property is a list of file property names that may be set.
+This information is provided in the directory list because it is
+different for different file systems.
+</td></tr><tr><td><obj>:pathname</obj></td><td>This property is the pathname from which this directory list was made.
+</td></tr><tr><td><obj>:block-size</obj></td><td>This is the number of words in a block in this directory.  It can be
+used to interpret the numbers of free blocks.
+</td></tr></tbody></table></description></definition><definition><define key="fs:directory-list-stream-fun" name="fs:directory-list-stream" type="fun"><args>filespec <standard>&amp;rest</standard> options</args>
+</define>
+
+<description>This is like <obj>fs:directory-list</obj> but returns the information in a
+different form.  Instead of returning the directory list all at once, it
+returns a special kind of stream which gives out one element of the
+directory list at a time.
+
+The directory list stream supports two operations: <obj>:entry</obj> and
+<obj>:close</obj>.  <obj>:entry</obj> asks for the next element of the directory
+stream.  <obj>:close</obj> closes any connection to a remote file server.
+
+The purpose of using <obj>fs:directory-list-stream</obj> instead of
+<obj>fs:directory-list</obj> is that, when communicating with a remote file
+server, the directory list stream can give you some of the
+information without waiting for it to all be transmitted and parsed.
+This is desirable if the directory is being printed on the console.
+</description></definition><definition><define key="directory-fun" name="directory" type="fun"><args>filespec</args>
+</define>
+
+<description>Returns a list of pathnames (truenames) of the files in the directory specified
+by <arg>filespec</arg>.  Wildcards are allowed.  This is the Common Lisp way
+to find the contents of a directory.
+</description></definition><definition><define key="fs:expunge-directory-fun" name="fs:expunge-directory" type="fun"><args>filespec <standard>&amp;key</standard> (error <obj>t</obj>)</args>
+</define>
+
+<description>Expunges the directory specified in <arg>filespec</arg>; that is, permanently
+eliminates any deleted files in that directory.  If <arg>error</arg> is <obj>nil</obj>,
+there is no error if the directory does not exist.
+
+Note that not all file systems support this function.  To find out
+whether a particular one does, send the <obj>:undeletable-p</obj> operation to
+a pathname.  If it returns <obj>t</obj>, the file system of that pathname
+supports undeletion (and therefore expunging).
+</description></definition><definition><define key="fs:create-directory-fun" name="fs:create-directory" type="fun"><args>filespec <standard>&amp;key</standard> (error <obj>t</obj>)</args>
+</define>
+
+<description>Creates the directory specified in <arg>filespec</arg>.
+If <arg>error</arg> is <obj>nil</obj>, there is no error if the directory cannot be
+created; instead an error string is returned.
+Not all file servers support creation of directories.
+</description></definition><definition><define key="fs:remote-connect-fun" name="fs:remote-connect" type="fun"><args>filespec <standard>&amp;key</standard> (error <obj>t</obj>) access</args>
+</define>
+
+<description>Performs the TOPS-20 ``connect'' or ``access'' function, or their
+equivalents, in a remote file server.  Access is done if
+<arg>access</arg> is non-<obj>nil</obj>; otherwise, connect is done.
+
+The connect operation grants you full access to the
+specified directory.  The access operation grants you whatever access
+to all files and directories you would have if logged in on the
+specified directory.  Both operations affect access only, since the connected
+directory of the remote server is never used by the Lisp Machine in
+choosing which file to operate on.
+
+This function may ask you for a password if one is required for the
+directory you specify.  If the operation cannot be performed, then if
+<arg>error</arg> is <obj>nil</obj>, an error object is returned.
+</description></definition><need amount="1800"></need><nopara></nopara>
+<p>File Properties:
+</p>
+<definition><define key="fs:change-file-properties-fun" name="fs:change-file-properties" type="fun"><args>file error-p <standard>&amp;rest</standard> properties</args>
+</define>
+
+<description>Changes one or more properties of the
+file <arg>file</arg>.  The <arg>properties</arg> arguments are alternating keywords
+and values.  If an error occurs accessing the file or changing the
+properties, the <arg>error-p</arg> argument controls what is done; if it is
+<obj>nil</obj>, a condition object describing the error is returned; if it is
+<obj>t</obj> a Lisp error is signaled.  If no error occurs,
+<obj>fs:change-file-properties</obj> returns <obj>t</obj>.
+
+Only some of the properties of a file may be changed; for instance,
+its creation date or its author.  Exactly which properties may be
+changed depends on the host file system; a list of the changeable
+property names is the <obj>:settable-properties</obj> property of the file
+system as a whole, returned by <obj>fs:directory-list</obj> as explained
+above.
+</description></definition><definition><define key="fs:file-properties-fun" name="fs:file-properties" type="fun"><args>file <standard>&amp;optional</standard> (error-p <obj>t</obj>)</args>
+</define>
+
+<description>Returns a disembodied property list for a single file (compare this to
+<obj>fs:directory-list</obj>).  The car of the returned list is the truename of
+the file and the cdr is an alternating list of indicators and values.
+The <arg>error-p</arg> argument is the same as in <obj>fs:change-file-properties</obj>.
+</description></definition><need amount="1800"></need><nopara></nopara>
+<p>Filename Completion:
+
+<index-entry index="concepts" title="filename completion"></index-entry>
+</p>
+<definition><define key="fs:complete-pathname-fun" name="fs:complete-pathname" type="fun"><args>defaults string type version <standard>&amp;rest</standard> options</args>
+</define>
+
+<description><arg>string</arg> is a partially-specified file name.  (Presumably it was typed in by a user
+and terminated with the <obj>Altmode</obj> key or the <obj>End</obj> key to request completion.)
+<obj>fs:complete-pathname</obj> looks in the file system on the appropriate host and
+returns a new, possibly more specific string.  Any unambiguous abbreviations
+are expanded out in a host-dependent fashion.
+
+<arg>defaults</arg>, <arg>type</arg>, and <arg>version</arg> are the arguments to be given to
+<obj>fs:merge-pathname-defaults</obj> (see <ref definition-in-file="pathnm" key="fs:merge-pathname-defaults-fun" title="Function fs:merge-pathname-defaults" type="fun"></ref>) when the
+user's input is eventually parsed and defaulted.
+
+<arg>options</arg> are keywords (without following values) that control how the
+completion is performed.  The following option keywords are allowed:
+
+<table><tbody><tr><td><obj>:deleted</obj></td><td>Looks for files which have been deleted but not yet expunged.
+
+</td></tr><tr><td><obj>:read <standard>or</standard> :in</obj></td>
+<td><index-entry index="keywords" title=":read fs:complete-pathname"></index-entry>
+
+<index-entry index="keywords" title=":in fs:complete-pathname"></index-entry>
+The file is going to be read.  This is the default.
+
+</td></tr><tr><td><obj>:print <standard>or</standard> :write <standard>or</standard> :out</obj></td>
+<td><index-entry index="keywords" title=":print fs:complete-pathname"></index-entry>
+
+<index-entry index="keywords" title=":write fs:complete-pathname"></index-entry>
+
+<index-entry index="keywords" title=":out fs:complete-pathname"></index-entry>
+The file is going to be written (i.e. a new version is going to be created).
+
+</td></tr><tr><td><obj>:old</obj></td><td>Looks only for files that already exist.  This is the default.
+
+</td></tr><tr><td><obj>:new-ok</obj></td><td>Allows either a file that already exists or a file that does not yet exist.
+An example of the use of this is the <obj>C-X</obj> <obj>C-F</obj> (Find File) command in the editor.
+
+</td></tr></tbody></table>
+The first value returned is always a string containing a file name, either the
+original string or a new, more specific string.  The second value returned
+indicates the success or failure of the completion.  It is <obj>nil</obj> if an
+error occurred.  One possible error is that the file is on a file system that
+does not support completion, in which case the original string is returned
+unchanged.  Other possible second values are <obj>:old</obj>, which means that the
+string completed to the name of a file that exists, <obj>:new</obj>, which means that
+the string completed to the name of a file that could be created, and <obj>nil</obj>
+again, which means that there is no possible completion.
+</description></definition><need amount="1800"></need><nopara></nopara>
+<p>Balance Directories:
+
+<index-entry index="concepts" title="balance directories"></index-entry>
+</p>
+<definition><define key="fs:balance-directories-fun" name="fs:balance-directories" type="fun"><args>filespec1 filespec2 <standard>&amp;rest</standard> options</args>
+</define>
+
+<description><obj>fs:balance-directories</obj> is a function for maintaining multiple copies
+of a directory.  Often it is useful to maintain copies of your files on
+more than one machine; this function provides a simple way of keeping
+those copies up to date.
+
+The function first parses <arg>filespec1</arg>, filling in missing components
+with wildcards (except for the version, which is <obj>:newest</obj>).  Then
+<arg>filespec2</arg> is parsed with <arg>filespec1</arg> as the default.  The
+resulting pathnames are used to generate directory lists using
+<obj>fs:directory-list</obj>.  Note that the resulting directory lists need not
+be entire directories; any subset of a directory that
+<obj>fs:directory-list</obj> can produce will do.
+
+First the directory lists are matched up on the basis of file name and
+type.  All of the files in either directory list which have both the
+same name and the same type are grouped together.
+
+The directory lists are next analyzed to determine if the directories
+are consistent, meaning that two files with the same name and type have
+equal creation-dates when their versions match, and greater versions
+have later creation-dates.  If any inconsistencies are found, a warning
+message is printed on the console.
+
+If the version specified for both <arg>filespec1</arg> and <arg>filespec2</arg> was
+<obj>:newest</obj> (the default), then the newest version of each file in each
+directory is copied to the other directory if it is not already
+there.  The result is that each directory has the newest copy
+of every file in either of the two directories.
+
+If one or both of the specified versions is not <obj>:newest</obj>, then <arg>every</arg>
+version that appears in one directory list and not in the other is
+copied.  This has the result that the two directories are completely the
+same.  (Note that this is probably not the right thing to use to
+<arg>copy</arg> an entire directory.  Use <obj>copy-file</obj> with a wildcard
+argument instead.)
+
+The <arg>options</arg> are keywords arguments which modify the operation.  The
+following options are currently defined:
+
+
+<table><tbody><tr><td><obj>:ignore</obj></td>
+<td><index-entry index="keywords" title=":ignore fs:balance-directories"></index-entry>
+This option takes one argument, which is a list of file names to ignore
+when making the directory lists.  The default value is <obj>nil</obj>.
+
+</td></tr><tr><td><obj>:error</obj></td>
+<td><index-entry index="keywords" title=":error fs:balance-directories"></index-entry>
+This option is identical to the <obj>:error</obj> option to <obj>open</obj>.
+
+</td></tr><tr><td><obj>:query-mode</obj></td>
+<td><index-entry index="keywords" title=":query-mode fs:balance-directories"></index-entry>
+This option takes one argument, which indicates whether or not the user
+should be asked before files are transferred.  If the argument is
+<obj>nil</obj>, no querying is done.  If it is <obj>:1-&gt;2</obj>, then only files
+being transferred from <arg>filespec2</arg> to <arg>filespec1</arg> are queried,
+while if it is <obj>:2-&gt;1</obj>, then files transferred from <arg>filespec1</arg> to
+<arg>filespec2</arg> are queried.  If the argument is <obj>:always</obj>, then
+the user is asked about all files.
+
+</td></tr><tr><td><obj>:copy-mode</obj></td>
+<td><index-entry index="keywords" title=":copy-mode fs:balance-directories"></index-entry>
+This option is identical to the <obj>:copy-mode</obj> option of <obj>copy-file</obj>,
+and is used to control whether files are treated as binary or textual
+data.
+
+</td></tr><tr><td><obj>:direction</obj></td><td>This option specifies transfer of files in one direction only.
+If the value is <obj>:1-&gt;2</obj> then files are transfered only from <arg>filespec1</arg>
+to <arg>filespec2</arg>, never in the other direction.  If the value is
+<obj>:2-&gt;1</obj> then files are transferred only from <arg>filespec2</arg> to
+<arg>filespec1</arg>.  <obj>nil</obj>, the default, means transfer in either direction
+as appropriate.
+</td></tr></tbody></table></description></definition></section><a name="Errors in Accessing Files"></a>
+
+<section chapter-number="26" name="Errors in Accessing Files" number="7" title="Errors in Accessing Files"><definition><define key="fs:file-error-condition-flavor" name="fs:file-error" type="condition-flavor"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This flavor is the basis for all errors signaled by the file system.
+
+It defines two special operations, <obj>:pathname</obj> and <obj>:operation</obj>.
+Usually, these return the pathname of the file being operated on, and
+the operation used.  This operation was performed either on the pathname
+object itself, or on a stream.
+
+It defines prompting for the proceed types <obj>:retry-file-operation</obj> and
+<obj>:new-pathname</obj>, both of which are provided for many file errors.
+<obj>:retry-file-operation</obj> tries the operation again exactly as it was
+requested by the program; <obj>:new-pathname</obj> expects on argument, a
+pathname, and tries the same operation on this pathname instead of the
+original one.
+</description></definition><definition><define key="fs:file-operation-failure-condition" name="fs:file-operation-failure" type="condition"><args>(<obj>fs:file-error</obj>)</args>
+</define>
+
+<description>This condition name signifies a problem with the file operation
+requested.  It is an alternative to <obj>fs:file-request-failure</obj>
+(<ref definition-in-file="files" key="file-request-failure-page" type="page"></ref>), which means that the file system
+was unable to consider the operation properly.
+</description></definition>
+<p>All the following conditions in this section are always accompanied by
+<obj>fs:file-operation-failure</obj>, <obj>fs:file-error</obj>, and <obj>error</obj>, so they
+will not be mentioned.
+</p>
+<definition>
+<define key="fs:file-open-for-output-condition" name="fs:file-open-for-output" type="condition"></define>
+
+<description>The request cannot be performed because the file is open for output.
+</description></definition><definition>
+<define key="fs:file-locked-condition" name="fs:file-locked" type="condition"></define>
+
+<description>The file cannot be accessed because it is already being accessed.  Just
+which kinds of simultaneous access are allowed depends on the file
+system.
+</description></definition><definition>
+<define key="fs:circular-link-condition" name="fs:circular-link" type="condition"></define>
+
+<description>A link could not be opened because it pointed, directly or indirectly
+through other links, to itself.  In fact, some systems report this condition
+whenever a chain of links exceeds a fixed length.
+</description></definition><definition>
+<define key="fs:invalid-byte-size-condition" name="fs:invalid-byte-size" type="condition"></define>
+
+<description>In <obj>open</obj>, the specified byte size was not valid for the particular
+file server or file.
+</description></definition><definition>
+<define key="fs:no-more-room-condition" name="fs:no-more-room" type="condition"></define>
+
+<description>Processing a request requires resources not available, such as
+space in a directory, or free disk blocks.
+</description></definition><definition>
+<define key="fs:filepos-out-of-range-condition" name="fs:filepos-out-of-range" type="condition"></define>
+
+<description>The <obj>:set-pointer</obj> operation was used with a pointer value outside the bounds of the file.
+</description></definition><definition>
+<define key="fs:not-available-condition" name="fs:not-available" type="condition"></define>
+
+<description>A requested pack, file, etc. exists but is currently off line or not available to users.
+</description></definition><definition>
+<define key="fs:file-lookup-error-condition" name="fs:file-lookup-error" type="condition"></define>
+
+<description>This condition name categorizes all sorts of failure to find a specified file,
+for any operation.
+</description></definition><definition><define key="fs:device-not-found-condition" name="fs:device-not-found" type="condition"><args>(<obj>fs:file-lookup-error</obj>)</args>
+</define>
+
+<description>The specified device does not exist.
+</description></definition><definition><define key="fs:directory-not-found-condition" name="fs:directory-not-found" type="condition"><args>(<obj>fs:file-lookup-error</obj>)</args>
+</define>
+
+<description>The specified directory does not exist.
+</description></definition><definition><define key="fs:file-not-found-condition" name="fs:file-not-found" type="condition"><args>(<obj>fs:file-lookup-error</obj>)</args>
+</define>
+
+<description>There is no file with the specified name, type and version.
+This implies that the device and directory do exist,
+or one of the errors described above would have been signaled.
+</description></definition><definition><define key="fs:multiple-file-not-found-condition" name="fs:multiple-file-not-found" type="condition"><args>(<obj>fs:file-lookup-error</obj>)</args>
+</define>
+
+<description>There is no file with the specified name and any of the
+specified types, in <obj>with-open-file-search</obj>.
+Three special operations are defined:
+
+<table><tbody><tr><td><obj>:operation</obj></td><td>Returns the function which used <obj>with-open-file-search</obj>, such as <obj>load</obj>.
+</td></tr><tr><td><obj>:pathname</obj></td><td>The base pathname used.
+</td></tr><tr><td><obj>:pathnames</obj></td><td>A list of all the pathnames that were looked for.
+</td></tr></tbody></table></description></definition><definition><define key="fs:link-target-not-found-condition" name="fs:link-target-not-found" type="condition"><args>(<obj>fs:file-lookup-error</obj>)</args>
+</define>
+
+<description>The file specified was a link, but the link's target filename
+fails to be found.
+</description></definition><definition>
+<define key="fs:access-error-condition" name="fs:access-error" type="condition"></define>
+
+<description>The operation is possible, but the file server is insubordinate and refuses to
+obey you.
+</description></definition><definition><define key="fs:incorrect-access-to-file-condition" name="fs:incorrect-access-to-file" type="condition"><args>(<obj>access-error</obj>).</args>
+</define><define key="fs:incorrect-access-to-directory-condition" name="fs:incorrect-access-to-directory" type="condition"><args>(<obj>access-error</obj>).</args>
+</define>
+
+<description>The file server refuses to obey you because of protection attached to
+the file (or, the directory).
+</description></definition><definition>
+<define key="fs:invalid-wildcard-condition" name="fs:invalid-wildcard" type="condition"></define>
+
+<description>A pathname had a wildcard in a place where the particular file server
+does not support them.  Such pathnames are not created by pathname
+parsing, but they can be created with the <obj>:new-pathname</obj> operation.
+</description></definition><definition>
+<define key="fs:wildcard-not-allowed-condition" name="fs:wildcard-not-allowed" type="condition"></define>
+
+<description>A pathname with a wildcard was used in an operation that does not support it.
+For example, opening a file with a wildcard in its name.
+</description></definition><definition>
+<define key="fs:wrong-kind-of-file-condition" name="fs:wrong-kind-of-file" type="condition"></define>
+
+<description>An operation was done on the wrong kind of file.
+If files and directories share one name space and it is an error to open
+a directory, the error possesses this condition name.
+</description></definition><definition>
+<define key="fs:creation-failure-condition" name="fs:creation-failure" type="condition"></define>
+
+<description>An attempt to create a file or directory failed for a reason
+specifically connected with creation.
+</description></definition><definition><define key="fs:file-already-exists-condition" name="fs:file-already-exists" type="condition"><args>(<obj>fs:creation-failure</obj>)</args>
+</define>
+
+<description>The file or directory to be created already exists.
+</description></definition><definition><define key="fs:superior-not-directory-condition" name="fs:superior-not-directory" type="condition"><args>(<obj>fs:creation-failure</obj> <obj>fs:wrong-kind-of-file</obj>)</args>
+</define>
+
+<description>In file systems where directories and files share one name space, this
+error results from an attempt to create a file using a filename
+specifying a directory whose name exists in the file system but is not
+a directory.
+</description></definition><definition>
+<define key="fs:delete-failure-condition" name="fs:delete-failure" type="condition"></define>
+
+<description>A file to be deleted exists, but for some reason cannot be deleted.
+</description></definition><definition><define key="fs:directory-not-empty-condition" name="fs:directory-not-empty" type="condition"><args>(<obj>fs:delete-failure</obj>)</args>
+</define>
+
+<description>A file could not be deleted because it is a directory and has files in it.
+</description></definition><definition><define key="fs:dont-delete-flag-set-condition" name="fs:dont-delete-flag-set" type="condition"><args>(<obj>fs:delete-failure</obj>)</args>
+</define>
+
+<description>A file could not be deleted because its ``don't delete'' flag is set.
+</description></definition><definition>
+<define key="fs:rename-failure-condition" name="fs:rename-failure" type="condition"></define>
+
+<description>A file to be renamed exists, but the renaming could not be done.  The
+<obj>:new-pathname</obj> operation on the condition instance returns the
+specified new pathname, which may be a pathname or a string.
+</description></definition><definition><define key="fs:rename-to-existing-file-condition" name="fs:rename-to-existing-file" type="condition"><args>(<obj>fs:rename-failure</obj>)</args>
+</define>
+
+<description>Renaming cannot be done because there is already a file with the
+specified new name.
+</description></definition><definition><define key="fs:rename-across-directories-condition" name="fs:rename-across-directories" type="condition"><args>(<obj>fs:rename-failure</obj>)</args>
+</define>
+
+<description>Renaming cannot be done because the new pathname contains a different
+device or directory from the one the file is on.  This may not always be
+an error--some file systems support it in certain cases--but when
+it is an error, it has this condition name.
+</description></definition><definition><define key="fs:unknown-property-condition" name="fs:unknown-property" type="condition"><args>(<obj>fs:change-property-failure</obj>)</args>
+</define>
+
+<description>A property name specified in a <obj>:change-properties</obj> operation is not
+supported by the file server.  (Some file servers support only a fixed
+set of property names.)  The <obj>:property</obj> operation on the condition
+instance returns the problematical property name.
+</description></definition><definition><define key="fs:invalid-property-value-condition" name="fs:invalid-property-value" type="condition"><args>(<obj>fs:change-property-failure</obj>)</args>
+</define>
+
+<description>In a <obj>:change-properties</obj> operation, some property was given a value
+that is not valid for it.  The <obj>:property</obj> operation on the
+condition instance returns the property name, and the <obj>:value</obj>
+operation returns the specified value.
+</description></definition><definition><define key="fs:invalid-property-name-condition" name="fs:invalid-property-name" type="condition"><args>(<obj>fs:change-property-failure</obj>)</args>
+</define>
+
+<description>In a <obj>:change-properties</obj> operation, a syntactically invalid property
+name was specified.  This may be because it is too long to be stored.
+The <obj>:property</obj> operation on the condition instance returns the
+property name.
+</description></definition></section><a name="chaosnet"></a>
+
+
+<section chapter-number="26" name="chaosnet" number="8" title="File Servers"><index-entry index="concepts" title="file servers"></index-entry>
+
+<p>Files on remote file servers are accessed using <arg>file servers</arg> over
+the Chaosnet.  Normally connections to servers are established
+automatically when you try to use them, but there are a few ways you can
+interact with them explicitly.
+</p>
+
+<p indent="1">        When characters are written to a file server computer that
+normally uses the ASCII character set to store text, Lisp Machine
+characters are mapped into an encoding that is reasonably close to an
+ASCII transliteration of the text.  When a file is written, the
+characters are converted into this encoding; the inverse
+transformation is done when a file is read back.  No information is
+lost.  Note that the length of a file, in characters, is not the
+same measured in original Lisp Machine characters as it is measured in
+the encoded ASCII characters.  In the currently implemented ASCII file
+servers, the following encoding is used.  All printing characters and
+any characters not mentioned explicitly here are represented as
+themselves.  Codes 010 (lambda), 011 (gamma), 012 (delta), 014
+(plus-minus), 015 (circle-plus), 177 (integral), 200 through 207
+inclusive, 213 (<obj>Delete</obj>), and 216 and anything higher, are preceded
+by a 177; that is, 177 is used as a quoting character for these codes.
+Codes 210 (<obj>Overstrike</obj>), 211 (<obj>Tab</obj>), 212 (<obj>Line</obj>), and 214 (<obj>Page</obj>), are
+converted to their ASCII cognates, namely 010 (backspace), 011
+(horizontal tab), 012 (line feed), and 014 (form feed) respectively.
+Code 215 (<obj>Return</obj>) is converted into 015 (carriage return) followed by
+012 (line feed).  Code 377 is ignored completely, and so cannot be
+stored in files.
+</p>
+
+<index-entry index="concepts" title="fascism"></index-entry>
+
+<index-entry index="concepts" title="passwords"></index-entry>
+
+<p>When a file server is first created for you on a particular host, you
+must tell the server how to log in on that host.  This involves
+specifying a <arg>username</arg>, and, if the obstructionists are in control
+of your site, a password.
+The Lisp Machine prompts you for these on the terminal when they are
+needed.
+</p>
+
+<p>Logging in a file server is not the same thing as logging in on the Lisp
+Machine (see <obj>login</obj>, <ref definition-in-file="fd-hac" key="login-fun" title="Function login" type="fun"></ref>).  The latter identifies you as a
+user in general and involves specifying one host, your login host.  The
+former identifies you to a particular file server host and must be done
+for each host on which you access files.  However, logging in on the
+Lisp Machine does specify the username for your login host and logs in
+a file server there.
+</p>
+
+<p>The Lisp Machine uses your username (or the part that follows
+the last period) as a first guess for your password (this happens to
+take no extra time).  If that does not work, you are asked to type a
+password, or else a username and a password, on the keyboard.  You do
+not have to give the same user name that you are logged in as, since you
+may have or use different user names on different machines.
+</p>
+
+<p>Once a password is recorded for one host, the system uses that password
+as the guess if you connect to a file server on another host.
+</p>
+<definition>
+<define key="fs:user-unames-var" name="fs:user-unames" type="var"></define>
+
+<description>This is an alist matching host names with the usernames you have
+specified on those hosts.  Each element is the cons of a host object and
+the username, as a string.
+
+For hosts running ITS, the symbol <obj>fs:its</obj> is used instead of a
+host object.  This is because every user has the same username on all
+ITS hosts.
+</description></definition><definition>
+<define key="fs:user-host-password-alist-var" name="fs:user-host-password-alist" type="var"></define>
+
+<description>Once you have specified a password for a given username and host, it
+is remembered for the duration of the session in this variable.
+The value is a list of elements, each of the form
+
+<lisp>((<arg>username</arg> <arg>hostname</arg>) <arg>password</arg>)
+</lisp>All three data are strings.
+</description></definition>
+<p>The remembered passwords are used if more than one file server is needed
+on the same host, or if the connection is broken and a new file server
+needs to be created.
+</p>
+
+<index-entry index="concepts" title="paranoia"></index-entry>
+
+<p>If you are very scared of your password being known, you can turn off
+the recording by setting this variable:
+</p>
+<definition>
+<define key="fs:record-passwords-flag-var" name="fs:record-passwords-flag" type="var"></define>
+
+<description>Passwords are recorded when typed in if this variable is non-<obj>nil</obj>.
+</description></definition>
+<p>You should set the variable at the front of your init file, and also set
+<obj>fs:user-host-password-alist</obj> to <obj>nil</obj>, since it will already have
+recorded your password when you logged in.
+</p>
+
+<p>If you do not use a file server for a period of time, it is killed to
+save resources on the server host.
+</p>
+<definition>
+<define key="fs:host-unit-lifetime-var" name="fs:host-unit-lifetime" type="var"></define>
+
+<description>This is the length of time after which an idle file server connection
+should be closed, in 60ths of a second.  The default is 20 minutes.
+</description></definition>
+<p>Some hosts have a caste system in which all users are not equal.  It is
+sometimes necessary to enable one's privileges in order to exercise
+them.  This is done with these functions:
+
+<index-entry index="concepts" title="capabilities"></index-entry>
+</p>
+<definition><define key="fs:enable-capabilities-fun" name="fs:enable-capabilities" type="fun"><args>host <standard>&amp;rest</standard> capabilities</args>
+</define>
+
+<description>Enables the named capabilities on file servers for the specified host.
+<arg>capabilities</arg> is a list of strings, whose meanings depend on the
+particular file system that is available on <arg>host</arg>.
+If <arg>capabilities</arg> is <obj>nil</obj>, a default list of capabilities is
+enabled; the default is also dependent on the operating system type.
+</description></definition><definition><define key="fs:disable-capabilities-fun" name="fs:disable-capabilities" type="fun"><args>host <standard>&amp;rest</standard> capabilities</args>
+</define>
+
+<description>Disables the named capabilities on file servers for the specified host.
+<arg>capabilities</arg> is a list of strings, whose meanings depend on the
+particular file system that is available on <arg>host</arg>.
+If <arg>capabilities</arg> is <obj>nil</obj>, a default list of capabilities is
+disabled; the default is also dependent on the operating system type.
+</description></definition>
+<p>The PEEK utility has a mode that displays the status of all your file
+connections, and of the <arg>host unit</arg> data structures that record them.
+Clicking on a connection with the mouse gets a menu of operations, of
+which the most interesting is <obj>reset</obj>.  Resetting a host unit may
+be useful if the connection becomes hung.
+</p>
+
+
+<subsection name="NIL" title="Errors in Communication with File Servers"><definition><define key="fs:file-request-failure-condition" name="fs:file-request-failure" type="condition"><args>(<obj>fs:file-error</obj> <obj>error</obj>)</args>
+</define>
+
+<description>This condition name categorizes errors that prevent the file system from
+processing the request made by the program.
+</description></definition>
+<p>The following condition names are always accompanied by the more general
+classifications <obj>fs:file-request-failure</obj>, <obj>fs:file-error</obj>, and <obj>error</obj>.
+</p>
+<definition>
+<define key="fs:data-error-condition" name="fs:data-error" type="condition"></define>
+
+<description>This condition signifies inconsistent data found in the file system,
+indicating a failure in the file system software or hardware.
+</description></definition><definition>
+<define key="fs:host-not-available-condition" name="fs:host-not-available" type="condition"></define>
+
+<description>This condition signifies that the file server host is up, but refusing
+connections for file servers.
+</description></definition><definition>
+<define key="fs:network-lossage-condition" name="fs:network-lossage" type="condition"></define>
+
+<description>This condition signifies certain problems in the use of the Chaosnet by a file server,
+such as failure to open a data connection when it is expected.
+</description></definition><definition>
+<define key="fs:not-enough-resources-condition" name="fs:not-enough-resources" type="condition"></define>
+
+<description>This condition signifies a shortage of resources needed to consider
+processing a request, as opposed to resources used up by the request
+itself.  This may include running out of network connections or job
+slots on the server host.  It does not include running out of space in a
+directory or running out of disk space, because these are resources
+whose requirements come from processing the request.
+</description></definition><definition>
+<define key="fs:unknown-operation-condition" name="fs:unknown-operation" type="condition"></define>
+
+<description>This condition signifies that the particular file system fails to
+implement a standardly defined operation; such as, expunging or
+undeletion on ITS.
+</description></definition></subsection></section></chapter>
+</document-part>

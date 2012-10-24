@@ -1,0 +1,329 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part>
+<chapter name="NIL" number="6" title="Resources"><index-entry index="concepts" title="resource"></index-entry>
+
+<index-entry index="concepts" title="allocation of storage"></index-entry>
+
+<index-entry index="concepts" title="storage allocation"></index-entry>
+
+<p>Storage allocation is handled differently by different computer
+systems.  In many languages, the programmer must spend a lot of time
+thinking about when variables and storage units are allocated and
+deallocated.  In Lisp, freeing of allocated storage is normally done
+automatically by the Lisp system; when an object is no longer
+accessible to the Lisp environment, the garbage collector reuses its
+storage for some other object.  This relieves the programmer of a
+great burden, and makes writing programs much easier.
+</p>
+
+<p>However, automatic freeing of storage incurs an expense: more computer
+resources must be devoted to the garbage collector.  If a program is
+designed to allocate temporary storage, which is then left as garbage,
+more of the computer must be devoted to the collection of garbage; this
+expense can be high.  In some cases, the programmer may decide that it
+is worth putting up with the inconvenience of having to free storage
+under program control, rather than letting the system do it
+automatically, in order to prevent a great deal of overhead from the
+garbage collector.
+</p>
+
+<p>It usually is not worth worrying about freeing of storage when the units
+of storage are very small things such as conses or small arrays.
+Numbers are not a problem, either; fixnums and short floats do not occupy
+storage, and the system has a special way of garbage-collecting the
+other kinds of numbers with low overhead.  But when a program allocates and
+then gives up very large objects at a high rate (or large objects at a
+very high rate), it can be worthwhile to keep track of that one
+kind of object manually.  Within the Lisp Machine system, there
+are several programs that are in this position.  The Chaosnet software
+allocates and frees ``packets'', which are moderately large, at a very
+high rate.  The window system allocates and frees certain kinds of
+windows, which are very large, moderately often.  Both of these programs
+manage their objects manually, keeping track of when they are no longer
+used.
+</p>
+
+<p>When we say that a program ``manually frees'' storage, it does not really
+mean that the storage is freed in the same sense that the garbage
+collector frees storage.  Instead, a list of unused objects is kept.
+When a new object is desired, the program first looks on the list to see
+if there is one around already, and if there is it uses it.  Only if the
+list is empty does it actually allocate a new one.  When the program is
+finished with the object, it returns it to this list.
+</p>
+
+<p>The functions and special forms in this section perform the above
+function.  The set of objects forming each such list is called a
+<arg>resource</arg>; for example, there might be a Chaosnet packet resource.
+<obj>defresource</obj> defines a new resource; <obj>allocate-resource</obj> allocates
+one of the objects; <obj>deallocate-resource</obj> frees one of the objects
+(putting it back on the list); and <obj>using-resource</obj> temporarily
+allocates an object and then frees it.
+</p>
+
+
+<subsection name="NIL" title="Defining Resources"><definition>
+<define key="defresource-fun" name="defresource" type="mac"></define>
+
+<description>The <obj>defresource</obj> special form is used to define a new resource.  The
+form looks like this:
+
+<lisp>(defresource <arg>name</arg> <arg>parameters</arg>
+   <arg>doc-string</arg>
+   <arg>keyword</arg> <arg>value</arg>
+   <arg>keyword</arg> <arg>value</arg>
+   ...)
+</lisp>
+<arg>name</arg> should be a symbol; it is the name of the resource and gets a
+<obj>defresource</obj> property of the internal data structure representing the resource.
+
+<arg>parameters</arg> is a lambda-list giving names and default values (if <obj>&amp;optional</obj>
+is used) of parameters to an object of this type.  For example, if one had a resource
+of two-dimensional arrays to be used as temporary storage in a calculation, the
+resource would typically have two parameters, the number of rows and the number of
+columns.  In the simplest case <arg>parameters</arg> is <obj>()</obj>.
+
+The documentation string is recorded for <obj>(documentation <arg>name</arg> 'resource)</obj> to access.  It may be omitted.
+
+The keyword options control how the objects of the resource are made and kept
+track of.  The following keywords are allowed:
+
+<table><tbody><tr><td><obj>:constructor</obj></td><td>The <arg>value</arg> is either a form or the name of a function.  It is
+responsible for making an object, and will be used when someone tries to
+allocate an object from the resource and no suitable free objects exist.
+If the <arg>value</arg> is a form, it may access the parameters as variables.
+If it is a function, it is given the internal data structure for the resource
+and any supplied parameters as its arguments; it will need to default any
+unsupplied optional parameters.  This keyword is required.
+
+</td></tr><tr><td><obj>:free-list-size</obj></td><td>The <arg>value</arg> is the number of objects which the resource data
+structure should have room, initially, to remember.  This is not a
+hard limit, since the data structure will be made bigger if necessary.
+
+</td></tr><tr><td><obj>:initial-copies</obj></td><td>The <arg>value</arg> is a number (or <obj>nil</obj> which means 0).  This many objects will
+be made as part of the evaluation of the <obj>defresource</obj>; thus is useful to
+set up a pool of free objects during loading of a program.  The default is
+to make no initial copies.
+
+If initial copies are made and there are <arg>parameters</arg>, all the parameters must
+be <obj>&amp;optional</obj> and the initial copies will have the default values of the
+parameters.
+
+</td></tr><tr><td><obj>:initializer</obj></td><td>The <arg>value</arg> is a form or a function as with <obj>:constructor</obj>.  In
+addition to the parameters, a form here may access the variable
+<obj>object</obj> (in the current package).  A function gets the object as
+its second argument, after the data structure and before the
+parameters.  The purpose of the initializer function or form is to
+clean up the contents of the object before each use.  It is called or
+evaluated each time an object is allocated, whether just constructed
+or being reused.
+
+</td></tr><tr><td><obj>:finder</obj></td><td>The <arg>value</arg> is a form or a function as with <obj>:constructor</obj> and sees the
+same arguments.  If this option is specified, the resource system does not keep
+track of the objects.  Instead, the finder must do so.  It will be called
+inside a <obj>without-interrupts</obj> and must find a usable object somehow and return it.
+
+</td></tr><tr><td><obj>:matcher</obj></td><td>The <arg>value</arg> is a form or a function as with <obj>:constructor</obj>.  In addition to
+the parameters, a form here may access the variable <obj>object</obj> (in the current package).
+A function gets the object as its second argument, after the data structure and
+before the parameters.  The job of the matcher is to make sure that the object
+matches the specified parameters.  If no matcher is supplied, the system will remember
+the values of the parameters (including optional ones that defaulted) that were used
+to construct the object, and will assume that it matches those particular values for
+all time.  The comparison is done with <obj>equal</obj> (not <obj>eq</obj>).  The matcher is
+called inside a <obj>without-interrupts</obj>.
+
+</td></tr><tr><td><obj>:checker</obj></td><td>The job of the checker is to determine whether the object is safe to allocate.
+The <arg>value</arg> is a form or a function, as above.  In addition to the
+parameters, a form here may access the variables <obj>object</obj> and <obj>in-use-p</obj>
+(in the current package).  A function receives these as its second and third
+arguments, after the data structure and before the parameters.  If no checker
+is supplied, the default checker looks only at <obj>in-use-p</obj>; if the object has
+been allocated and not freed it is not safe to allocate, otherwise it is.  The
+checker is called inside a <obj>without-interrupts</obj>.
+
+</td></tr></tbody></table>If these options are used with forms (rather than functions), the forms
+get compiled into functions as part of the expansion of <obj>defresource</obj>.
+The functions, whether user-provided or generated from forms, are given
+names like <obj>(:property <arg>resource-name</arg> si:resource-constructor)</obj>;
+these names are not guaranteed not to change in the future.
+
+Most of the options are not used in typical cases.  Here is an example:
+
+<lisp>(defresource two-dimensional-array (rows columns)
+        :constructor (make-array (list rows columns)))
+</lisp>
+Suppose the array was usually going to be 100 by 100, and you wanted to preallocate
+one during loading of the program so that the first time you needed an array you
+wouldn't have to spend the time to create one.  You might simply put
+
+<lisp>(using-resource (foo two-dimensional-array 100 100)
+        )
+</lisp>after your <obj>defresource</obj>, which would allocate a 100 by 100 array and then
+immediately free it.  Alternatively you could write:
+
+<lisp>(defresource two-dimensional-array
+                        (&amp;optional (rows 100) (columns 100))
+        :constructor (make-array (list rows columns))
+        :initial-copies 1)
+</lisp>
+Here is an example of how you might use the <obj>:matcher</obj> option.  Suppose you wanted
+to have a resource of two-dimensional arrays, as above, except that when you allocate
+one you don't care about the exact size, as long as it is big enough.  Furthermore
+you realize that you are going to have a lot of different sizes and if you always
+allocated one of exactly the right size, you would allocate a lot of different arrays
+and would not reuse a pre-existing array very often.  So you might write:
+
+<lisp>(defresource sloppy-two-dimensional-array (rows columns)
+    :constructor (make-array (list rows columns))
+    :matcher (and (≥ (array-dimension-n 1 object) rows)
+                  (≥ (array-dimension-n 2 object) columns)))
+</lisp></description></definition></subsection>
+
+<subsection name="NIL" title="Allocating Resource Objects"><definition><define key="allocate-resource-fun" name="allocate-resource" type="fun"><args>resource-name <standard>&amp;rest</standard> parameters</args>
+</define>
+
+<description>Allocates an object from the resource specified by <arg>resource-name</arg>.  The various forms
+and/or functions given as options to <obj>defresource</obj>, together with any
+<arg>parameters</arg> given to <obj>allocate-resource</obj>, control how a suitable object
+is found and whether a new one has to be constructed or an old one can be reused.
+
+Note that the <obj>using-resource</obj> special form is usually what you want to
+use, rather than <obj>allocate-resource</obj> itself; see below.
+</description></definition><definition><define key="deallocate-resource-fun" name="deallocate-resource" type="fun"><args>resource-name resource-object</args>
+</define>
+
+<description>Frees the object <arg>resource-object</arg>, returning it to the free-object
+list of the resource specified by <arg>resource-name</arg>.
+</description></definition><definition><define key="using-resource-fun" name="using-resource" type="mac"><args>(variable resource parameters...) body...</args>
+</define>
+
+<description>The <arg>body</arg> forms are evaluated sequentially with <arg>variable</arg> bound to an
+object allocated from the resource named <arg>resource</arg>, using the given <arg>parameters</arg>.
+The <arg>parameters</arg> (if any) are evaluated, but <arg>resource</arg> is not.
+
+<obj>using-resource</obj> is often more convenient than calling
+<obj>allocate-resource</obj> and <obj>deallocate-resource</obj>.
+Furthermore it is careful to free the object when the body is exited,
+whether it returns normally or via <obj>throw</obj>.  This is done by using
+<obj>unwind-protect</obj>; see <ref definition-in-file="fd-flo" key="unwind-protect-fun" title="Special Form unwind-protect" type="spec"></ref>.
+</description></definition>
+<lisp><exdent amount="96"><caption>Here is an example of the use of resources: </caption>(defresource huge-16b-array (&amp;optional (size 1000))
+  :constructor (make-array size :type 'art-16b))
+
+(defun do-complex-computation (x y)
+  (using-resource (temp-array huge-16b-array)
+    ...                               ;<standard>Within the body, the array can be used.</standard>
+    (aset 5 temp-array i)
+    ...))                             ;<standard>The array is deallocated at the end.</standard>
+</exdent></lisp><definition><define key="deallocate-whole-resource-fun" name="deallocate-whole-resource" type="fun"><args>resource-name</args>
+</define>
+
+<description>Frees all objects in <arg>resource-name</arg>.  This is like doing
+<obj>deallocate-resource</obj> on each one individually.  This function is
+often useful in warm-boot initializations.
+</description></definition><definition><define key="map-resource-fun" name="map-resource" type="fun"><args>function resource-name <standard>&amp;rest</standard> extra-args</args>
+</define>
+
+<description>Calls function on each object created in <arg>resource-name</arg>.  Each time
+function is called, it receives three fixed arguments, plus whatever
+<arg>extra-args</arg> were specified.  The three fixed arguments are an object
+of the resource; <obj>t</obj> if the object is currently allocated (``in use'');
+and the resource data structure itself.
+</description></definition><definition><define key="clear-resource-fun" name="clear-resource" type="fun"><args>resource-name</args>
+</define>
+
+<description>Forgets all of the objects being remembered by the resource specified by <arg>resource-name</arg>.
+Future calls to <obj>allocate-resource</obj> will create new objects.  This function is
+useful if something about the resource has been changed incompatibly, such that the
+old objects are no longer usable.  If an object of the resource is in use when
+<obj>clear-resource</obj> is called, an error will be signaled when that object is
+deallocated.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Accessing the Resource Data Structure"><p>The constructor, initializer, matcher and checker functions receive
+the internal resource data structure as an argument.  This is a named
+structure array whose elements record the objects both free and
+allocated, and whose array leader contains sundry other information.
+This structure should be accessed using the following primitives:
+</p>
+<definition><define key="si:resource-object-fun" name="si:resource-object" type="fun"><args>resource-structure index</args>
+</define>
+
+<description>Returns the <arg>index</arg>'th object remembered by the resource.
+Both free and allocated objects are remembered.
+</description></definition><definition><define key="si:resource-in-use-p-fun" name="si:resource-in-use-p" type="fun"><args>resource-structure index</args>
+</define>
+
+<description>Returns <obj>t</obj> if the <arg>index</arg>'th object remembered by the
+resource has been allocated and not deallocated.
+Simply defined resources will not reallocate an object in this state.
+</description></definition><definition><define key="si:resource-parameters-fun" name="si:resource-parameters" type="fun"><args>resource-structure index</args>
+</define>
+
+<description>Returns the list of parameters from which the <arg>index</arg>'th object
+was originally created.
+</description></definition><definition><define key="si:resource-n-objects-fun" name="si:resource-n-objects" type="fun"><args>resource-structure</args>
+</define>
+
+<description>Returns the number of objects currently remembered by the resource.
+This will include all objects ever constructed, unless
+<obj>clear-resource</obj> has been used.
+</description></definition><definition><define key="si:resource-parametizer-fun" name="si:resource-parametizer" type="fun"><args>resource-structure</args>
+</define>
+
+<description>Returns a function, created by <obj>defresource</obj>, which accepts the
+supplied parameters as arguments, and returns a complete list of
+parameter values, including defaults for the optional ones.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Fast Pseudo-Resources"><p>When small temporary data structures are allocated so often that they
+amount to a considerable drain of storage space, an ordinary resource
+may be unacceptably slow.  Here is a simple technique that
+provides in such cases nearly all the benefit of a resource while
+costing nearly nothing.  The function <obj>read</obj> uses it to allocate a
+buffer for reading tokens of input.
+</p>
+
+<lisp>(defvar buffer-for-reuse nil)
+
+(defsubst get-buffer ()
+  (or (do (old)
+          ((%store-conditional (locf buffer-for-reuse)
+                               (setq old buffer-for-reuse)
+                               nil)
+           old))
+      (construct-new-buffer))))
+
+(defsubst free-buffer (buffer)
+  (setq buffer-for-reuse buffer))
+</lisp>
+<p>To allocate a buffer for use, do <obj>(get-buffer)</obj>.
+To free it when you are done with it, call <obj>free-buffer</obj>.
+It is assumed that <obj>construct-new-buffer</obj> is the function
+which can create a new buffer when there is none available for
+reuse.
+</p>
+
+<p>This technique keeps track of at most one buffer which has been freed
+and may be reused.  It is not effective in this simple form when more
+than one buffer is needed at any given time by one application.
+In the case of <obj>read</obj>, only one token is being read in at any time.
+</p>
+
+<p>It is safe for more than one process to call <obj>read</obj> because
+<obj>get-buffer</obj> is designed to guarantee that a request cannot get a
+buffer already handed out and not freed.  Likewise, nothing terrible
+happens if there is an error inside <obj>read</obj> and <obj>read</obj> is called
+recursively within the debugger.  The only problem is that multiple
+buffers will be allocated, which means that some of them will be lost.
+But the cost of this is minor in the cases where this technique
+is applicable.  For example, if two processes are reading files,
+process switching will probably happen a few times a second, each time
+costing one buffer not reused.  This is insignificant compared to the
+storage used up for other purposes by reading large amounts of data.
+</p>
+</subsection></chapter>
+</document-part>

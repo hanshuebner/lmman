@@ -1,0 +1,1784 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="defstruct-chapter"></a>
+<chapter name="defstruct-chapter" number="21" title="Defstruct"><index-entry index="concepts" title="structures"></index-entry>
+
+<index-entry index="concepts" title="defstruct"></index-entry>
+
+<index-entry index="concepts" title="record (structure)"></index-entry>
+
+<index-entry index="concepts" title="macro defining macros"></index-entry>
+
+<p indent="1">        <obj>defstruct</obj> provides a facility in Lisp for creating and
+using aggregate datatypes with named elements.  These are like
+structures in PL/I, or records in Pascal.  In the last two chapters we
+saw how to use macros to extend the control structures of Lisp; here we
+see how they can be used to extend Lisp's data structures as well.
+</p>
+<a name="Introduction to Structure Macros"></a>
+
+
+<section chapter-number="21" name="Introduction to Structure Macros" number="1" title="Introduction to Structure Macros"><p indent="1">        To explain the basic idea, assume you were writing a Lisp
+program that dealt with space ships.  In your program, you want to
+represent a space ship by a Lisp object of some kind.  The interesting
+things about a space ship, as far as your program is concerned, are
+its position (<arg>x</arg> and <arg>y</arg>), velocity (<arg>x</arg> and <arg>y</arg>), and mass.  How do you
+represent a space ship?
+</p>
+
+<p indent="1">        Well, the representation could be a list of the x-position,
+<arg>y</arg> position, and so on.  Equally well it could be an array of five
+elements, the zeroth being the <arg>x</arg> position, the first being the
+<arg>y</arg> position, and so on.  The problem with both of these representations
+is that the ``elements'' (such as <arg>x</arg> position) occupy places in the object
+which are quite arbitrary, and hard to remember (Hmm, was the mass the
+third or the fourth element of the array?).  This would make programs
+harder to write and read.  It would not be obvious when reading
+a program that an expression such as <obj>(cadddr ship1)</obj> or <obj>(aref ship2 3)</obj>
+means ``the <arg>y</arg> component of the ship's velocity'', and it would be very easy
+to write <obj>caddr</obj> in place of <obj>cadddr</obj>.
+</p>
+
+<p>What we would like to see are names, easy to remember and to understand.
+If the symbol <obj>foo</obj> were bound to a representation of a space ship, then
+
+<lisp>(ship-x-position foo)
+</lisp>could return its <arg>x</arg> position, and
+
+<lisp>(ship-y-position foo)
+</lisp>its <arg>y</arg> position, and so forth.  The <obj>defstruct</obj> facility does just this.
+</p>
+
+<p indent="1">        <obj>defstruct</obj> itself is a macro which defines a structure.  For the
+space ship example above, we might define the structure by saying:
+
+<lisp>(defstruct (ship)
+  &quot;Represents a space ship.&quot;
+  ship-x-position
+  ship-y-position
+  ship-x-velocity
+  ship-y-velocity
+  ship-mass)
+</lisp></p>
+
+<p>This says that every <obj>ship</obj> is an object with five named components.
+(This is a very simple case of <obj>defstruct</obj>; we will see the general form
+later.)  The evaluation of this form does several things.  First, it
+defines <obj>ship-x-position</obj> to be a function which, given a ship, returns
+the <arg>x</arg> component of its position.  This is called an <arg>accessor function</arg>,
+because it <arg>accesses</arg> a component of a structure.
+
+<index-entry index="concepts" title="accessor function"></index-entry>
+<obj>defstruct</obj> defines the other four accessor functions analogously.
+</p>
+
+<p><obj>defstruct</obj> also defines <obj>make-ship</obj> to be a macro or function
+(you can specify which one) that can create a <obj>ship</obj> object.  So <obj>(setq s
+(make-ship))</obj> makes a new ship, and sets <obj>s</obj> to it.  This is
+called the <arg>constructor</arg>, because it constructs a new structure.
+
+<index-entry index="concepts" title="constructor"></index-entry>
+</p>
+
+<p>We also want to be able to change the contents of a structure.  To do this,
+we use the <obj>setf</obj> macro (see <ref definition-in-file="fd-eva" key="setf-fun" title="Macro setf" type="mac"></ref>), as follows (for example):
+
+<lisp>(setf (ship-x-position s) 100)
+</lisp>Here <obj>s</obj> is bound to a ship, and after the evaluation of the <obj>setf</obj>
+form, the <obj>ship-x-position</obj> of that ship is 100.  Another way
+to change the contents of a structure is to use the alterant macro,
+which is described later, in <ref chapter="21" definition-in-file="defstr" key="using-defstruct-alterant" section="4" title="Using the Constructor and Alterant" type="section"></ref>.
+</p>
+
+<p>How does all this map into the familiar primitives of Lisp?  In this simple
+example, we left the choice of implementation technique up to
+<obj>defstruct</obj>; by default, it chooses to represent a ship as an array.  The array has
+five elements, which are the five components of the ship.  The accessor
+functions are defined thus:
+
+<lisp>(defun ship-x-position (ship)
+  (aref ship 0))
+</lisp>The constructor form <obj>(make-ship)</obj> performs <obj>(make-array 5)</obj>, which
+makes an array of the appropriate size to be a ship.  Note that a program which
+uses ships need not contain any explicit knowledge that ships are represented
+as five-element arrays; this is kept hidden by <obj>defstruct</obj>.
+</p>
+
+<p>The accessor functions are not actually ordinary functions; instead they
+are substs (see <ref chapter="12" definition-in-file="fd-fun" key="subst" section="5" title="Kinds of Functions" type="section"></ref>).  This difference has two implications: it allows
+<obj>setf</obj> to understand the accessor functions, and it allows the compiler to
+substitute the body of an accessor function directly into any function that uses it,
+making compiled programs that use <obj>defstruct</obj> exactly equal in efficiency to
+programs that ``do it by hand''.  Thus writing <obj>(ship-mass s)</obj> is exactly
+equivalent to writing <obj>(aref s 4)</obj>, and writing <obj>(setf (ship-mass s) m)</obj>
+is exactly equivalent to writing <obj>(setf (aref s 4) m)</obj>, when the program is compiled.
+It is also possible to tell <obj>defstruct</obj> to implement the accessor
+functions as macros; this is not normally done in Zetalisp, however.
+</p>
+
+<p indent="1">        We can now use the <obj>describe-defstruct</obj> function to look at the
+<obj>ship</obj> object, and see what its contents are:
+
+<lisp>(describe-defstruct x 'ship) =&gt;
+
+#&lt;art-q-5 17073131&gt; is a ship
+   ship-x-position:              100
+   ship-y-position:              nil
+   ship-x-velocity:              nil
+   ship-y-velocity:              nil
+   ship-mass:                    nil
+#&lt;art-q-5 17073131&gt;
+</lisp>(The <obj>describe-defstruct</obj> function is explained more fully on
+<ref definition-in-file="defstr" key="describe-defstruct-fun" title="Function describe-defstruct" type="fun"></ref>.)
+</p>
+
+<p indent="1">        By itself, this simple example provides a powerful structure
+definition tool.  But, in fact, <obj>defstruct</obj> has many other features.  First
+of all, we might want to specify what kind of Lisp object to use for the
+``implementation'' of the structure.  The example above implemented a ship
+as an array, but <obj>defstruct</obj> can also implement structures as array-leaders,
+lists, and other things.  (For array-leaders, the accessor functions call
+<obj>array-leader</obj>, for lists, <obj>nth</obj>, and so on.)
+</p>
+
+<p indent="1">        Most structures are implemented as arrays.  Lists take slightly less
+storage, but elements near the end of a long list are slower to access.
+Array leaders allow you to have a homogeneous aggregate (the array)
+and a heterogeneous aggregate with named elements (the leader) tied
+together into one object.  Packages are this sort of an object,
+and so are the strings which Zmacs uses for storing lines of text.
+</p>
+
+<p indent="1">        The constructor function or macro allows you to specify values
+for slots in the new structure.  <obj>defstruct</obj> allows you to specify
+default initial values for slots; whenever a structure is constructed
+and no value is specified for a slot, the slot's default initial value
+is stored in it.
+</p>
+
+<p indent="1">        The <obj>defstruct</obj> in Zetalisp also works in various
+dialects of Maclisp, and so it has some features that are not useful in
+Zetalisp.  When possible, the Maclisp-specific features attempt
+to do something reasonable or harmless in Zetalisp, to make it
+easier to write code that will run equally well in Zetalisp and
+Maclisp.  (Note that this <obj>defstruct</obj> is not necessarily the one installed in Maclisp!)
+</p>
+
+<p>Note that there is another version of <obj>defstruct</obj> used in Common Lisp
+programs, which is slightly incompatible.  See <ref chapter="21" definition-in-file="defstr" key="cli-defstruct" section="8" title="Common Lisp Defstruct" type="section"></ref>.
+</p>
+</section><a name="How to Use Defstruct"></a>
+
+
+<section chapter-number="21" name="How to Use Defstruct" number="2" title="How to Use Defstruct"><index-entry index="concepts" title="slot"></index-entry>
+<definition>
+<define key="defstruct-fun" name="defstruct" type="mac"></define>
+
+<description>A call to <obj>defstruct</obj> looks like:
+
+<lisp>(defstruct (<arg>name</arg> <arg>options</arg><obj>...</obj>)
+  [<arg>doc-string</arg>]
+  <arg>slot-description-1</arg>
+  <arg>slot-description-2</arg>
+  <obj>...</obj>)
+</lisp><arg>name</arg> must be a symbol; it is the name of the structure.  It is given a
+<obj>si:defstruct-description</obj> property that describes the attributes and elements of the
+structure; this is intended to be used by programs that examine Lisp
+programs and that want to display the contents of structures in a helpful
+way.  <arg>name</arg> is used for other things, described below.
+
+Each <arg>option</arg> may be either a symbol, which should be one of the recognized
+option names listed in the next section, or a list, whose car should be one of the
+option names and the rest of which should be arguments to the option.
+Some options have arguments that default; others require that arguments be
+given explicitly.
+
+<arg>doc-string</arg> is a string which is recorded as the documentation of
+<arg>name</arg> as a structure.  It can be accessed via <obj>(documentation
+'<arg>name</arg> 'structure)</obj>.  It is not required.
+
+Each <arg>slot-description</arg> may be in any of three forms:
+
+<lisp><standard>(1)</standard> <arg>slot-name</arg>
+<standard>(2)</standard> (<arg>slot-name</arg> [<arg>default-init</arg> <arg>slot-options</arg><obj>...</obj>])
+<standard>(3)</standard> ((<arg>slot-name-1</arg> <arg>byte-spec-1</arg> [<arg>default-init-1</arg> <arg>slot-options</arg><obj>...</obj>])
+         (<arg>slot-name-2</arg> <arg>byte-spec-2</arg> [<arg>default-init-2</arg> <arg>slot-options</arg><obj>...</obj>])
+                <obj>...</obj>)
+</lisp>Each <arg>slot-description</arg> allocates one element of the physical structure,
+even though in form (3) several slots are defined.
+
+Each <arg>slot-name</arg> must always be a symbol; an accessor function is defined
+for each slot.
+
+In form (1), <arg>slot-name</arg> simply defines a slot with the given name.  An
+accessor function is defined with the name <arg>slot-name</arg> (but see the
+<obj>:conc-name</obj> option, <ref definition-in-file="defstr" key="defstruct-conc-name-option" type="page"></ref>).  Form (2) is
+similar, but allows a default initialization for the slot.  Initialization
+is explained further on <ref definition-in-file="defstr" key="defstruct-initialization" type="page"></ref>.  Form (3) lets you pack
+several slots into a single element of the physical underlying structure, using
+the byte field feature of <obj>defstruct</obj>, which is explained on
+<ref definition-in-file="defstr" key="defstruct-byte-field" type="page"></ref>.
+
+Forms (2) and (3) allow <arg>slot-options</arg> which are alternating
+keywords and values (unevaluated).  These slot option keywords are
+defined:
+
+<table><tbody><tr><td><obj>:read-only <arg>flag</arg></obj></td>
+<td><index-entry index="keywords" title=":read-only &quot;defstruct slot option&quot;"></index-entry>
+If <arg>flag</arg> is non-<obj>nil</obj>, this specifies that this slot should not be changed in
+an existing structure.  <obj>setf</obj> will not be allowed on the slot's
+accessor.
+
+</td></tr><tr><td><obj>:type <arg>type-spec</arg></obj></td>
+<td><index-entry index="keywords" title=":type &quot;defstruct slot option&quot;"></index-entry>
+Declares that the contents of this slot must be of type <arg>type-spec</arg>.
+The Lisp machine compiler does not use this information,
+but sometimes it enables <obj>defstruct</obj> to deduce that it
+can pack the structure into less space by using a specialized array type.
+
+</td></tr><tr><td><obj>:documentation <arg>documentation-string</arg></obj></td>
+<td><index-entry index="keywords" title=":documentation &quot;defstruct slot option&quot;"></index-entry>
+Makes <arg>documentation-string</arg> the documentation for the slot's accessor
+function.  It also goes in the <obj>si:defstruct-slot-description-documentation</obj>
+for this slot in the <obj>defstruct-description</obj> structure.
+</td></tr></tbody></table>
+Here is an eggsample of using slot options:
+
+
+<lisp>(defstruct (eggsample :named :conc-name) 
+  (yolk 'a
+   :documentation &quot;First thing you need in an eggsample.&quot;) 
+  (grade 3) 
+  (albumen nil :read-only t)) 
+
+(documentation 'eggsample-yolk 'function)
+=&gt; &quot;First thing you need in an eggsample.&quot; 
+
+(setf (eggsample-albumen (make-eggsample)) 'eggsistential)
+&gt;&gt;ERROR: SETF is forbidden on EGGSAMPLE-ALBUMEN.
+While in the function ...
+</lisp></description></definition>
+<p>Because evaluation of a <obj>defstruct</obj> form causes many functions and macros
+to be defined, you must take care not to define the same name with two
+different <obj>defstruct</obj> forms.  A name can only have one function
+definition at a time; if it is redefined, the latest definition is the one
+that takes effect, and the earlier definition is clobbered.  (This is no
+different from the requirement that each <obj>defun</obj> which is intended to
+define a distinct function must have a distinct name.)
+</p>
+
+<p>To systematize this necessary carefulness, as well as for
+clarity in the code, it is conventional to prefix the names of all of the
+accessor functions with some text unique to the structure.  In the example
+above, all the names started with <obj>ship-</obj>.  The <obj>:conc-name</obj>
+option can be used to provide such prefixes automatically (see <ref definition-in-file="defstr" key="defstruct-conc-name-option" type="page"></ref>).
+Similarly, the conventional name for the constructor in the example
+above was <obj>make-ship</obj>, and the conventional name for the alterant macro
+(see <ref chapter="21" definition-in-file="defstr" key="using-defstruct-alterant" section="4" title="Using the Constructor and Alterant" type="section"></ref>) was <obj>alter-ship</obj>.
+</p>
+
+<p>The <obj>describe-defstruct</obj> function lets you examine an instance of
+a structure.
+</p>
+<definition><define key="describe-defstruct-fun" name="describe-defstruct" type="fun"><args>instance <standard>&amp;optional</standard> name</args>
+</define>
+
+<description><obj>describe-defstruct</obj> takes an <arg>instance</arg> of a structure, and prints
+out a description of the instance, including the contents of each of its
+slots.  <arg>name</arg> should be the name of the structure; you must provide
+the name of the structure so that <obj>describe-defstruct</obj> can know what
+structure <arg>instance</arg> is an instance of, and therefore figure out what
+the names of the slots of <arg>instance</arg> are.
+
+If <arg>instance</arg> is a named structure, you don't have to provide <arg>name</arg>,
+since it is just the named structure symbol of <arg>instance</arg>.
+Normally the <obj>describe</obj> function (see <ref definition-in-file="fd-hac" key="describe-fun" title="Function describe" type="fun"></ref>) calls
+<obj>describe-defstruct</obj> if it is asked to describe a named structure;
+however some named structures have their own idea of how to describe themselves.
+See <ref definition-in-file="defstr" key="named-structure" type="page"></ref> for more information about named structures.
+</description></definition></section><a name="Options to Defstruct"></a>
+
+
+<section chapter-number="21" name="Options to Defstruct" number="3" title="Options to Defstruct"><p>This section explains each of the options that can be given to <obj>defstruct</obj>.
+Here is an example that shows the typical syntax of a call to <obj>defstruct</obj>
+that gives several options.
+
+<lisp>(defstruct (foo (:type (:array (mod 256)))
+                (:make-array (:leader-length 3))
+                :conc-name
+                (:size-macro foo))
+  a b)
+</lisp></p>
+
+<table><tbody><tr><td><obj>:type</obj></td>
+<td><index-entry index="keywords" title=":type defstruct"></index-entry>
+The <obj>:type</obj> option specifies what kind of Lisp object to use
+to implement the structure.  It must be given one argument, which must
+be one of the symbols enumerated below, or a user-defined type.
+If the option itself is not
+provided, the type defaults to <obj>:array</obj> in traditional programs,
+or <obj>:vector</obj> in Common Lisp programs.  You can define your
+own types; this is explained in <ref chapter="21" definition-in-file="defstr" key="defining-your-own-defstruct-types" section="10" title="Extensions to Defstruct" type="section"></ref>.
+
+
+<table><tbody><tr><td><obj>:list</obj></td>
+<td><index-entry index="keywords" title=":list defstruct"></index-entry>
+Uses a list.
+</td></tr><tr><td><obj>:named-list</obj></td>
+<td><index-entry index="keywords" title=":named-list defstruct"></index-entry>
+Like <obj>:list</obj>, but the first element of the list holds the
+symbol that is the name of the structure and so is not used
+as a component.
+
+</td></tr><tr><td><obj>:array</obj></td><td></td></tr><tr><td><obj>:typed-array</obj></td><td></td></tr><tr><td><obj>:vector</obj></td>
+<td><index-entry index="keywords" title=":array defstruct"></index-entry>
+
+<index-entry index="keywords" title=":typed-array defstruct"></index-entry>
+
+<index-entry index="keywords" title=":vector defstruct"></index-entry>
+These are all synonymous.
+They use an array, storing components in the body of the array.
+</td></tr><tr><td><obj>:named-array</obj></td>
+<td><index-entry index="keywords" title=":named-array defstruct"></index-entry>
+Like <obj>:array</obj>, but makes the array a named structure (see
+<ref definition-in-file="defstr" key="named-structure" type="page"></ref>) using the name of the structure as the named
+structure symbol.  Element 0 of the array holds the named
+structure symbol and so is not used to hold a component of the
+structure.
+</td></tr><tr><td><obj>:named-typed-array</obj></td><td></td></tr><tr><td><obj>:named-vector</obj></td>
+<td><index-entry index="keywords" title=":named-typed-array defstruct"></index-entry>
+
+<index-entry index="keywords" title=":named-vector defstruct"></index-entry>
+These two synonyms are
+like <obj>:named-array</obj> but the array always has a leader and the
+named structure symbol is stored there.  As a result, it is
+possible to use the <obj>:subtype</obj> option to specify a restricted
+array type, such as <obj>art-8b</obj>.
+</td></tr><tr><td><obj>:phony-named-vector</obj></td>
+<td><index-entry index="keywords" title=":phony-named-vector defstruct"></index-entry>
+This is what you get in Common Lisp if you say
+<obj>(:type :vector)</obj> and <obj>:named</obj>.
+
+</td></tr><tr><td><obj>:array-leader</obj></td>
+<td><index-entry index="keywords" title=":array-leader defstruct"></index-entry>
+Use an array, storing components in the leader of the array.
+(See the <obj>:make-array</obj> option, described below.)
+</td></tr><tr><td><obj>:named-array-leader</obj></td>
+<td><index-entry index="keywords" title=":named-array-leader defstruct"></index-entry>
+Like <obj>:array-leader</obj>, but makes the array a named structure (see
+<ref definition-in-file="defstr" key="named-structure" type="page"></ref>) using the name of the structure as the named
+structure symbol.  Element 1 of the leader holds the named
+structure symbol and so is not used to hold a component of the
+structure.
+
+</td></tr><tr><td><obj>:fixnum-array</obj></td>
+<td><index-entry index="keywords" title=":fixnum-array defstruct"></index-entry>
+Like <obj>:array</obj>, but the type of the array is <obj>art-32b</obj>.
+</td></tr><tr><td><obj>:flonum-array</obj></td>
+<td><index-entry index="keywords" title=":flonum-array defstruct"></index-entry>
+Like <obj>:array</obj>, but the type of the array is <obj>art-float</obj>.
+</td></tr><tr><td><obj>:named-fixnum-array</obj></td><td></td></tr><tr><td><obj>:named-flonum-array</obj></td>
+<td><index-entry index="keywords" title=":named-fixnum-array defstruct"></index-entry>
+
+<index-entry index="keywords" title=":named-flonum-array defstruct"></index-entry>
+Like <obj>:fixnum-array</obj> or <obj>:flonum-array</obj> but also a named structure, with a leader
+to hold the named structure symbol.
+
+</td></tr><tr><td><obj>:tree</obj></td>
+<td><index-entry index="keywords" title=":tree defstruct"></index-entry>
+The structure is implemented out of a binary tree of conses, with
+the leaves serving as the slots.
+
+</td></tr><tr><td><obj>:fixnum</obj></td>
+<td><index-entry index="keywords" title=":fixnum defstruct"></index-entry>
+This unusual type implements the structure as a single fixnum.  The
+structure may only have one slot.  This is only useful with the
+byte field feature (see <ref definition-in-file="defstr" key="defstruct-byte-field" type="page"></ref>); it lets you store
+a bunch of small numbers within fields of a fixnum, giving the
+fields names.
+
+</td></tr><tr><td><obj>:grouped-array</obj></td>
+<td><index-entry index="keywords" title=":grouped-array defstruct"></index-entry>
+This is described in <ref chapter="21" definition-in-file="defstr" key="grouped-array" section="6" title="Grouped Arrays" type="section"></ref>.
+</td></tr></tbody></table>
+The argument of <obj>:type</obj> may also have the form
+<obj>(<arg>type</arg> <arg>subtype</arg>)</obj>.  This is equivalent to
+specifying <arg>type</arg> for the <obj>:type</obj> option and <arg>subtype</arg>
+for the <obj>:subtype</obj> option.  For example, <obj>(:type (:array (mod 16.)))</obj>
+specifies an array of four-bit bytes.
+
+</td></tr><tr><td><obj>:subtype</obj></td><td>For structures which are arrays, <obj>:subtype</obj> permits the array type
+to be specified.  It requires an argument, which must be either
+an array type name such as <obj>art-4b</obj> or a type specifier restricting the elements
+of the array.  In other words, it should be a suitable value for either
+the <arg>type</arg> or the <arg>element-type</arg> argument to <obj>make-array</obj>.
+
+If no <obj>:subtype</obj> option is specified but a <obj>:type</obj> slot option is
+given for every slot, <obj>defstruct</obj> may deduce a subtype automatically
+to make the structure more compact.
+
+See <ref chapter="2" definition-in-file="fd-dtp" key="type-specifiers" section="3" title="Type Specifiers" type="section"></ref> for more information on type specifiers.
+
+</td></tr><tr><td><obj>:constructor</obj></td>
+<td><index-entry index="keywords" title=":constructor defstruct"></index-entry>
+Specifies how to make a constructor for the structure.  In the simplest
+use, there is one argument, which specifies the name to give to the
+standard keyword-argument constructor.  If the argument is not provided
+or if the option itself is not provided, the name of the constructor is
+made by concatenating the string <obj>&quot;make-&quot;</obj> to the name of the
+structure.  If the argument is provided and is <obj>nil</obj>, no constructor
+is defined.  More complicated usage is explained in
+<ref chapter="21" definition-in-file="defstr" key="using-defstruct-constructor" section="4" title="Using the Constructor and Alterant" type="section"></ref>.
+
+</td></tr><tr><td><obj>:alterant</obj></td>
+<td><index-entry index="keywords" title=":alterant defstruct"></index-entry>
+Takes one argument, which specifies the name of the alterant
+macro.  If the argument is not provided, the name of the alterant is
+made by concatenating the string <obj>&quot;alter-&quot;</obj> to the name of the
+structure.  If the argument is provided and is <obj>nil</obj>, no alterant is
+defined.  Use of the alterant macro is explained in
+<ref chapter="21" definition-in-file="defstr" key="using-defstruct-alterant" section="4" title="Using the Constructor and Alterant" type="section"></ref>.
+
+In Common Lisp programs, the default for <obj>:alterant</obj> is <obj>nil</obj>;
+no alterant is defined.  In traditional programs, the default is <obj>alter-<arg>name</arg></obj>.
+
+</td></tr><tr><td><obj>:predicate defstruct</obj></td><td>Causes <obj>defstruct</obj> to generate a predicate
+to recognize instances of the structure.  Naturally it only works for
+``named'' types.  The argument to the <obj>:predicate</obj> option is the name of
+the predicate.  If the option is present without an argument, then the
+name is formed by concatenating `<obj>-p</obj>' to the end of the name symbol
+of the structure.  If the option is not present, then no predicate is
+generated.  Example:
+
+<lisp>(defstruct (foo :named :predicate)
+  a
+  b)
+</lisp>defines a single argument function, <obj>foo-p</obj>, that is true only of
+instances of this structure.
+
+The defaulting of the <obj>:predicate</obj> option is different (and complicated)
+in Common Lisp programs.  See <ref chapter="21" definition-in-file="defstr" key="cli-defstruct" section="8" title="Common Lisp Defstruct" type="section"></ref>.
+
+</td></tr><tr><td><obj>:copier defstruct</obj></td><td>Causes <obj>defstruct</obj> to generate a single argument function that can
+copy instances of this structure.  Its argument is the name of the copying
+function.  If the option is present without an argument, then the name is
+formed by concatenating `<obj>copy-</obj>' with the name of the structure.  Example:
+
+<lisp>(defstruct (foo (:type :list) :copier)
+  foo-a
+  foo-b)
+</lisp>Generates a function approximately like:
+
+<lisp>(defun copy-foo (x)
+  (list (car x) (cadr x)))
+</lisp>
+</td></tr><tr><td><obj>:default-pointer</obj></td>
+<td><index-entry index="keywords" title=":default-pointer defstruct"></index-entry>
+Normally, the accessors defined by <obj>defstruct</obj> expect to
+be given exactly one argument.  However, if the <obj>:default-pointer</obj>
+argument is used, the argument to each accessor is optional.  If
+the accessor is used with no argument, it evaluates the default-pointer
+form to find a structure and accesses the appropriate component of
+that structure.  Here is an example:
+
+<lisp>(defstruct (room 
+             (:default-pointer *default-room*))
+   room-name
+   room-contents)
+
+(room-name x) ==&gt; (aref x 0)
+(room-name)   ==&gt; (aref *default-room* 0)
+</lisp>
+If the argument to the <obj>:default-pointer</obj> argument is not given, it
+defaults to the name of the structure.
+
+</td></tr><tr><td><obj>:conc-name</obj></td>
+<td><index-entry index="keywords" title=":conc-name defstruct"></index-entry>
+It is conventional to begin the names of all the accessor functions of
+a structure with a specific prefix, usually
+the name of the structure followed by a hyphen.  The <obj>:conc-name</obj>
+option allows you to specify this prefix and have it concatenated
+onto the front of all the slot names to make the names of the accessor
+functions.  The argument should be a string to be used as the prefix,
+or a symbol whose pname is to be used.
+If <obj>:conc-name</obj> is specified without an argument, the prefix is the
+name of the structure followed by a hyphen.  If the argument is <obj>nil</obj> or <obj>&quot;&quot;</obj>,
+the names of the accessors are the same as the slot names,
+and it is up to you to name the slots according to some suitable convention.
+
+In Common Lisp programs, the default for <obj>:conc-name</obj>, when this
+option is not specified,  is the structure name followed by a hyphen.
+For traditional programs, the default is <obj>nil</obj>.
+
+The keywords recognized by the constructor and alterant are the slot
+names, not the accessor names, transfered into the keyword package.  It
+is important to keep this in mind when using <obj>:conc-name</obj>, since it
+causes the slot and accessor names to be different.  Here is an example:
+
+
+<lisp>(defstruct (door :conc-name)
+   knob-color
+   width)
+
+(setq d (make-door :knob-color 'red :width 5.0))
+
+(door-knob-color d) ==&gt; red
+</lisp>
+</td></tr><tr><td><obj>:include</obj></td>
+<td><index-entry index="keywords" title=":include defstruct"></index-entry>
+Builds a new structure definition as an extension of an old
+structure definition.  Suppose you have a structure called <obj>person</obj> that
+looks like this:
+
+
+<lisp>(defstruct (person :named :conc-name)
+   name
+   age
+   sex)
+</lisp>
+Now suppose you want to make a new structure to represent an astronaut.
+Since astronauts are people too, you would like them to also have the
+attributes of name, age, and sex, and you would like Lisp functions
+that operate on <obj>person</obj> structures to operate just as well on
+<obj>astronaut</obj> structures.  You can do this by defining <obj>astronaut</obj>
+with the <obj>:include</obj> option, as follows:
+
+<lisp>(defstruct (astronaut :named (:include person) 
+                      :conc-name)
+   helmet-size
+   (favorite-beverage 'tang))
+</lisp>
+The argument to the <obj>:include</obj> option is required, and must be the
+name of some previously defined structure of the same type as this
+structure.  <obj>:include</obj> does not work with structures of type
+<obj>:tree</obj> or of type <obj>:grouped-array</obj>.
+
+The <obj>:include</obj> option inserts the slots of the included structure at
+the front of the list of slots for this structure.  That is, an
+<obj>astronaut</obj> has five slots; first the three defined in <obj>person</obj>, and
+then after those the two defined in <obj>astronaut</obj> itself.  The accessor
+functions defined by the <obj>person</obj> structure, such as <obj>person-name</obj>, can be used also on
+<obj>astronaut</obj>'s.  New accessor functions are generated for these slots
+in the <obj>astronaut</obj> structure as if they were defined afresh;
+their names start with <obj>astronaut-</obj> instead of <obj>person-</obj>.
+In fact, the functions <obj>person-age</obj> and <obj>astronaut-age</obj> receive
+identical definitions.
+
+Since the structures are named structures, recognizable by <obj>typep</obj>,
+<obj>subtypep</obj> considers <obj>astronaut</obj> a subtype of <obj>person</obj>,
+and <obj>typep</obj> considers any <obj>astronaut</obj> to be of type <obj>person</obj>.
+
+The following examples illustrate how you can
+construct and use <obj>astronaut</obj> structures:
+
+
+<lisp>(setq x (make-astronaut :name 'buzz
+                        :age 45.
+                        :sex t
+                        :helmet-size 17.5))
+
+(person-name x) =&gt; buzz
+(astronaut-name x) =&gt; buzz
+(astronaut-favorite-beverage x) =&gt; tang
+
+(typep x 'astronaut) =&gt; t
+(typep x 'person) =&gt; t
+</lisp>
+Note that the <obj>:conc-name</obj> option was <arg>not</arg> inherited from the
+included structure; it is present for <obj>:astronaut</obj> only because it was
+specified explicitly in the definition.  Similarly, the
+<obj>:default-pointer</obj> and <obj>:but-first</obj> options are not inherited from
+the <obj>:include</obj>'d structure.
+
+The following is an advanced feature.  Sometimes, when one structure
+includes another, the default values or slot options for the slots that
+came from the included structure are not what you want.  The new
+structure can specify new default values or slot options for the
+included slots by giving the <obj>:include</obj> option as:
+
+
+<lisp>(:include <arg>name new-descriptor-1 <obj>...</obj> new-descriptor-n</arg>)
+</lisp>
+Each <arg>new-slot-descriptor</arg> is just like the slot descriptors used for
+defining new slots, except that byte fields are not allowed.  The
+default initialization specified in <arg>new-slot-descriptor</arg>, or the
+absence of one, overrides what was specified in the included structure
+type (<obj>person</obj>).  Any slot option values specified in <arg>new-slot-descriptor</arg>
+also override the values given in the included structure's definition.
+Any inherited slots for which no <arg>new-slot-descriptor</arg> is given,
+and any slot options not explicitly overridden, are inherited.
+
+For example, if we had wanted to define <obj>astronaut</obj> so that the
+default age for an astronaut is <obj>45.</obj>, and provide
+documentation for its accessor, then we could have said:
+
+<lisp>(defstruct (astronaut :conc-name
+             (:include person 
+               (age 45. :documentation
+                 &quot;The ASTRONAUT's age in years.&quot;)))
+   helmet-size
+   (favorite-beverage 'tang))
+</lisp>
+If the <obj>:read-only</obj> option is specified as <obj>nil</obj> when <obj>t</obj>
+would have been inherited, an error is signaled.
+
+</td></tr><tr><td><obj>:named</obj></td>
+<td><index-entry index="keywords" title=":named defstruct"></index-entry>
+This means that you want to use one of the ``named'' types.  If you
+specify a type of <obj>:array</obj>, <obj>:array-leader</obj>, or <obj>:list</obj>, and give
+the <obj>:named</obj> option, then the <obj>:named-array</obj>,
+<obj>:named-array-leader</obj>, or <obj>:named-list</obj> type is used instead.
+Asking for type <obj>:array</obj> and giving the <obj>:named</obj> option as well
+is the same as asking for the type <obj>:named-array</obj>; the only difference
+is stylistic.
+
+The <obj>:named</obj> option works quite differently in Common Lisp programs;
+see <ref chapter="21" definition-in-file="defstr" key="cli-defstruct" section="8" title="Common Lisp Defstruct" type="section"></ref>.
+
+</td></tr><tr><td><obj>:make-array</obj></td>
+<td><index-entry index="keywords" title=":make-array defstruct"></index-entry>
+If the structure being defined is implemented as an array, this option
+may be used to control those aspects of the array that are not otherwise constrained by
+<obj>defstruct</obj>.  For example, you might want to control the area in which
+the array is allocated.  Also, if you are creating a structure of type
+<obj>:array-leader</obj>, you almost certainly want to specify the dimensions
+of the array to be created, and you may want to specify the type of the
+array.
+
+The argument to the <obj>:make-array</obj> option should be a list of alternating
+keyword symbols for the <obj>make-array</obj> function (see <ref definition-in-file="fd-arr" key="make-array-fun" title="Function make-array" type="fun"></ref>),
+and forms whose values are the arguments to those keywords.  For example,
+<obj>(:make-array (:area 'permanent-storage-area))</obj> would request that the array
+be allocated in a particular area.  Note that the keyword symbol is <arg>not</arg> evaluated.
+
+<obj>defstruct</obj> overrides any of the <obj>:make-array</obj> options that it needs
+to.  For example, if your structure is of type <obj>:array</obj>, then
+<obj>defstruct</obj> supplies the size of that array regardless of what you
+say in the <obj>:make-array</obj> option.  If you use the <obj>:initial-element</obj>
+<obj>make-array</obj> option, it initializes all the slots, but
+<obj>defstruct</obj>'s own initializations are done afterward.  If a subtype
+has been specified to or deduced by <obj>defstruct</obj>, it overrides
+any <obj>:type</obj> keyword in the <obj>:make-array</obj> argument.
+
+Constructors for structures implemented as arrays recognize the keyword
+argument <obj>:make-array</obj>.  Attributes supplied therein overide any
+<obj>:make-array</obj> option attributes supplied in the original <obj>defstruct</obj>
+form.  If some attribute appears in neither the invocation of the
+constructor nor in the <obj>:make-array</obj> option to <obj>defstruct</obj>, then the
+constructor chooses appropriate defaults.  The <obj>:make-array</obj> option
+may only be used with the default style of
+constructor that takes keyword arguments.
+
+If a structure is of type <obj>:array-leader</obj>, you probably want to
+specify the dimensions of the array.  The dimensions of an array are
+given to <obj>:make-array</obj> as a position argument rather than a keyword
+argument, so there is no way to specify them in the above syntax.  To
+solve this problem, you can use the keyword <obj>:dimensions</obj> or the
+keyword <obj>:length</obj> (they mean the same thing), with a value that is
+anything acceptable as <obj>make-array</obj>'s first argument.
+
+</td></tr><tr><td><obj>:times</obj></td>
+<td><index-entry index="keywords" title=":times defstruct"></index-entry>
+Used for structures of type <obj>:grouped-array</obj> to control
+the number of repetitions of the structure to be allocated by the
+constructor.  (See <ref chapter="21" definition-in-file="defstr" key="grouped-array" section="6" title="Grouped Arrays" type="section"></ref>.)  The constructor also accepts a
+keyword argument <obj>:times</obj> to override the value given in the
+<obj>defstruct</obj>.  If <obj>:times</obj> appears in neither the invocation of the
+constructor nor as a <obj>defstruct</obj> option, the constructor allocates
+only one instance of the structure.
+
+</td></tr><tr><td><obj>:size-macro</obj></td>
+<td><index-entry index="keywords" title=":size-macro defstruct"></index-entry>
+Defines a special macro to expand into the size of this structure.  The
+exact meaning of the size varies, but in general this number is the one
+you would need to know if you were going to allocate one of these
+structures yourself (for example, the length of the array or list).  The
+argument of the <obj>:size-macro</obj> option is the name to be used for the
+macro.  If this option is present without an argument, then the name of
+the structure is concatenated with `<obj>-size</obj>' to produce the macro
+name.
+
+Example:
+
+<lisp>(defstruct (foo :conc-name :size-macro)
+  a b)
+(macroexpand '(foo-size)) =&gt; 2
+</lisp>
+</td></tr><tr><td><obj>:size-symbol</obj></td>
+<td><index-entry index="keywords" title=":size-symbol defstruct"></index-entry>
+Like <obj>:size-macro</obj> but defines a global variable rather than a macro.
+The size of the structure is the variable's value.  Use of <obj>:size-macro</obj>
+is considered cleaner.
+
+</td></tr><tr><td><obj>:initial-offset</obj></td>
+<td><index-entry index="keywords" title=":initial-offset defstruct"></index-entry>
+This allows you to tell <obj>defstruct</obj> to skip over a certain
+number of slots before it starts allocating the slots described in the
+body.  This option requires an argument (which must be a fixnum), which
+is the number of slots you want <obj>defstruct</obj> to skip.  To make use of
+this option requires that you have some familiarity with how <obj>defstruct</obj>
+is implementing your structure; otherwise, you will be unable to make
+use of the slots that <obj>defstruct</obj> has left unused.
+
+</td></tr><tr><td><obj>:but-first</obj></td>
+<td><index-entry index="keywords" title=":but-first defstruct"></index-entry>
+This option is best explained by example:
+
+
+<lisp>(defstruct (head (:type :list)
+                 (:default-pointer person)
+                 (:but-first person-head))
+  nose
+  mouth
+  eyes)
+</lisp>
+The accessors expand like this:
+
+
+<lisp>(nose x)        ==&gt; (car (person-head x))
+(nose)          ==&gt; (car (person-head person))
+</lisp>
+The idea is that <obj>:but-first</obj>'s argument is an accessor from some
+other structure, and it is never expected that this structure will be
+found outside of that slot of that other structure.  Actually, you can
+use any one-argument function, or a macro that acts like a one-argument
+function.  It is an error for
+the <obj>:but-first</obj> option to be used without an argument.
+
+</td></tr><tr><td><obj>:callable-accessors defstruct</obj></td><td>Controls whether accessors are really functions,
+and therefore ``callable'', or whether they are really macros.  With
+an argument of <obj>t</obj>, or with no argument, or if the option is not
+provided, then the accessors are really functions.  Specifically,
+they are substs, so that they have all the efficiency of macros
+in compiled programs, while still being function objects that
+can be manipulated (passed to <obj>mapcar</obj>, etc.).  If
+the argument is <obj>nil</obj> then the accessors are really macros.
+
+</td></tr><tr><td><obj>:callable-constructors defstruct</obj></td><td>Controls whether constructors are really functions,
+and therefore ``callable'', or macros.  An argument of <obj>t</obj>
+makes them functions; <obj>nil</obj> makes them macros.
+The default is <obj>t</obj> in Common Lisp programs, <obj>nil</obj> in
+traditional programs.  See <ref chapter="21" definition-in-file="defstr" key="using-defstruct-constructor" section="4" title="Using the Constructor and Alterant" type="section"></ref> for more information.
+
+</td></tr><tr><td><obj>:property defstruct</obj></td><td>For each structure defined by defstruct, a property list is maintained
+for the recording of arbitrary properties about that structure.  (That
+is, there is one property list per structure definition, not one for
+each instantiation of the structure.)
+
+The <obj>:property</obj> option can be used to give a <obj>defstruct</obj> an
+arbitrary property.  <obj>(:property <arg>property-name value</arg>)</obj> gives the
+<obj>defstruct</obj> a <arg>property-name</arg> property of <arg>value</arg>.  Neither
+argument is evaluated.  To access the property list, the user must
+look inside the <obj>defstruct-description</obj> structure himself (see
+<ref definition-in-file="defstr" key="defstruct-description" type="page"></ref>).
+
+</td></tr><tr><td><obj>:print defstruct</obj></td><td>Controls the printed representation of his structure in a way
+independent of the Lisp dialect in use.  Here is an example:
+
+<lisp>(defstruct (foo :named
+                (:print &quot;#&lt;Foo ~S ~S&gt;&quot;
+                        (foo-a foo) (foo-b foo)))
+  foo-a
+  foo-b)
+</lisp>
+Of course, this only works if you use some named type, so that the system
+can recognize examples of this structure automatically.
+
+The arguments to the <obj>:print</obj> option are arguments to the <obj>format</obj>
+function (except for the stream of course!).  They are evaluated in an
+environment where the name symbol of the structure (<obj>foo</obj> in this
+case) is bound to the instance of the structure to be printed.
+
+This works by generating a <obj>defselect</obj> that creates a named structure
+handler.  Do not use the <obj>:print</obj> option if you define a named
+structure handler yourself, as they will conflict.
+
+</td></tr><tr><td><obj>:print-function</obj></td><td>is the Common Lisp version of the <obj>:print</obj> option.  Its argument is a function
+to print a structure of this type, and it is called with three arguments:
+the structure to be printed, the stream to print it on, and the current printing depth
+(which should be compared with <obj>*print-level*</obj> to decide when to cut off
+recursion and print `<obj>#</obj>').
+The function is expected to observe the values of the various printer-control variables
+such as <obj>*print-escape*</obj> (see <ref definition-in-file="rdprt" key="*print-escape*-var" title="Variable *print-escape*" type="var"></ref>).  Example:
+
+
+<lisp>(defstruct (bar :named :conc-name
+                (:print-function
+                  (lambda (struct stream depth)
+                    depth ;<standard> unused</standard>
+                    (sys:printing-random-object
+                        (struct stream :type)
+                      (format stream &quot;with zap ~S&quot;
+                              (bar-zap struct))))))
+  &quot;The famous BAR structure.&quot;
+  (zap 'yow)
+  random-slot)
+
+(make-bar) =&gt; #&lt;BAR with zap YOW&gt;
+</lisp>
+</td></tr><tr><td><obj><arg>type</arg></obj></td><td>In addition to the options listed above, any currently defined type
+(any legal argument to the <obj>:type</obj> option) can be used as an option.
+This is mostly for compatibility with the old version of <obj>defstruct</obj>.
+It allows you to say just <arg>type</arg> instead of <obj>(:type <arg>type</arg>)</obj>.  It
+is an error to give an argument to one of these options.
+
+</td></tr><tr><td><obj><arg>other</arg></obj></td><td>Finally, if an option isn't found among those listed above,
+it should be a valid defstruct-keyword for the type
+of structure being defined, and the option should be of the form
+<obj>(<arg>option-name value</arg>)</obj>.  If so, the option is treated
+just like <obj>(:property <arg>option-name value</arg>)</obj>.
+That is, the <obj>defstruct</obj> is given an <arg>option-name</arg> property of <arg>value</arg>.
+
+This provides a primitive way for you to define your own options to
+<obj>defstruct</obj>, particularly in connection with user-defined types (see
+<ref chapter="21" definition-in-file="defstr" key="defining-your-own-defstruct-types" section="10" title="Extensions to Defstruct" type="section"></ref>).  Several of the options listed above
+are actually implemented using this mechanism.  They include
+<obj>:times</obj>, <obj>:subtype</obj> and <obj>:make-array</obj>.
+
+The valid defstruct-keywords of a type are in a list in the 
+<obj>defstruct-keywords</obj> slot of the
+<obj>defstruct-type-description</obj> structure for <arg>type</arg>.
+</td></tr></tbody></table></section><a name="using-defstruct-alterant"></a>
+
+
+<section chapter-number="21" name="using-defstruct-alterant" number="4" title="Using the Constructor and Alterant"><p>After you have defined a new structure with <obj>defstruct</obj>, you can
+create instances of this structure using the constructor, and
+you can alter the values of its slots using the alterant macro.  By
+default, traditional <obj>defstruct</obj> defines both the constructor and the alterant,
+forming their names by concatenating `<obj>make-</obj>' and `<obj>alter-</obj>',
+respectively, onto the name of the structure.  The <obj>defstruct</obj> for Common Lisp 
+programs defines no alterant by default.  You can specify the names
+yourself by passing the name you want to use as the argument to the
+<obj>:constructor</obj> or <obj>:alterant</obj> options, or specify that you don't
+want the macro created at all by passing <obj>nil</obj> as the argument.
+</p>
+
+
+
+<subsection name="NIL" title="Constructors"><index-entry index="concepts" title="constructor"></index-entry>
+
+<p>A call to a constructor, in general, has the form
+
+<lisp>(<arg>name-of-constructor</arg>  <arg>keyword-1</arg> <arg>value-1</arg>  <arg>keyword-2</arg> <arg>value-2</arg>  <obj>...</obj>)
+</lisp>Each <arg>keyword</arg> is a keyword (a symbol in the <obj>keyword</obj> package)
+whose name matches one of the slots of the structure,
+or one of a few specially recognized keywords.
+</p>
+
+<p>The name of the constructor is specified by the <obj>:constructor</obj> option,
+which can also specify a documentation string for it:
+
+<lisp>(:constructor <arg>name-of-constructor</arg> [<arg>doc-string</arg>])
+</lisp></p>
+
+<p>If a <arg>keyword</arg> matches the name of a slot (<arg>not</arg> the name of an
+accessor), then the corresponding <arg>value</arg> is used to initialize that
+slot of the new structure.  Any slots whose values are not specified in
+this way are initialized to the values of the default initial value forms
+specified in the <obj>defstruct</obj>.  If no default initial value was specified
+either for a slot, that slot's initial value is undefined.
+You should always specify the initialization, either in the <obj>defstruct</obj>
+or in the constructor invocation, if you care about the initial value of the slot.
+</p>
+
+<p>Constructors may be macros or functions.  They are functions
+if the <obj>:callable-constructors</obj> option to <obj>defstruct</obj>
+is non-<obj>nil</obj>.  By default, they are functions in Common Lisp programs
+and macros in traditional programs.
+</p>
+
+<p>Constructor macros allow the slot name (in its own package) to be
+used instead of a keyword.  Constructor functions do not, as they
+are ordinary functions defined using <obj>&amp;key</obj>.  Old code using slot
+names not in the keyword package should be converted.
+</p>
+
+<p>The default initial value forms are evaluated (if needed) each
+time a structure is constructed, so that if <obj>(gensym)</obj> is used as a
+default initial value form then a new symbol is generated for each
+structure.  The order of evaluation of the default initial value forms
+is unpredictable.  When the constructor is a macro, the order of
+evaluation of the keyword argument forms it is given is also
+unpredictable.
+</p>
+
+<p>The two special keyword arguments recognized by constructors are <obj>:make-array</obj>
+and <obj>:times</obj>.  <obj>:make-array</obj> should be used only for structures
+which are represented as arrays, and <obj>:times</obj> only for <obj>:grouped-array</obj>
+structures.  If one of these arguments is given, then it overrides the <obj>:make-array</obj>
+option or the <obj>:times</obj> option (see <ref definition-in-file="defstr" key="defstruct-make-array-option" type="page"></ref>)
+specified in the <obj>defstruct</obj>.  For example:
+
+<lisp><exdent amount="96"><caption>For example, </caption></exdent>(make-ship :ship-x-position 10.0
+           :ship-y-position 12.0
+           :make-array '(:leader-length 5 :area disaster-area))
+</lisp></p>
+
+<p>User-defined types of structures can define their own special
+constructor keywords.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="By-Position Constructors"><p>If the <obj>:constructor</obj> option is given as
+<obj>(:constructor <arg>name</arg> <arg>arglist</arg> [<arg>doc-string</arg>])</obj>, then instead of making a keyword
+driven constructor, <obj>defstruct</obj> defines a positional constructor,
+taking arguments whose meaning is determined by the argument's position
+rather than by a keyword.
+The <arg>arglist</arg> is used to describe what arguments the constructor should accept.
+In the simplest case something like
+<obj>(:constructor make-foo (a b c))</obj> defines <obj>make-foo</obj> to be a three-argument
+constructor macro whose arguments are used to initialize the
+slots named <obj>a</obj>, <obj>b</obj>, and <obj>c</obj>.
+</p>
+
+<p>In addition, the keywords <obj>&amp;optional</obj>, <obj>&amp;rest</obj>, and <obj>&amp;aux</obj> are
+recognized in the argument list.  They work in the way you might expect,
+but there are a few fine points worthy of explanation:
+</p>
+
+<lisp>(:constructor make-foo 
+        (a &amp;optional b (c 'sea) &amp;rest d &amp;aux e (f 'eff))
+  &quot;Make a FOO, with positional arguments&quot;)
+</lisp>
+<p>This defines <obj>make-foo</obj> to be a constructor of one or more arguments.
+The first argument is used to initialize the <obj>a</obj> slot.  The second
+argument is used to initialize the <obj>b</obj> slot.  If there isn't any
+second argument, then the default value given in the body of the
+<obj>defstruct</obj> (if given) is used instead.  The third argument is used to
+initialize the <obj>c</obj> slot.  If there isn't any third argument, then the
+symbol <obj>sea</obj> is used instead.  Any arguments following the third
+argument are collected into a list and used to initialize the <obj>d</obj>
+slot.  If there are three or fewer arguments, then <obj>nil</obj> is placed in
+the <obj>d</obj> slot.  The <obj>e</obj> slot <arg>is not initialized</arg>; its initial
+value is undefined, even if a default value was specified in its slot-description.
+Finally, the <obj>f</obj> slot is initialized to contain
+the symbol <obj>eff</obj>.
+</p>
+
+<p indent="1">        The actions taken in the <obj>b</obj> and <obj>e</obj> cases were carefully
+chosen to allow the user to specify all possible behaviors.  Note that
+the aux ``variables'' can be used to override completely the default
+initializations given in the body.
+</p>
+
+<p indent="1">        Since there is so much freedom in defining constructors this
+way, it would be cruel to only allow the <obj>:constructor</obj> option to be
+given once.  So, by special dispensation, you are allowed to give the
+<obj>:constructor</obj> option more than once, so that you can define several
+different constructors, each with a different syntax.  These
+may include both keyword and positional constructors.  If there are
+multiple keyword constructors, they all behave the same, differing
+only in the name.  <obj>It is important
+to have a keyword constructor</obj> because otherwise the <obj>#S</obj> reader
+construct cannot work.
+</p>
+
+<p indent="1">        Note that positional constructors may be macros or functions,
+just like keyword constructors, and based on the same criterion: they
+are functions if the <obj>:callable-constructors</obj> option to <obj>defstruct</obj>
+is non-<obj>nil</obj>.  By default, they are functions in Common Lisp programs
+and macros in traditional programs.  If the positional constructor is a
+macro, then the actual order of evaluation of its arguments is
+unpredictable.
+</p>
+
+<p indent="1">          Also note that you cannot specify the <obj>:make-array</obj>
+or <obj>:times</obj> information in a positional constructor.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Alterant Macros"><index-entry index="concepts" title="alterant macro"></index-entry>
+
+<p>A call to the alterant macro, in general, has the form
+
+<lisp>(<arg>name-of-alterant-macro</arg> <arg>instance-form</arg> 
+    <arg>slot-name-1</arg> <arg>form-1</arg>
+    <arg>slot-name-2</arg> <arg>form-2</arg>
+    <arg>...</arg>)
+</lisp><arg>instance-form</arg> is evaluated and should return an instance of the
+structure.  Each <arg>form</arg> is evaluated and the corresponding slot is
+changed to have the result as its new value.  The slots are altered
+after all the <arg>forms</arg> are evaluated, so you can exchange the values
+of two slots, as follows:
+
+<lisp>(alter-ship enterprise
+    :ship-x-position (ship-y-position enterprise)
+    :ship-y-position (ship-x-position enterprise))
+</lisp></p>
+
+<p>As with constructor macros, the order of evaluation of the <arg>forms</arg> is
+undefined.  Using the alterant macro can produce more efficient Lisp
+than using consecutive <obj>setf</obj>s when you are altering two byte fields
+of the same object, or when you are using the <obj>:but-first</obj> option.
+</p>
+</subsection></section><a name="Byte Fields"></a>
+
+
+<section chapter-number="21" name="Byte Fields" number="5" title="Byte Fields"><p indent="1">        The byte field feature of <obj>defstruct</obj> allows you to specify that
+several slots of your structure are bytes (see
+<ref chapter="8" definition-in-file="fd-num" key="byte-manipulation-functions" section="9" title="Byte Manipulation Functions" type="section"></ref>) in an integer stored in one
+element of the structure.  For example, suppose we had the following
+structure:
+
+<lisp>(defstruct (phone-book-entry (:type :list))
+  name
+  address
+  (area-code 617.)
+  exchange
+  line-number)
+</lisp></p>
+
+<p>This works correctly but it wastes space.  Area codes and
+exchange numbers are always less than 1000, and so both can fit
+into 10 bit fields when expressed as binary numbers.  Since Lisp
+Machine fixnums have (more than) 20 bits, both of these
+values can be packed into a single fixnum.  To tell <obj>defstruct</obj> to do
+so, you can change the structure definition to the following:
+</p>
+
+<lisp>(defstruct (phone-book-entry (:type :list))
+  name
+  address
+  ((area-code (byte 10. 10.) 617.)
+   (exchange (byte 10. 0)))
+  line-number)
+</lisp>
+<p>The expressions <obj>(byte ...)</obj> calculate byte specifiers to be used
+with the functions <obj>ldb</obj> and <obj>dpb</obj>.  The accessors, constructor, and
+alterant will now operate as follows:
+</p>
+
+<lisp>(area-code pbe) ==&gt; (ldb (byte 10. 10.) (caddr pbe))
+(exchange pbe)  ==&gt; (ldb (byte 10. 0) (caddr pbe))
+</lisp>
+<lisp>
+(make-phone-book-entry
+   :name &quot;Fred Derf&quot;
+   :address &quot;259 Octal St.&quot;
+   :exchange ex
+   :line-number 7788.)
+
+==&gt; (list &quot;Fred Derf&quot; &quot;259 Octal St.&quot; 
+          (dpb ex (byte 10. 0) 631808.)
+          7788.)
+
+</lisp>
+<lisp>(alter-phone-book-entry pbe
+   :area-code ac
+   :exchange ex)
+
+==&gt; ((lambda (#:g0530)
+       (setf (nth 2 #:g0530)
+             (dpb ac (byte 10. 10.) 
+                     (dpb ex (byte 10. 0) (nth 2 #:g0530)))))
+     pbe)
+</lisp>
+<p>(This is how the expression would print; this text would not read in
+properly because a new uninterned symbol would be created by each use of
+<example>#:</example>.)
+</p>
+
+<p>Note that the alterant macro is optimized to only read and write the
+second element of the list once, even though you are altering two
+different byte fields within it.  This is more efficient than using two
+<obj>setf</obj>'s.  Additional optimization by the alterant macro occurs if the
+byte specifiers in the <obj>defstruct</obj> slot descriptions are constants.
+However, you don't need to worry about the details of how the alterant
+macro does its work.
+</p>
+
+<p>If the byte specifier is <obj>nil</obj>, then the accessor is
+defined to be the usual kind that accesses the entire Lisp object,
+thus returning all the byte field components as a fixnum.  These slots
+may have default initialization forms.
+</p>
+
+<p>The byte specifier need not be a constant; a variable or, indeed, any
+Lisp form, is legal as a byte specifier.  It is evaluated each
+time the slot is accessed.  Of course, unless you are doing something
+very strange you will not want the byte specifier to change between
+accesses.
+</p>
+
+<p>Constructors (both functions and macros) initialize
+words divided into byte fields as if they were deposited in in the
+following order:
+</p>
+
+<p> 1) Initializations for the entire word given in the defstruct form.
+</p>
+
+<p> 2) Initializations for the byte fields given in the defstruct form.
+</p>
+
+<p> 3) Initializations for the entire word given in the constructor invocation.
+</p>
+
+<p> 4) Initializations for the byte fields given in the constructor invocation.
+</p>
+
+<p>Alterant macros work similarly: the modification for the entire Lisp
+object is done first, followed by modifications to specific byte fields.
+If any byte fields being initialized or altered overlap each other, the
+action of the constructor and alterant is unpredictable.
+</p>
+</section><a name="grouped-array"></a>
+
+
+<section chapter-number="21" name="grouped-array" number="6" title="Grouped Arrays"><index-entry index="concepts" title="grouped array"></index-entry>
+
+<p indent="1">        The grouped array feature allows you to store several instances
+of a structure side-by-side within an array.  This feature is somewhat
+limited; it does not support the <obj>:include</obj> and <obj>:named</obj> options.
+</p>
+
+<p indent="1">        The accessor functions are defined to take an extra argument, which
+should be an integer, and is the index into the array of where this
+instance of the structure starts.  This index should normally be a multiple
+of the size of the structure, for things to make sense.  Note that the
+index is the <arg>first</arg> argument to the accessor function and the structure
+is the <arg>second</arg> argument, the opposite of what you might expect.  This
+is because the structure is <obj>&amp;optional</obj> if the <obj>:default-pointer</obj> option
+is used.
+</p>
+
+<p indent="1">        Note that the ``size'' of the structure (for purposes of the
+<obj>:size-symbol</obj> and <obj>:size-macro</obj> options) is the number of elements
+in <arg>one</arg> instance of the structure; the actual length of the array is
+the product of the size of the structure and the number of instances.
+The number of instances to be created by the constructor is taken from
+the <obj>:times</obj> keyword of the constructor or the argument to the
+<obj>:times</obj> option to <obj>defstruct</obj>.
+</p>
+</section><a name="Named Structures"></a>
+
+
+<section chapter-number="21" name="Named Structures" number="7" title="Named Structures"><index-entry index="concepts" title="named structure"></index-entry>
+
+<p indent="1">        The <arg>named structure</arg> feature provides a very simple form of
+user-defined data type.  (Flavors are another, more powerful, facility
+for defining data types, but they are more expensive in simple cases.  See
+<ref chapter="22" definition-in-file="flavor" key="flavor" section="0" title="Objects, Message Passing, and Flavors" type="section"></ref>.)  A named structure is actually an array, containing
+elements and optionally a leader.  The difference between a named
+structure and an ordinary array is that the named structure also contains
+an explicit slot to hold its ostensible data type.  This data type is a
+symbol, any symbol the programmer cares to use.  In traditional
+programs, named structures are normally defined using <obj>defstruct</obj> with
+the <obj>:named</obj> option.  In Common Lisp programs, <obj>defstruct</obj> defines a
+named structure by default.  Individual named structures are made with
+the constructors defined by <obj>defstruct</obj>.
+</p>
+
+<p>The data type symbol of a named structure is also called the <arg>named
+structure symbol</arg>.  It is stored in array element 0 if the structure
+has no leader.  If there is a leader, the type symbol is stored in array
+leader element 1 (recall that element 0 is reserved for the fill
+pointer).  If a numeric-type array is to be a named structure, it must
+have a leader, since a symbol cannot be an element of a numeric array.
+</p>
+
+<p>Named structure are <arg>recognizable</arg>; that is, if you define a named
+structure called <obj>foo</obj>, you can always tell whether an object is a
+<obj>foo</obj> structure.  No array created in the normal fashion, no matter
+what components it has, will be mistaken for a genuine <obj>foo</obj>.
+</p>
+
+<p>Named structures can recognized by <obj>typep</obj>.  Specify <obj>foo</obj>,
+the named structure name, as the second argument, and the object to be
+tested as the first argument.  <obj>type-of</obj> of an ordinary array returns
+<obj>array</obj>, but <obj>type-of</obj> of a named structure returns the explicitly
+recorded data type symbol.
+</p>
+
+<lisp>(defstruct (foo :named) a b)
+(type-of (make-foo)) =&gt; foo
+(typep (make-foo) 'foo) =&gt; t
+</lisp>
+<p>Named structures of other types which include <obj>foo</obj> are also recognized
+as <obj>foo</obj>'s by <obj>typep</obj>.  For example, using the previously-given definitions
+of <obj>person</obj> and <obj>astronaut</obj>, then
+
+<lisp>(typep (make-astronaut) 'person) =&gt; t
+</lisp>because the type <obj>person</obj> was explicitly included by the <obj>defstruct</obj>
+for <obj>astronaut</obj>.  Indirect includes count also:
+</p>
+
+<lisp>(defstruct (mission-specialist :named
+             (:include astronaut))
+   <obj>...</obj>)
+
+(typep (make-mission-specialist) 'person) =&gt; t
+(subtypep 'person 'mission-specialist) =&gt; t
+</lisp>
+<p>It should be emphasized that the named structure <arg>is</arg> an array.
+All the usual array functions, such as <obj>aref</obj> and <obj>array-dimension</obj>,
+can be used on it.  If it is one-dimensional (as is usually the case)
+then the named structure is a vector and the generic sequence functions
+can be used on it.
+</p>
+
+<lisp>(typep (make-astronaut) 'array) =&gt; t
+(arrayp (make-astronaut)) =&gt; t
+(array-rank (make-astronaut)) =&gt; 1
+</lisp>
+<p>Because named structure data types are recognizable, they can define generic
+operations and say how to handle them.  A few
+such operations are defined by the system and are invoked automatically
+from well-defined places.  For example <obj>print</obj> automatically invokes
+the <obj>:print-self</obj> operation if you give it a named structure.  Thus,
+each type of named structure can define how it should print.  The standardly
+defined named structure operations are listed below.  You can also define
+new named structure operations and invoke them by calling the named structure
+as a function just as you would invoke a flavor instance.
+</p>
+
+<p>Operations on a named structure are all handled by a single function,
+which is found as the <obj>named-structure-invoke</obj> property of the
+structure type symbol.  It is OK for a named structure type to have no
+handler function.  Then invocation of any operation on the named
+structure returns <obj>nil</obj>, and system routines such as <obj>print</obj> take
+default actions.
+</p>
+
+<p>If a handler function exists, it is given these arguments:
+
+<table><tbody><tr><td><arg>operation</arg></td><td>The name of the operation being invoked; usually a keyword.
+</td></tr><tr><td><arg>structure</arg></td><td>The named structure which is being operated on.
+</td></tr><tr><td><arg>additional-arguments...</arg></td><td>Any other arguments which were passed when the operation was invoked.
+The handler function should have a rest parameter so it can accept
+any number of arguments.
+</td></tr></tbody></table></p>
+<nopara></nopara>
+<p>The handler function should return <obj>nil</obj> if it does not recognize
+the <arg>operation</arg>.
+These are the named structure operations used by the system at present:
+
+<table><tbody><tr><td><obj>:which-operations</obj></td><td>Should return a list of the names of the operations the function handles.
+Every handler function must handle this operation, and every opertation
+that the function handles should be included in this list.
+
+</td></tr><tr><td><obj>:print-self</obj></td><td>Should output the printed representation of the named structure to a stream.
+The additional arguments are the stream to output to, the current
+depth in list-structure, and the current value of <obj>*print-escape*</obj>.  If
+<obj>:print-self</obj> is not in the value returned by <obj>:which-operations</obj>,
+or if there is no handler function, <obj>print</obj> uses <obj>#s</obj> syntax.
+
+</td></tr><tr><td><obj>:describe</obj></td><td>Is invoked by <obj>describe</obj> and should output a description of the
+structure to <obj>*standard-output*</obj>.  If there is no handler function
+or <obj>:describe</obj> is not in its <obj>:which-operations</obj> list,
+<obj>describe</obj> prints the names and values of the structure's fields as
+defined in the <obj>defstruct</obj>.
+
+</td></tr><tr><td><obj>:sxhash</obj></td><td>Is invoked by <obj>sxhash</obj> and should return a hash code to
+use as the value of <obj>sxhash</obj> for this structure.  It is often useful
+to call <obj>sxhash</obj> on some (perhaps all) of the components of the
+structure and combine the results in some way.
+
+There is one additional argument to this operation: a flag saying
+whether it is permissible to use the structure's address in forming the
+hash code.  For some kinds of structure, there may be no way to generate
+a good hash code except to use the address.  If the flag is <obj>nil</obj>,
+they must simply do the best they can, even if it means always returning
+zero.
+
+It is permissible to return <obj>nil</obj> for <obj>:sxhash</obj>.  Then <obj>sxhash</obj>
+produces a hash code in its default fashion.
+
+</td></tr><tr><td><obj>:fasd-fixup</obj></td><td>Is invoked by <obj>fasload</obj> on a named structure that has
+been created from data in a QFASL file.  The purpose of the operation
+is to give the structure a chance to ``clean itself up'' if, in order to
+be valid, it needs to have contents that are not exactly identical
+to those that were dumped.  For example, readtables push themselves onto
+the list <obj>si:*all-readtables*</obj> so that they can be found by name.
+
+For most kinds of structures it is
+acceptable not to define this operation at all (so that it returns <obj>nil</obj>).
+</td></tr></tbody></table></p>
+
+<p>Example handler function:
+
+<lisp>(defun (:property person named-structure-invoke)
+       (op self &amp;rest args)
+  (selectq op
+    (:which-operations '(:print-self :describe))
+    (:describe
+      (format (car args)
+              &quot;This is a ~D-year-old person&quot;
+              (person-age self)))
+    (:print-self
+      (if *print-escape*
+          (si:printing-random-object (self (car args) :type)
+            (princ (person-name self) (car args)))
+        (princ (person-name self) (car args))))))
+<exdent amount="96"><caption>or </caption>(defselect ((:property person named-structure-handler)
+            ignore)
+  (:print-self (self stream ignore &amp;optional ignore)
+    (if *print-escape*
+        (si:printing-random-object (self stream :type)
+          (princ (person-name self) stream))
+      (princ (person-name self) stream)))
+  (:describe (self)
+    (format *standard-output*
+            &quot;This is a ~D-year-old person&quot;
+            (person-age self))))
+</exdent></lisp></p>
+<nopara></nopara>
+<p>This handler causes a person structure to include its name in its printed
+representation; it also causes <obj>princ</obj> of a person to print just the
+name, with no `<obj>#&lt;</obj>' syntax.  This simple example could have been
+done even more simply with the <obj>:print-function</obj> option.
+</p>
+
+<p>It is often convenient to define a handler function with <obj>defselect</obj>;
+but you must be careful.  <obj>defselect</obj> by default defines the function
+to signal an error if it is called with a first argument that is not
+recognized.  A handler function should return <obj>nil</obj> and get no error.
+To avoid the problem, specify <obj>ignore</obj> as the default handler when you
+write the <obj>defselect</obj>.  See <ref definition-in-file="fd-fun" key="defselect-fun" title="Special Form defselect" type="spec"></ref>.
+</p>
+
+<p>Note that the handler function of a named structure type is <arg>not</arg>
+inherited by other named structure types that include it.  For
+example, the above definition of a handler for <obj>person</obj> has no
+effect at all on the <obj>astronaut</obj> structure.  If you need such
+inheritance, you must use flavors rather than named structures (see
+<ref chapter="22" definition-in-file="flavor" key="flavor" section="0" title="Objects, Message Passing, and Flavors" type="section"></ref>).
+</p>
+<nopara></nopara>
+<p>The following functions operate on named structures.
+</p>
+<definition><define key="named-structure-p-fun" name="named-structure-p" type="fun"><args>x</args>
+</define>
+
+<description>This semi-predicate returns <obj>nil</obj> if <arg>x</arg> is not a named structure; otherwise
+it returns <arg>x</arg>'s named structure symbol.
+</description></definition><definition><define key="make-array-into-named-structure-fun" name="make-array-into-named-structure" type="fun"><args>array</args>
+</define>
+
+<description>Marks <arg>array</arg> as a named structure and returns it.
+This is used by <obj>make-array</obj> when creating named structures.
+You should not normally call it explicitly.
+</description></definition><definition><define key="named-structure-invoke-fun" name="named-structure-invoke" type="fun"><args>operation structure <standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Invokes a named structure operation on <arg>structure</arg>.
+<arg>operation</arg> should be a keyword symbol, and <arg>structure</arg> should be a
+named structure.  The handler function of the named structure symbol,
+found as the value of the <obj>named-structure-invoke</obj> property of the
+symbol, is called with appropriate arguments.
+
+If the structure type has no <obj>named-structure-invoke</obj> property,
+<obj>nil</obj> is returned.  By convention, <obj>nil</obj> is also returned
+by the handler if it does not recognize <obj>operation</obj>.
+
+<obj>(send <arg>structure</arg> <arg>operation</arg> <arg>args</arg>...)</obj>
+has the same effect, by calling <obj>named-structure-invoke</obj>.
+</description></definition>
+<p>See also the <obj>:named-structure-symbol</obj> keyword to <obj>make-array</obj>, <ref definition-in-file="fd-arr" key="make-array-fun" title="Function make-array" type="fun"></ref>.
+</p>
+</section><a name="cli-defstruct"></a>
+
+<section chapter-number="21" name="cli-defstruct" number="8" title="Common Lisp Defstruct"><definition>
+<define key="cli:defstruct-fun" name="cli:defstruct" type="mac"></define>
+
+<description>The version of <obj>defstruct</obj> used in Common Lisp programs
+differs from the traditional <obj>defstruct</obj> in the defaults for
+a few options and the meanings of a few of them.
+
+The <obj>:conc-name</obj> option defaults to the structure type name followed
+by a hyphen in <obj>cli:defstruct</obj>.  In traditional <obj>defstruct</obj> it
+defaults to <obj>nil</obj>.
+
+The <obj>:callable-constructors</obj> option defaults to <obj>t</obj> in
+<obj>cli:defstruct</obj>, so that the constructor is a function.
+Traditionally, it defaults to <obj>nil</obj>.
+
+The <obj>:alterant</obj> option defaults to <obj>nil</obj> in <obj>cli:defstruct</obj>,
+so that no alterant is defined.  Traditionally, an alterant is defined
+by default with the name <obj>alter-<arg>name</arg></obj>.
+
+The <obj>:type</obj> option defaults to <obj>:named-vector</obj> in <obj>cli:defstruct</obj>.
+This makes a named structure, and you may specify how to print it.
+The <obj>:predicate</obj> option defaults to <obj>t</obj> in this case.
+
+If the <obj>:type</obj> option is specified in <obj>cli:defstruct</obj>, you never get
+a named structure.  You get either a plain list or a plain vector.
+There is no type-testing predicate, and you may not request one.
+You may not say how to print the structure, either.
+
+If you specify the <obj>:named</obj> option along with <obj>:type</obj>, you still
+<arg>do not</arg> get a named structure.  You get a plain list or a plain vector
+in which the structure name happens to be stored.  The type is either
+<obj>:named-list</obj> or <obj>:phony-named-vector</obj>.
+The <obj>:predicate</obj> option defaults to <obj>nil</obj>, but you may specify <obj>t</obj> yourself.
+However, any randomly created list or vector with the structure name
+stored in the right place will satisfy the predicate thus defined.
+<obj>typep</obj> cannot recognize these phony named structures, and you
+may not specify how to print them (they do not understand <obj>named-structure-invoke</obj>.)
+</description></definition></section><a name="The si:defstruct-description Structure"></a>
+
+
+<section chapter-number="21" name="The si:defstruct-description Structure" number="9" title="The si:defstruct-description Structure"><p indent="1">        This section discusses the internal structures used by
+<obj>defstruct</obj> that might be useful to programs that want to interface
+to <obj>defstruct</obj> nicely.  For example, if you want to write a program
+that examines structures and displays them the way <obj>describe</obj>
+(see <ref definition-in-file="fd-hac" key="describe-fun" title="Function describe" type="fun"></ref>) and the Inspector do, your program should work
+by examining these structures.
+The information in this section is also
+necessary for anyone who is thinking of defining his own structure
+types.
+</p>
+
+<p indent="1">        Whenever the user defines a new structure using <obj>defstruct</obj>,
+<obj>defstruct</obj> creates an instance of the <obj>si:defstruct-description</obj> structure.
+This can be found as the <obj>si:defstruct-description</obj> property of
+the name of the structure; it contains such useful information as
+the number of slots in the structure, the <obj>defstruct</obj> options specified,
+and so on.
+</p>
+
+<p>This is a simplified version of the way 
+the <obj>si:defstruct-description</obj> structure is defined.
+It omits some slots whose meaning is not worth documenting here.
+(The actual definition is in the <obj>system-internals</obj> package.)
+</p>
+
+<lisp>(defstruct (defstruct-description
+                (:default-pointer description)
+                (:conc-name defstruct-description-))
+           name
+           size
+           property-alist
+           slot-alist
+           documentation)
+</lisp>
+<p indent="1">        The <obj>name</obj> slot contains the symbol supplied by the user to be
+the name of his structure, such as <obj>spaceship</obj> or
+<obj>phone-book-entry</obj>.
+</p>
+
+<p indent="1">        The <obj>size</obj> slot contains the total number of slots in an
+instance of this kind of structure.  This is <arg>not</arg> the same number as
+that obtained from the <obj>:size-symbol</obj> or <obj>:size-macro</obj> options to
+<obj>defstruct</obj>.  A named structure, for example, usually uses up an extra
+location to store the name of the structure, so the <obj>:size-macro</obj> option
+will get a number one larger than that stored in the <obj>defstruct</obj>
+description.
+</p>
+
+<p indent="1">        The <obj>property-alist</obj> slot contains an alist with pairs of the
+form <obj>(<arg>property-name</arg> . <arg>property</arg>)</obj> containing properties placed there
+by the <obj>:property</obj> option to <obj>defstruct</obj> or by property names used as
+options to <obj>defstruct</obj> (see the <obj>:property</obj> option, <ref definition-in-file="defstr" key="defstruct-property-option" type="page"></ref>).
+</p>
+
+<p indent="1">        The <obj>slot-alist</obj> slot contains an alist of pairs of the form
+<obj>(<arg>slot-name</arg> . <arg>slot-description</arg>)</obj>.  A <arg>slot-description</arg> is
+an instance of the <obj>defstruct-slot-description</obj> structure.  The
+<obj>defstruct-slot-description</obj> structure is defined something like
+this (with other slots that are omitted here), also in the <obj>si</obj> package:
+</p>
+
+<lisp>(defstruct (defstruct-slot-description
+                (:default-pointer slot-description)
+                :conc-name)
+  number
+  ppss
+  init-code
+  type
+  property-alist
+  ref-macro-name
+  documentation)
+</lisp>
+<p indent="1">        The <obj>number</obj> slot contains the number of the location of this
+slot in an instance of the structure.  Locations are numbered,
+starting with 0, and continuing up to a number one less than the size of the
+structure.  The actual location of the slot is determined by the
+reference-consing function associated with the type of the structure; see
+<ref definition-in-file="defstr" key="defstruct-reference-consing-function" type="page"></ref>.
+</p>
+
+<p indent="1">        The <obj>ppss</obj> slot contains the byte specifier code for this slot if
+this slot is a byte field of its location.  If this slot is the entire
+location, then the <obj>ppss</obj> slot contains <obj>nil</obj>.
+</p>
+
+<p indent="1">        The <obj>init-code</obj> slot contains the initialization code supplied
+for this slot by the user in his <obj>defstruct</obj> form.  If there is no
+initialization code for this slot then the init-code slot contains a
+canonical object which can be obtained (for comparison using <obj>eq</obj>)
+as the result of <obj>(si:defstruct-empty)</obj>.
+</p>
+
+<p indent="1">        The <obj>ref-macro-name</obj> slot contains the symbol that is defined as
+a macro or a subst that expands into a reference to this slot (that is, the name
+of the accessor function).
+</p>
+</section><a name="flavor"></a>
+
+
+<section chapter-number="21" name="flavor" number="10" title="Extensions to Defstruct"><p indent="1">        The macro <obj>si:defstruct-define-type</obj> can be used to teach <obj>defstruct</obj>
+about new types that it can use to implement structures.
+</p>
+<definition>
+<define key="si:defstruct-define-type-fun" name="si:defstruct-define-type" type="mac"></define>
+
+<description>Is used for teaching <obj>defstruct</obj> about new types.
+
+The syntax of <obj>si:defstruct-define-type</obj> is:
+
+<lisp>(si:defstruct-define-type <arg>type</arg>
+  <arg>option-1</arg> <arg>option-2</arg> <obj>...</obj>)
+</lisp>where each <arg>option</arg> is either the symbolic name of an option or a list of
+the form <obj>(<arg>option-name</arg> .  <arg>rest</arg>)</obj>.  Different options interpret
+<arg>rest</arg> in different ways.  The symbol <arg>type</arg> is given an
+<obj>si:defstruct-type-description</obj> property of a structure that describes the type
+completely.
+
+The semantics of <obj>si:defstruct-define-type</obj> is the subject
+of the rest of this section.
+</description></definition>
+
+
+<subsection name="NIL" title="Example"><p indent="1">        Let us start by examining a sample call to
+<obj>defstruct-define-type</obj>.  This is how the <obj>:list</obj> type of structure might
+have been defined:
+</p>
+
+<lisp>(si:defstruct-define-type :list
+  (:cons (initialization-list description
+                              keyword-options) 
+         :list
+         `(list . ,initialization-list))
+  (:ref (slot-number description argument)
+        `(nth ,slot-number ,argument)))
+</lisp>
+<p>This is the simplest possible form of <obj>defstruct-define-type</obj>.  It
+provides <obj>defstruct</obj> with two Lisp forms: one for creating forms to
+construct instances of the structure, and one for creating forms to
+become the bodies of accessors for slots of the structure.
+</p>
+
+<p>The keyword <obj>:cons</obj> is followed by a list of three variables that will
+be bound while the constructor-creating form is evaluated.  The first,
+<obj>initialization-list</obj>, will be bound to a list of the initialization
+forms for the slots of the structure.  The second, <obj>description</obj>, will
+be bound to the <obj>defstruct-description</obj> structure for the structure
+(see <ref definition-in-file="defstr" key="defstruct-description" type="page"></ref>).  The third variable and the <obj>:list</obj> keyword
+will be explained later.
+</p>
+
+<p>The keyword <obj>:ref</obj> is followed by a list of three variables that will
+be bound while the accessor-creating form is evaluated.  The first,
+<obj>slot-number</obj>, will bound to the number of the slot that the new accessor
+should reference.  The second, <obj>description</obj>, will be bound to the
+<obj>defstruct-description</obj> structure for the structure.  The third, <obj>argument</obj>,
+will be bound to the form that was provided as the argument to the accessor.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Options to si:defstruct-define-type"><p indent="1">        This section is a catalog of all the options currently known
+about by <obj>si:defstruct-define-type</obj>.
+</p>
+
+<table><tbody><tr><td><obj>:cons</obj></td>
+<td><index-entry index="keywords" title=":cons si:defstruct-define-type"></index-entry>
+Specifies the code to cons up a form that will construct an instance
+of a structure of this type.
+
+The <obj>:cons</obj> option has the syntax:
+
+<lisp>(:cons (<arg>inits</arg> <arg>description</arg> <arg>keywords</arg>) <arg>kind</arg>
+  <arg>body</arg>)
+</lisp><arg>body</arg> is some code that should construct and return a piece
+of code that will construct, initialize, and return an instance of a
+structure of this type.
+
+The symbol <arg>inits</arg> will be bound to the information that the
+constructor conser should use to initialize the slots of the
+structure.  The exact form of this argument is determined by the
+symbol <arg>kind</arg>.  There are currently two kinds of initialization.
+There is the <obj>:list</obj> kind, where <arg>inits</arg> is bound to a list of
+initializations, in the correct order, with <obj>nil</obj>s in uninitialized
+slots.  And there is the <obj>:alist</obj> kind, where <arg>inits</arg> is bound to an
+alist with pairs of the form <obj>(<arg>slot-number</arg> . <arg>init-code</arg>)</obj>. Additional
+kinds may be provided in the future.
+
+The symbol <arg>description</arg> will be bound to the instance of the
+<obj>defstruct-description</obj> structure (see <ref definition-in-file="defstr" key="defstruct-description" type="page"></ref>) that
+<obj>defstruct</obj> maintains for this particular structure.  This is so that
+the constructor conser can find out such things as the total size of
+the structure it is supposed to create.
+
+The symbol <arg>keywords</arg> will be bound to an alist with pairs of the form
+<obj>(<arg>keyword</arg> . <arg>value</arg>)</obj>, where each <arg>keyword</arg> was a keyword supplied to
+the constructor that wasn't the name of a slot, and <arg>value</arg> was the Lisp
+object that followed the keyword.  This is how you can make your own special
+keywords, like the existing <obj>:make-array</obj> and <obj>:times</obj> keywords.  See the
+section on using the constructor, <ref chapter="21" definition-in-file="defstr" key="using-defstruct-constructor" section="4" title="Using the Constructor and Alterant" type="section"></ref>.  You
+specify the list of acceptable keywords with
+the <obj>:cons-keywords</obj> option (see <ref definition-in-file="defstr" key="defstruct-define-type-keywords" type="page"></ref>).
+        It is an error not to supply the <obj>:cons</obj> option to
+<obj>si:defstruct-define-type</obj>.
+
+</td></tr><tr><td><obj>:ref</obj></td>
+<td><index-entry index="keywords" title=":ref si:defstruct-define-type"></index-entry>
+Specifies the code to cons up a form that will reference an
+instance of a structure of this type.
+
+The <obj>:ref</obj> option has the syntax:
+
+<lisp>(:ref (<arg>number</arg> <arg>description</arg> <arg>arg-1</arg> <obj>...</obj> <arg>arg-n</arg>)
+  <arg>body</arg>)
+</lisp><arg>body</arg> is some code that should construct and return a piece
+of code that will reference an instance of a structure of this type.
+
+The symbol <arg>number</arg> will be bound to the location of the slot
+that is to be referenced.  This is the same number that is found
+in the number slot of the <obj>defstruct-slot-description</obj> structure
+(see <ref definition-in-file="defstr" key="defstruct-slot-description-structure" type="page"></ref>).
+
+The symbol <arg>description</arg> will be bound to the instance of the
+<obj>si:defstruct-description</obj> structure that <obj>defstruct</obj> maintains for this
+particular structure.
+
+The symbols <arg>arg-i</arg> are bound to the forms supplied to the accessor as
+arguments.  Normally there should be only one of these.  The <arg>last</arg> argument
+is the one that will be defaulted by the <obj>:default-pointer</obj> option (see
+<ref definition-in-file="defstr" key="defstruct-default-pointer-option" type="page"></ref>).  <obj>defstruct</obj> will check that the user
+has supplied exactly <arg>n</arg> arguments to the accessor function before calling the
+reference consing code.
+
+It is an error not to supply the <obj>:ref</obj> option to
+<obj>si:defstruct-define-type</obj>. 
+
+</td></tr><tr><td><obj>:overhead</obj></td>
+<td><index-entry index="keywords" title=":overhead si:defstruct-define-type"></index-entry>
+Declares to <obj>defstruct</obj> that the implementation of this particular type
+of structure ``uses up'' some number of locations in the object
+actually constructed.  This option is used by various ``named'' types of
+structures that store the name of the structure in one location.
+For example, named arrays have an overhead of one, and named array
+leaders an overhead of two, but named typed arrays have no overhead
+since the structure type symbol is stored in the array leader whilst the
+actual data specifying the values of the slots is stored in the array proper.
+
+The syntax of <obj>:overhead</obj> is <obj>(:overhead <arg>n</arg>)</obj>, where <arg>n</arg> is a
+fixnum that says how many locations of overhead this type needs.
+
+This number is used only by the <obj>:size-macro</obj> and <obj>:size-symbol</obj>
+options to <obj>defstruct</obj> (see <ref definition-in-file="defstr" key="defstruct-size-macro-option" type="page"></ref>).
+
+</td></tr><tr><td><obj>:named</obj></td>
+<td><index-entry index="keywords" title=":named si:defstruct-define-type"></index-entry>
+Controls the use of the <obj>:named</obj> option to <obj>defstruct</obj>.  With no
+argument, the <obj>:named</obj> option means that this type is one which
+records the structure type name somehow (not necessarily by using an
+actual named structure).  With an argument, as in <obj>(:named
+<arg>type-name</arg>)</obj>, the symbol <arg>type-name</arg> should be the name of some
+other structure type that <obj>defstruct</obj> should use if the user
+specifies this type and <obj>:named</obj> as well.  For example, the
+definition of the <obj>:list</obj> type contains <obj>(:named :named-list)</obj>,
+saying that a <obj>defstruct</obj> that specifies <obj>(:list :named)</obj> really
+uses type <obj>:named-list</obj>.
+
+</td></tr><tr><td><obj>:cons-keywords</obj></td>
+<td><index-entry index="keywords" title=":cons-keywords si:defstruct-define-type"></index-entry>
+Defines additional constructor keywords for this type of structure.
+Using these keywords, one may specify additional information
+about a structure at the time it is created (``consed'') using one of
+its constructor functions or macros.
+(The <obj>:times</obj> constructor keyword for structures of type
+<obj>:grouped-array</obj> is an example.)  The syntax is: <obj>(:cons-keywords
+<arg>keyword-1</arg> ... <arg>keyword-n</arg>)</obj> where each <arg>keyword</arg> is a symbol
+that the constructor conser expects to find in the <arg>keywords</arg> alist
+(explained above).
+
+</td></tr><tr><td><obj>:keywords si:defstruct-define-type</obj></td><td><obj>:keywords</obj> is an old name for the <obj>:cons-keywords</obj> option.
+
+</td></tr><tr><td><obj>:defstruct-keywords</obj></td>
+<td><index-entry index="keywords" title=":defstruct-keywords si:defstruct-define-type"></index-entry>
+Defines additional <obj>defstruct</obj> options allowed for this
+type of structure.  (The <obj>:subtype</obj> option for structures of type
+<obj>:array</obj> is an example.)  These options take effect at the time
+the structure is defined using <obj>defstruct</obj>, and thus affect
+all structures of a particular type (unless overridden in some way.)
+In contrast, the <obj>:cons-keywords</obj> options affect the creation
+of individual structures of a particular type.
+
+The syntax is:
+<obj>(:defstruct-keywords <arg>keyword-1</arg> ... <arg>keyword-n</arg>)</obj> where each
+<arg>keyword</arg> is a keyword that <obj>defstruct</obj> will recognize as an option.
+<obj>defstruct</obj> puts such options, with their values, in the
+<obj>property-alist</obj> slot of the <obj>defstuct-description</obj> structure
+(defined above)
+
+</td></tr><tr><td><obj>:predicate si:defstruct-define-type</obj></td><td>Tells <obj>defstruct</obj> how to produce predicates for a particular type
+(for the <obj>:predicate</obj> option to <obj>defstruct</obj>).  Its syntax is:
+
+<lisp>(:predicate (<arg>description</arg> <arg>name</arg>)
+  <arg>body</arg><obj>...</obj>)
+</lisp>The variable <arg>description</arg> is bound to the <obj>defstruct-description</obj>
+structure maintained for the structure for which a predicate is being
+generated.  The variable <arg>name</arg> is bound to the symbol that is to be
+defined as a predicate.  <arg>body</arg> is a piece of code to compute
+the defining form for the predicate.  A typical use of this
+option might look like:
+
+<lisp>(:predicate (description name)
+  `(defun ,name (x)
+     (and (frobbozp x)
+          (eq (frobbozref x 0)
+              ',(si:defstruct-description-name
+                  description)))))
+</lisp>
+</td></tr><tr><td><obj>:copier si:defstruct-define-type</obj></td><td><obj>defstruct</obj> knows how to generate a copier function using the
+constructor and reference code that must be provided with any new
+defstruct type.  Nevertheless it is sometimes desirable to specify a
+specific method of copying a particular defstruct type.  The <obj>:copier</obj>
+option to <obj>si:defstruct-define-type</obj> allow this to be done:
+
+<lisp>(:copier (<arg>description</arg> <arg>name</arg>)
+  <arg>body</arg>)
+</lisp>As with the <obj>:predicate</obj> option, <arg>description</arg> is bound to an instance of the
+<obj>defstruct-description</obj> structure, <arg>name</arg> is bound to the symbol to be defined,
+and <arg>body</arg> is some code to evaluate to get the defining form.  For example:
+
+<lisp>(:copier (description name)
+  `(fdefine ',name 'copy-frobboz))
+</lisp>
+</td></tr><tr><td><obj>:defstruct</obj></td>
+<td><index-entry index="keywords" title=":defstruct si:defstruct-define-type"></index-entry>
+The <obj>:defstruct</obj> option to <obj>si:defstruct-define-type</obj> allows the user
+to run some code and return some forms as part of the expansion of the
+<obj>defstruct</obj> macro.
+
+The <obj>:defstruct</obj> option has the syntax:
+
+<lisp>(:defstruct (<arg>description</arg>)
+  <arg>body</arg>)
+</lisp><arg>body</arg> is a piece of code that will be run whenever <obj>defstruct</obj>
+is expanding a <obj>defstruct</obj> form that defines a structure of this type.
+The symbol <arg>description</arg> will be bound to the instance of the
+<obj>defstruct-description</obj> structure that <obj>defstruct</obj> maintains for this
+particular structure.
+
+The value returned by the <arg>body</arg> should be a <arg>list</arg>
+of forms to be included with those that the <obj>defstruct</obj> expands into.
+Thus, if you only want to run some code at <obj>defstruct</obj>-expand time, and
+you don't want to actually output any additional code, then you should
+be careful to return <obj>nil</obj> from the code in this option.
+
+<obj>defstruct</obj> will cause the <arg>body</arg> forms to be evaluated as early
+as possible in the parsing of a structure definition, and cause the
+returned forms to be evalutated as late as possible in the
+macro-expansion of the <obj>defstuct</obj> forms. This is so that <arg>body</arg>
+can rehack arguments, signal errors, and the like before many of
+<obj>defstruct</obj>'s internal forms are executed, while enabling it to
+return code which will modify or extend the default forms produced by
+a vanilla <obj>defstruct</obj>.
+
+</td></tr></tbody></table></subsection></section></chapter>
+</document-part>

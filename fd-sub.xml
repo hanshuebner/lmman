@@ -1,0 +1,1616 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="subprimitive-chapter"></a>
+<chapter name="subprimitive-chapter" number="16" title="Subprimitives"><index-entry index="concepts" title="subprimitive"></index-entry>
+
+<p indent="1">        <arg>Subprimitives</arg> are functions which are not intended to be used by
+the average program, only by system programs.  They allow one to
+manipulate the environment at a level lower than normal Lisp.
+They are described in this chapter.
+Subprimitives usually have names starting with a <obj>%</obj> character.
+The primitives described in other sections of the manual typically
+use subprimitives to accomplish their work.  To some extent the subprimitives take
+the place of what in other systems would be individual machine instructions.
+Subprimitives are normally hand-coded in microcode.
+</p>
+
+<p indent="1">        There is plenty of stuff in this chapter that is not fully
+explained; there are terms that are undefined, there are forward references,
+and so on.  Furthermore, most of what is in here is considered subject
+to change without notice.  In fact, this chapter does not exactly belong
+in this manual, but in some other more low-level manual.  Since the latter
+manual does not exist, it is here for the interim.
+</p>
+
+<p indent="1">        Subprimitives by their very nature cannot do full checking.
+Improper use of subprimitives can destroy the environment.
+Subprimitives come in varying degrees of dangerousness.
+Generally, those without
+a <obj>%</obj> sign in their name are not directly dangerous, whereas those
+whose names begin with <obj>%</obj> can ruin the Lisp world just as readily
+as they can do something useful.  The subprimitives are documented here
+since they need to be documented somewhere, but this manual does not
+document all the things you need to know in order to use them.  Still other
+subprimitives are not documented here because they are very specialized.
+Most of these are never used explicitly by a programmer; the compiler
+inserts them into the program to perform operations which are expressed
+differently in the source code.
+</p>
+
+<p indent="1">        The most common problem you can cause using subprimitives, though
+by no means the only one, is to create illegal pointers: pointers
+that are, for one reason or another, according to storage conventions,
+not allowed to exist.  The storage conventions are not documented;
+as we said, you have to be an expert to use a lot of the functions
+in this chapter correctly.  If you create such an illegal pointer, it probably will
+not be detected immediately, but later on parts of the system may see it,
+notice that it is illegal, and (probably) halt the Lisp Machine.
+</p>
+
+<p indent="1">        In a certain sense <obj>car</obj>, <obj>cdr</obj>, <obj>rplaca</obj>, and <obj>rplacd</obj> are
+subprimitives.  If these are given a locative instead of a list, they
+access or modify the cell addressed by the locative without regard to what
+object the cell is inside.  Subprimitives can be used to create locatives
+to strange places.
+</p>
+<a name="Data Types "></a>
+
+<section chapter-number="16" name="Data Types " number="1" title="Data Types "><definition><define key="data-type-fun" name="data-type" type="fun"><args>arg</args>
+</define>
+
+<description><obj>data-type</obj> returns a symbol that is the name for the internal
+data-type of <arg>arg</arg>.  The <obj>type-of</obj> function (<ref definition-in-file="fd-dtp" key="type-of-fun" title="Function type-of" type="fun"></ref>) is a
+higher-level primitive that is more useful in most cases; normal
+programs should always use <obj>type-of</obj> (or, when appropriate, <obj>typep</obj>)
+rather than <obj>data-type</obj>.
+
+Note that some types as seen by the user are not
+distinguished from each other at this level, and some user types may be
+represented by more than one internal type.  For example,
+<obj>dtp-extended-number</obj> is the symbol that <obj>data-type</obj> would return
+for either a single-float or a bignum, even though those two types are
+quite different.
+
+Some of these type codes occur in memory words but cannot be the type of
+an actual Lisp object.  These include header types such as
+<obj>dtp-symbol-header</obj>, which identify the first word of a structure, and
+forwarding or ``invisible'' pointer types such as <obj>dtp-one-q-forward</obj>.
+
+
+<table><tbody><tr><td><obj>dtp-symbol</obj></td>
+<td><index-entry index="variables" title="dtp-symbol"></index-entry>
+The object is a symbol.
+</td></tr><tr><td><obj>dtp-fix</obj></td>
+<td><index-entry index="variables" title="dtp-fix"></index-entry>
+The object is a fixnum; the numeric value is contained in the address
+field of the pointer.
+</td></tr><tr><td><obj>dtp-small-flonum</obj></td>
+<td><index-entry index="variables" title="dtp-small-flonum"></index-entry>
+The object is a short float; the numeric value is contained in the
+address field of the pointer.
+</td></tr><tr><td><obj>dtp-extended-number</obj></td>
+<td><index-entry index="variables" title="dtp-extended-number"></index-entry>
+The object is a single-float, ratio, bignum or complexnum.  This value will also be used for
+future numeric types.
+</td></tr><tr><td><obj>dtp-character</obj></td>
+<td><index-entry index="variables" title="dtp-character"></index-entry>
+The object is a character object; the value is contained in the address
+field of the pointer.
+</td></tr><tr><td><obj>dtp-list</obj></td>
+<td><index-entry index="variables" title="dtp-list"></index-entry>
+The object is a cons.
+</td></tr><tr><td><obj>dtp-locative</obj></td>
+<td><index-entry index="variables" title="dtp-locative"></index-entry>
+The object is a locative pointer.
+</td></tr><tr><td><obj>dtp-array-pointer</obj></td>
+<td><index-entry index="variables" title="dtp-array-pointer"></index-entry>
+The object is an array.
+</td></tr><tr><td><obj>dtp-fef-pointer</obj></td>
+<td><index-entry index="variables" title="dtp-fef-pointer"></index-entry>
+The object is a compiled function.
+</td></tr><tr><td><obj>dtp-u-entry</obj></td>
+<td><index-entry index="variables" title="dtp-u-entry"></index-entry>
+The object is a microcode entry.
+</td></tr><tr><td><obj>dtp-closure</obj></td>
+<td><index-entry index="variables" title="dtp-closure"></index-entry>
+The object is a closure; see <ref chapter="13" definition-in-file="fd-clo" key="closure" section="0" title="Closures" type="section"></ref>.
+</td></tr><tr><td><obj>dtp-stack-closure</obj></td>
+<td><index-entry index="variables" title="dtp-stack-closure"></index-entry>
+The object is a closure which lives inside a stack, and which must be
+copied if it is stored anywhere but farther down in the same stack.
+Lexical scoping is implemented using these.
+</td></tr><tr><td><obj>dtp-instance</obj></td>
+<td><index-entry index="variables" title="dtp-instance"></index-entry>
+The object is an instance of a flavor; see <ref chapter="22" definition-in-file="flavor" key="flavor" section="0" title="Objects, Message Passing, and Flavors" type="section"></ref>.
+</td></tr><tr><td><obj>dtp-entity</obj></td>
+<td><index-entry index="variables" title="dtp-entity"></index-entry>
+The object is an entity; see <ref chapter="13" definition-in-file="fd-clo" key="entity" section="4" title="Entities" type="section"></ref>.
+</td></tr><tr><td><obj>dtp-select-method</obj></td>
+<td><index-entry index="variables" title="dtp-select-method"></index-entry>
+The object is a select-method; see <ref definition-in-file="fd-fun" key="select-method" type="page"></ref>.
+</td></tr><tr><td><obj>dtp-stack-group</obj></td>
+<td><index-entry index="variables" title="dtp-stack-group"></index-entry>
+The object is a stack-group; see <ref chapter="14" definition-in-file="fd-sg" key="stack-group" section="0" title="Stack Groups" type="section"></ref>.
+</td></tr><tr><td><obj><standard>The remaining types are internal only.</standard></obj></td><td></td></tr><tr><td><obj>dtp-header</obj></td>
+<td><index-entry index="variables" title="dtp-header"></index-entry>
+An internal type used to mark the first word of several kinds of multi-word structure,
+including single-floats, ratios, bignums and FEFs.
+</td></tr><tr><td><obj>dtp-array-header</obj></td>
+<td><index-entry index="variables" title="dtp-array-header"></index-entry>
+An internal type used to mark the first word of an array.
+</td></tr><tr><td><obj>dtp-symbol-header</obj></td>
+<td><index-entry index="variables" title="dtp-symbol-header"></index-entry>
+An internal type used to mark the first word of a symbol.
+The pointer field points to the symbol's print-name, which is a string.
+</td></tr><tr><td><obj>dtp-instance-header</obj></td>
+<td><index-entry index="variables" title="dtp-instance-header"></index-entry>
+An internal type used to mark the first word of an instance.
+The pointer field points to the structure that describes the
+instance's flavor.
+</td></tr><tr><td><obj>dtp-null</obj></td>
+<td><index-entry index="variables" title="dtp-null"></index-entry>
+Nothing to do with <obj>nil</obj>.  This type code identifies a void marker.
+An attempt to refer to the contents of a cell that contains a
+<obj>dtp-null</obj> signals an error.  This is how ``unbound variable'' and
+``undefined function'' errors are detected.
+</td></tr><tr><td><obj>dtp-trap</obj></td>
+<td><index-entry index="variables" title="dtp-trap"></index-entry>
+The zero data-type, which is not used.  This hopes to detect microcode bugs.
+</td></tr><tr><td><obj>dtp-free</obj></td>
+<td><index-entry index="variables" title="dtp-free"></index-entry>
+This type is used to fill free storage, to catch wild references.
+</td></tr><tr><td><obj>dtp-external-value-cell-pointer</obj></td>
+<td><index-entry index="variables" title="dtp-external-value-cell-pointer"></index-entry>
+An ``invisible pointer'' used for external value cells,
+which are part of the closure mechanism (see <ref chapter="13" definition-in-file="fd-clo" key="closure" section="0" title="Closures" type="section"></ref>),
+and used by compiled code to address value and function cells.
+</td></tr><tr><td><obj>dtp-self-ref-pointer</obj></td>
+<td><index-entry index="variables" title="dtp-self-ref-pointer"></index-entry>
+An ``invisible pointer'' used to refer to an instance variable of <obj>self</obj>.
+This data type appears in FEFs of flavor methods.
+</td></tr><tr><td><obj>dtp-header-forward</obj></td>
+<td><index-entry index="variables" title="dtp-header-forward"></index-entry>
+An ``invisible pointer'' used to indicate that the structure containing
+it has been moved elsewhere.  The ``header word'' of the structure is
+replaced by one of these invisible pointers.  See the function <obj>structure-forward</obj>
+(<ref definition-in-file="fd-sub" key="structure-forward-fun" title="Function structure-forward" type="fun"></ref>).
+</td></tr><tr><td><obj>dtp-body-forward</obj></td>
+<td><index-entry index="variables" title="dtp-body-forward"></index-entry>
+An ``invisible pointer'' used to indicate that the structure containing
+it has been moved elsewhere.  This points to the word containing
+the header-forward, which points to the new copy of the structure.
+</td></tr><tr><td><obj>dtp-one-q-forward</obj></td>
+<td><index-entry index="variables" title="dtp-one-q-forward"></index-entry>
+An ``invisible pointer'' used to indicate that the single cell containing
+it has been moved elsewhere.
+</td></tr><tr><td><obj>dtp-gc-forward</obj></td>
+<td><index-entry index="variables" title="dtp-gc-forward"></index-entry>
+This is used by the copying garbage collector to flag the obsolete copy
+of an object; it points to the new copy.
+</td></tr></tbody></table></description></definition><definition>
+<define key="q-data-types-var" name="q-data-types" type="const"></define>
+
+<description>The value of <obj>q-data-types</obj> is a list of all of the symbolic
+names for data types described above under <obj>data-type</obj>.
+These are the symbols whose print names begin
+with `<obj>dtp-</obj>'.  The values of these symbols are the internal numeric data-type codes
+for the various types.
+</description></definition><definition><define key="q-data-types-fun" name="q-data-types" type="fun"><args>type-code</args>
+</define>
+
+<description>Given the internal numeric data-type code, returns the corresponding symbolic name.
+This ``function'' is actually an array.
+</description></definition></section><a name="Forwarding"></a>
+
+
+<section chapter-number="16" name="Forwarding" number="2" title="Forwarding"><index-entry index="concepts" title="invisible pointers"></index-entry>
+
+<index-entry index="concepts" title="forwarding pointer"></index-entry>
+
+<p>An <arg>invisible pointer</arg> or <arg>forwarding pointer</arg> is a kind of pointer
+that does not represent a Lisp object, but just resides in memory.
+There are several kinds of invisible pointer, and there are various
+rules about where they may or may not appear.  The basic property of an
+invisible pointer is that if the Lisp Machine reads a word of memory and
+finds an invisible pointer there, instead of seeing the invisible
+pointer as the result of the read, it does a second read, at the
+location addressed by the invisible pointer, and returns that as the
+result instead.  Writing behaves in a similar fashion.  When the Lisp
+Machine writes a word of memory it first checks to see if that word
+contains an invisible pointer; if so it goes to the location pointed to
+by the invisible pointer and tries to write there instead.  Many
+subprimitives that read and write memory do not do this checking.
+</p>
+
+<p>The simplest kind of invisible pointer has the data type code
+<obj>dtp-one-q-forward</obj>.  It is used to forward a single word of memory to
+someplace else.  The invisible pointers with data types
+<obj>dtp-header-forward</obj> and <obj>dtp-body-forward</obj> are used for moving
+whole Lisp objects (such as cons cells or arrays) somewhere else.  The
+<obj>dtp-external-value-cell-pointer</obj> is very similar to the
+<obj>dtp-one-q-forward</obj>; the difference is that it is not ``invisible'' to
+the operation of binding.  If the (internal) value cell of a symbol
+contains a <obj>dtp-external-value-cell-pointer</obj> that points to some other
+word (the external value cell), then <obj>symeval</obj> or <obj>set</obj> operations on
+the symbol consider the pointer to be invisible and use the
+external value cell, but binding the symbol saves away the
+<obj>dtp-external-value-cell-pointer</obj> itself, and stores the new value into
+the internal value cell of the symbol.  This is how closures are implemented.
+</p>
+
+<p><obj>dtp-gc-forward</obj> is not an invisible pointer at all; it only appears in
+``old spaced'' and can never be seen by any program other than the garbage
+collector.  When an object is found not to be garbage, and the garbage collector 
+moves it from ``old space'' to ``new space'', a <obj>dtp-gc-forward</obj> is left behind
+to point to the new copy of the object.  This ensures that other references
+to the same object get the same new copy.
+</p>
+<definition><define key="structure-forward-fun" name="structure-forward" type="fun"><args>old-object new-object</args>
+</define>
+
+<description>This causes references to <arg>old-object</arg> actually to reference
+<arg>new-object</arg>, by storing invisible pointers in <arg>old-object</arg>.
+It returns <arg>old-object</arg>.
+
+An example of the use of <obj>structure-forward</obj> is <obj>adjust-array</obj>.
+If the array is being made bigger and cannot be expanded in place, a new
+array is allocated, the contents are copied, and the old array is
+structure-forwarded to the new one.  This forwarding ensures that pointers
+to the old array, or to cells within it, continue to work.  When the garbage
+collector goes to copy the old array, it notices the forwarding and uses
+the new array as the copy; thus the overhead of forwarding disappears
+eventually if garbage collection is in use.
+</description></definition><definition><define key="follow-structure-forwarding-fun" name="follow-structure-forwarding" type="fun"><args>object</args>
+</define>
+
+<description>Normally returns <arg>object</arg>, but if <arg>object</arg> has been <obj>structure-forward</obj>'ed,
+returns the object at the end of the chain of forwardings.  If <arg>object</arg>
+is not exactly an object, but a locative to a cell in the middle of an object,
+a locative to the corresponding cell in the latest copy of the object is
+returned.
+</description></definition><definition><define key="forward-value-cell-fun" name="forward-value-cell" type="fun"><args>from-symbol to-symbol</args>
+</define>
+
+<description>This alters <arg>from-symbol</arg> so that it always has the same value
+as <arg>to-symbol</arg>, by sharing its value cell.  A <obj>dtp-one-q-forward</obj>
+invisible pointer is stored into <arg>from-symbol</arg>'s value cell.
+Do not do this while <arg>from-symbol</arg>'s current dynamic binding
+is not global, as
+the microcode does not bother to check for that case and something
+bad will happen when <arg>from-symbol</arg>'s binding is unbound.  The microcode check
+is omitted to speed up binding and unbinding.
+
+This is how synonymous variables (such as <obj>*terminal-io*</obj> and <obj>terminal-io</obj>)
+are created.
+
+To forward one arbitrary cell to another (rather than specifically
+one value cell to another), given two locatives, do
+
+<lisp>(%p-store-tag-and-pointer <arg>locative1</arg> dtp-one-q-forward <arg>locative2</arg>)
+</lisp></description></definition><definition><define key="follow-cell-forwarding-fun" name="follow-cell-forwarding" type="fun"><args>loc evcp-p</args>
+</define>
+
+<description><arg>loc</arg> is a locative to a cell.  Normally <arg>loc</arg> is returned, but if the
+cell has been forwarded, this follows the chain of forwardings and returns
+a locative to the final cell.  If the cell is part of a structure which has
+been forwarded, the chain of structure forwardings is followed, too.
+If <arg>evcp-p</arg> is <obj>t</obj>, external value cell pointers are followed; if
+it is <obj>nil</obj> they are not.
+</description></definition></section><a name="Pointer Manipulation"></a>
+
+
+<section chapter-number="16" name="Pointer Manipulation" number="3" title="Pointer Manipulation"><p>It should again be emphasized that improper use of these functions
+can damage or destroy the Lisp environment.  It is possible to create
+pointers with illegal data-type, pointers to non-existent objects, and
+pointers to untyped storage, which will completely confuse the garbage
+collector.
+</p>
+<definition><define key="%data-type-fun" name="%data-type" type="fun"><args>x</args>
+</define>
+
+<description>Returns the data-type field of <arg>x</arg>, as a fixnum.
+</description></definition><definition><define key="%pointer-fun" name="%pointer" type="fun"><args>x</args>
+</define>
+
+<description>Returns the pointer field of <arg>x</arg>, as a fixnum.  For most
+types, this is dangerous since the garbage collector can copy the object
+and change its address.
+</description></definition><definition><define key="%make-pointer-fun" name="%make-pointer" type="fun"><args>data-type pointer</args>
+</define>
+
+<description>Makes up a pointer, with <arg>data-type</arg> in the data-type
+field and <arg>pointer</arg> in the pointer field, and returns it.  <arg>data-type</arg>
+should be an internal numeric data-type code; these are the values of
+the symbols that start with <obj>dtp-</obj>.  <arg>pointer</arg> may be any object;
+its pointer field is used.  This is
+most commonly used for changing the type of a pointer.  Do not use this
+to make pointers which are not allowed to be in the machine, such as
+<obj>dtp-null</obj>, invisible pointers, etc.
+</description></definition><definition><define key="%make-pointer-offset-fun" name="%make-pointer-offset" type="fun"><args>data-type pointer offset</args>
+</define>
+
+<description>Returns a pointer with <arg>data-type</arg> in the data-type
+field, and <arg>pointer</arg> plus <arg>offset</arg> in the pointer field.  The
+<arg>data-type</arg> and <arg>pointer</arg> arguments are like those of <obj>%make-pointer</obj>;
+<arg>offset</arg> may be any object but is usually a fixnum.  The
+types of the arguments are not checked; their pointer fields are simply
+added together.  This is useful for constructing locative pointers
+into the middle of an object.  However, note that it is illegal to
+have a pointer to untyped data, such as the inside of a FEF or
+a numeric array.
+</description></definition><definition><define key="%pointer-difference-fun" name="%pointer-difference" type="fun"><args>pointer-1 pointer-2</args>
+</define>
+
+<description>Returns a fixnum which is <arg>pointer-1</arg> minus <arg>pointer-2</arg>.
+No type checks are made.  For the result to be meaningful, the two pointers
+must point into the same object, so that their difference cannot change
+as a result of garbage collection.
+</description></definition><definition><define key="%pointerp-fun" name="%pointerp" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> points to storage.  For example,
+<obj>(%pointerp &quot;foo&quot;)</obj> is <obj>t</obj>, but <obj>(%pointerp 5)</obj> is <obj>nil</obj>.
+</description></definition><definition><define key="%pointer-type-p-fun" name="%pointer-type-p" type="fun"><args>data-type</args>
+</define>
+
+<description><obj>t</obj> if the specified data type is one which points to storage.
+For example, <obj>(%pointer-type-p dtp-fix)</obj> returns <obj>nil</obj>.
+</description></definition></section><a name="Special Memory Referencing"></a>
+
+<section chapter-number="16" name="Special Memory Referencing" number="4" title="Special Memory Referencing"><definition><define key="%p-pointerp-fun" name="%p-pointerp" type="fun"><args>location</args>
+</define>
+
+<description><obj>t</obj> if the contents of the word at <arg>location</arg> points to storage.
+This is similar to <obj>(%pointerp (contects <arg>location</arg>))</obj>, but the latter may get
+an error if <arg>location</arg> contains a forwarding pointer, a header type, or a
+void marker.  In such cases, <obj>%p-pointerp</obj> correctly tells you whether
+the header or forward points to storage.
+</description></definition><definition><define key="%p-pointerp-offset-fun" name="%p-pointerp-offset" type="fun"><args>location offset</args>
+</define>
+
+<description>Similar to <obj>%p-pointerp</obj> but operates on the word <arg>offset</arg> words beyond <arg>location</arg>.
+</description></definition><definition><define key="%p-contents-offset-fun" name="%p-contents-offset" type="fun"><args>base-pointer offset</args>
+</define>
+
+<description>Returns the contents of the word <arg>offset</arg> words beyond <arg>base-pointer</arg>.
+This first checks the cell pointed to by <arg>base-pointer</arg> for
+a forwarding pointer.  Having followed forwarding pointers to the
+real structure pointed to, it adds <arg>offset</arg> to the resulting
+forwarded <arg>base-pointer</arg> and returns the contents of that location.
+</description></definition><nopara></nopara>
+<p>There is no <obj>%p-contents</obj>, since <obj>car</obj> performs that operation.
+</p>
+<definition><define key="%p-contents-safe-p-fun" name="%p-contents-safe-p" type="fun"><args>location</args>
+</define>
+
+<description><obj>t</obj> if the contents of word <arg>location</arg> are a valid Lisp object, at least
+as far as data type is concerned.  It is <obj>nil</obj> if the word contains a header type,
+a forwarding pointer, or a void marker.  If the value of this function is
+<obj>t</obj>, you will not get an error from <obj>(contents <arg>location</arg>)</obj>.
+</description></definition><definition><define key="%p-contents-safe-p-offset-fun" name="%p-contents-safe-p-offset" type="fun"><args>location offset</args>
+</define>
+
+<description>Similar to <obj>%p-contents-safe-p</obj> but operates on the word <arg>offset</arg> words beyond <arg>location</arg>.
+</description></definition><definition><define key="%p-contents-as-locative-fun" name="%p-contents-as-locative" type="fun"><args>pointer</args>
+</define>
+
+<description>Given a pointer to a memory location containing a pointer that isn't
+allowed to be ``in the machine'' (typically an invisible pointer)
+this function returns the contents of the location as a <obj>dtp-locative</obj>.
+It changes the disallowed data type to <obj>dtp-locative</obj> so that you can safely
+look at it and see what it points to.
+</description></definition><definition><define key="%p-contents-as-locative-offset-fun" name="%p-contents-as-locative-offset" type="fun"><args>base-pointer offset</args>
+</define>
+
+<description>Extracts the contents of a word like <obj>%p-contents-offset</obj>,
+but changes it into a locative like <obj>%p-contents-as-locative</obj>.
+This can be used, for example, to analyze the
+<obj>dtp-external-value-cell-pointer</obj> pointers in a FEF, which are
+used by the compiled code to reference value cells and function cells
+of symbols.
+</description></definition><definition><define key="%p-safe-contents-offset-fun" name="%p-safe-contents-offset" type="fun"><args>location offset</args>
+</define>
+
+<description>Returns the contents of the word <arg>offset</arg> words beyond <arg>location</arg> as accurately as
+possible without getting an error.
+
+If the contents are a valid Lisp object, it is returned exactly.
+
+If the contents are not a valid Lisp object but do point to storage,
+the value returned is a locative which points to the same place in storage.
+
+If the contents are not a valid Lisp object and do not point to storage,
+the value returned is a fixnum with the same pointer field.
+
+Forwarding pointers are checked as in <obj>%p-contents-offset</obj>.
+</description></definition><definition><define key="%p-store-contents-fun" name="%p-store-contents" type="fun"><args>pointer value</args>
+</define>
+
+<description>Stores <arg>value</arg> into the data-type and pointer fields of the location
+addressed by <arg>pointer</arg>, and returns <arg>value</arg>.  The cdr-code field of
+the location remains unchanged.
+</description></definition><definition><define key="%p-store-contents-offset-fun" name="%p-store-contents-offset" type="fun"><args>value base-pointer offset</args>
+</define>
+
+<description>Stores <arg>value</arg> in the location <arg>offset</arg> beyond words beyond
+<arg>base-pointer</arg>, then returns <arg>value</arg>.  The cdr-code field remains
+unchanged.  Forwarding pointers in the location at <arg>base-pointer</arg> are
+handled as they are in <obj>%p-contents-offset</obj>.
+</description></definition><definition><define key="%p-store-tag-and-pointer-fun" name="%p-store-tag-and-pointer" type="fun"><args>pointer miscfields pointerfield</args>
+</define>
+
+<description>Stores <arg>miscfields</arg> and <arg>pointerfield</arg> into the location addressed
+by <arg>pointer</arg>.  25 bits are taken from <arg>pointerfield</arg> to fill the
+pointer field of the location, and the low 7 bits of <arg>miscfields</arg> are
+used to fill both the data-type and cdr-code fields of the location.
+The low 5 bits of <arg>miscfields</arg> become the data-type, and the top two
+bits become the cdr-code.  This is a good way to store a forwarding
+pointer from one structure to another (for example).
+
+<obj>%p-store-tag-and-pointer</obj> should be used only for storing into `boxed' words,
+for the same reason as <obj>%blt-typed</obj>: the microcode could halt if the data stored
+is not valid boxed data.  See <ref definition-in-file="fd-sub" key="%blt-typed-fun" title="Function %blt-typed" type="fun"></ref>.
+</description></definition><definition><define key="%p-ldb-fun" name="%p-ldb" type="fun"><args>byte-spec pointer</args>
+</define>
+
+<description>Extracts a byte according to <arg>byte-spec</arg> from the contents of the
+location addressed by <arg>pointer</arg>, in effect regarding the contents as a
+32-bit number and using <obj>ldb</obj>.  The result is always a fixnum.
+For example, <obj>(%p-ldb %%q-cdr-code <arg>loc</arg>)</obj> returns the cdr-code of
+the location addressed by <arg>loc</arg>.
+</description></definition><definition><define key="%p-ldb-offset-fun" name="%p-ldb-offset" type="fun"><args>byte-spec base-pointer offset</args>
+</define>
+
+<description>Extracts a byte according to <arg>byte-spec</arg> from the contents of the
+location <arg>offset</arg> words beyond <arg>base-pointer</arg>, after handling
+forwarding pointers like <obj>%p-contents-offset</obj>.
+
+This is the way to reference byte fields within a structure
+without violating system storage conventions.
+</description></definition><definition><define key="%p-mask-field-fun" name="%p-mask-field" type="fun"><args>byte-spec pointer</args>
+</define>
+
+<description>Like <obj>%p-ldb</obj>, except that the selected byte is returned in its
+original position within the word instead of right-aligned.
+</description></definition><definition><define key="%p-mask-field-offset-fun" name="%p-mask-field-offset" type="fun"><args>byte-spec base-pointer offset</args>
+</define>
+
+<description>Like <obj>%p-ldb-offset</obj>, except that the selected byte is returned in its
+original position within the word instead of right-aligned.
+</description></definition>
+<p>Note: <obj>%p-dbp</obj>, <obj>%p-dpb-offset</obj>, <obj>%p-deposit-field</obj> and
+<obj>%p-deposit-field-offset</obj> should never be used to modify
+the pointer field of a boxed word if the data type is one which actually
+points to storage, unless you are sure that the new pointer is such as
+to cause no trouble (such as, if it points to a static area).  Likewise,
+it should never be used to change a data type which does not point to
+storage into one which does.  Either action could confuse the garbage
+collector.
+</p>
+<definition><define key="%p-dpb-fun" name="%p-dpb" type="fun"><args>value byte-spec pointer</args>
+</define>
+
+<description>Stores <arg>value</arg>, a fixnum, into the byte selected
+by <arg>byte-spec</arg> in the word addressed by <arg>pointer</arg>.  <obj>nil</obj> is returned.
+You can use this to alter data types, cdr-codes, etc.,
+but see the note above for restrictions.
+</description></definition><definition><define key="%p-dpb-offset-fun" name="%p-dpb-offset" type="fun"><args>value byte-spec base-pointer offset</args>
+</define>
+
+<description>Stores <arg>value</arg> into the specified byte of the location <arg>offset</arg>
+words beyond that addressed by <arg>base-pointer</arg>, after first
+handling forwarding pointers in the location addressed by <arg>base-pointer</arg>
+as in <obj>%p-contents-offset</obj>.  <obj>nil</obj> is returned.
+
+This is the way to alter unboxed data within a structure
+without violating system storage conventions.
+You can use this to alter boxed words too,
+but see the note above for restrictions.
+</description></definition><definition><define key="%p-deposit-field-fun" name="%p-deposit-field" type="fun"><args>value byte-spec pointer</args>
+</define>
+
+<description>Like <obj>%p-dpb</obj>, except that the selected
+byte is stored from the corresponding bits of <arg>value</arg> rather than
+the right-aligned bits.  
+See the note above <obj>%p-dpb</obj> for restrictions.
+</description></definition><definition><define key="%p-deposit-field-offset-fun" name="%p-deposit-field-offset" type="fun"><args>value byte-spec base-pointer offset</args>
+</define>
+
+<description>Like <obj>%p-dpb-offset</obj>, except that the selected
+byte is stored from the corresponding bits of <arg>value</arg> rather than
+the right-aligned bits.
+See the note above <obj>%p-dpb</obj> for restrictions.
+</description></definition><definition><define key="%p-pointer-fun" name="%p-pointer" type="fun"><args>pointer</args>
+</define>
+
+<description>Extracts the pointer field of the contents of the
+location addressed by <arg>pointer</arg> and returns
+it as a fixnum.
+</description></definition><definition><define key="%p-data-type-fun" name="%p-data-type" type="fun"><args>pointer</args>
+</define>
+
+<description>Extracts the data-type field of the contents of the
+location addressed by <arg>pointer</arg> and returns
+it as a fixnum.
+</description></definition><definition><define key="%p-cdr-code-fun" name="%p-cdr-code" type="fun"><args>pointer</args>
+</define>
+
+<description>Extracts the cdr-code field of the contents of the
+location addressed by <arg>pointer</arg> and returns
+it as a fixnum.
+</description></definition><definition><define key="%p-store-pointer-fun" name="%p-store-pointer" type="fun"><args>pointer value</args>
+</define>
+
+<description>Stores <arg>value</arg> in the pointer field of the location
+addressed by <arg>pointer</arg>, and returns <arg>value</arg>.
+</description></definition><definition><define key="%p-store-data-type-fun" name="%p-store-data-type" type="fun"><args>pointer value</args>
+</define>
+
+<description>Stores <arg>value</arg> in the data-type field of the location
+addressed by <arg>pointer</arg>, and returns <arg>value</arg>.
+</description></definition><definition><define key="%p-store-cdr-code-fun" name="%p-store-cdr-code" type="fun"><args>pointer value</args>
+</define>
+
+<description>Stores <arg>value</arg> in the cdr-code field of the location
+addressed by <arg>pointer</arg>, and returns <arg>value</arg>.
+</description></definition><definition>
+<define key="%stack-frame-pointer-fun" name="%stack-frame-pointer" type="fun"></define>
+
+<description>Returns a locative pointer to its caller's stack frame.  This
+function is not defined in the interpreted Lisp environment; it only works
+in compiled code.  Since it turns into a ``misc'' instruction,
+the ``caller's stack frame'' really means ``the frame for the FEF
+that executed the <obj>%stack-frame-pointer</obj> instruction''.
+</description></definition></section><a name="Storage Layout Definitions"></a>
+
+
+<section chapter-number="16" name="Storage Layout Definitions" number="5" title="Storage Layout Definitions"><p>The following special variables have values which define the most important attributes
+of the way Lisp data structures are laid out in storage.  In addition to the variables
+documented here, there are many others that are more specialized.  They are not
+documented in this manual since they are in the <obj>system</obj> package rather than
+the <obj>global</obj> package.  The variables whose names start with <obj>%%</obj> are
+byte specifiers, intended to be used with subprimitives such as <obj>%p-ldb</obj>.
+If you change the value of any of these variables, you will probably bring the
+machine to a crashing halt.
+</p>
+<definition>
+<define key="%%q-cdr-code-var" name="%%q-cdr-code" type="const"></define>
+
+<description>The field of a memory word that contains the cdr-code.  See <ref chapter="5" definition-in-file="fd-con" key="cdr-code" section="4" title="Cdr-Coding" type="section"></ref>.
+</description></definition><definition>
+<define key="%%q-data-type-var" name="%%q-data-type" type="const"></define>
+
+<description>The field of a memory word that contains the data-type code.  See <ref definition-in-file="fd-sub" key="data-type-fun" title="Function data-type" type="fun"></ref>.
+</description></definition><definition>
+<define key="%%q-pointer-var" name="%%q-pointer" type="const"></define>
+
+<description>The field of a memory word that contains the pointer address, or immediate data.
+</description></definition><definition>
+<define key="%%q-pointer-within-page-var" name="%%q-pointer-within-page" type="const"></define>
+
+<description>The field of a memory word that contains the part of the address that lies
+within a single page.
+</description></definition><definition>
+<define key="%%q-typed-pointer-var" name="%%q-typed-pointer" type="const"></define>
+
+<description>The concatenation of the <obj>%%q-data-type</obj> and <obj>%%q-pointer</obj> fields.
+</description></definition><definition>
+<define key="%%q-all-but-typed-pointer-var" name="%%q-all-but-typed-pointer" type="const"></define>
+
+<description>This is now synonymous with <obj>%%q-cdr-code</obj>, and therefore obsolete.
+</description></definition><definition>
+<define key="%%q-all-but-pointer-var" name="%%q-all-but-pointer" type="const"></define>
+
+<description>The concatenation of all fields of a memory word except for <obj>%%q-pointer</obj>.
+</description></definition><definition>
+<define key="%%q-all-but-cdr-code-var" name="%%q-all-but-cdr-code" type="const"></define>
+
+<description>The concatenation of all fields of a memory word except for <obj>%%q-cdr-code</obj>.
+</description></definition><definition>
+<define key="%%q-high-half-var" name="%%q-high-half" type="const"></define>
+<define key="%%q-low-half-var" name="%%q-low-half" type="const"></define>
+
+<description>The two halves of a memory word.  These fields are only used in storing compiled code.
+</description></definition><definition>
+<define key="cdr-normal-var" name="cdr-normal" type="const"></define>
+<define key="cdr-next-var" name="cdr-next" type="const"></define>
+<define key="cdr-nil-var" name="cdr-nil" type="const"></define>
+<define key="cdr-error-var" name="cdr-error" type="const"></define>
+
+<description>The values of these four variables are the numeric values that go in the cdr-code
+field of a memory word.  See <ref chapter="5" definition-in-file="fd-con" key="cdr-code" section="4" title="Cdr-Coding" type="section"></ref> for the details of cdr-coding.
+</description></definition></section><a name="Analyzing Structures"></a>
+
+<section chapter-number="16" name="Analyzing Structures" number="6" title="Analyzing Structures"><definition><define key="%find-structure-header-fun" name="%find-structure-header" type="fun"><args>pointer</args>
+</define>
+
+<description>This subprimitive finds the structure into which 
+<arg>pointer</arg> points, by searching backward for a header.
+It is a basic low-level function used by such things as the
+garbage collector.
+<arg>pointer</arg> is normally a locative, but its data-type is ignored.
+Note that it is illegal to point into an ``unboxed'' portion of
+a structure, for instance the middle of a numeric array.
+
+In structure space, the ``containing structure'' of a pointer
+is well-defined by system storage conventions.  In list space,
+it is considered to be the contiguous, cdr-coded segment of
+list surrounding the location pointed to.  If a cons of the list
+has been copied out by <obj>rplacd</obj>, the contiguous list includes
+that pair and ends at that point.
+</description></definition><definition><define key="%find-structure-leader-fun" name="%find-structure-leader" type="fun"><args>pointer</args>
+</define>
+
+<description>This is identical to <obj>%find-structure-header</obj>, except that if the
+structure is an array with a leader, this returns a locative pointer
+to the leader-header, rather than returning the array-pointer itself.
+Thus the result of <obj>%find-structure-leader</obj> is always the lowest
+address in the structure.  This is the one used internally by the garbage collector.
+</description></definition><definition><define key="%structure-boxed-size-fun" name="%structure-boxed-size" type="fun"><args>object</args>
+</define>
+
+<description>Returns the number of ``boxed Q's'' in <arg>object</arg>.  This is the number
+of words at the front of the structure which contain normal Lisp objects.
+Some structures, for example FEFs and numeric arrays, contain additional
+``unboxed Q's'' following their boxed Q's.
+Note that the boxed size of a PDL (either regular or special) does not
+include Q's above the current top of the PDL.  Those locations are boxed,
+but their contents are considered garbage and are not protected by the
+garbage collector.
+</description></definition><definition><define key="%structure-total-size-fun" name="%structure-total-size" type="fun"><args>object</args>
+</define>
+
+<description>Returns the total number of words occupied by the representation
+of <arg>object</arg>, including boxed Q's, unboxed Q's, and garbage Q's off
+the ends of PDLs.
+</description></definition></section><a name="Creating Objects"></a>
+
+<section chapter-number="16" name="Creating Objects" number="7" title="Creating Objects"><definition><define key="%allocate-and-initialize-fun" name="%allocate-and-initialize" type="fun"><args>data-type header-type header second-word area size</args>
+</define>
+
+<description>        This is the subprimitive for creating most structured-type objects.
+<arg>area</arg> is the area in which it is to be created, as a fixnum or a symbol.
+<arg>size</arg> is the number of words to be allocated.  The value returned
+points to the first word allocated and has data-type <arg>data-type</arg>.
+Uninterruptibly, the words allocated are initialized so that storage
+conventions are preserved at all times.  The first word, the header,
+is initialized to have <arg>header-type</arg> in its data-type field 
+and <arg>header</arg> in its pointer field.  The second word is initialized
+to <arg>second-word</arg>.  The remaining words are initialized to <obj>nil</obj>.
+The cdr-codes of all words
+except the last are set to <obj>cdr-next</obj>; the cdr-code of the last word
+is set to <obj>cdr-nil</obj>.  It is probably a bad idea to rely on this.
+</description></definition><definition><define key="%allocate-and-initialize-array-fun" name="%allocate-and-initialize-array" type="fun"><args>header data-length leader-length area size</args>
+</define>
+
+<description>        This is the subprimitive for creating arrays, called only by <obj>make-array</obj>.
+It is different from <obj>%allocate-and-initialize</obj> because arrays have
+a more complicated header structure.
+</description></definition>
+<p>The basic functions for creating list-type objects are <obj>cons</obj> and
+<obj>make-list</obj>; no special subprimitive is needed.  Closures, entities,
+and select-methods are based on lists, but there is no primitive
+for creating them.  To create one, create a list and then use <obj>%make-pointer</obj>
+to change the data type from <obj>dtp-list</obj> to the desired type.
+</p>
+</section><a name="Copying Data"></a>
+
+
+<section chapter-number="16" name="Copying Data" number="8" title="Copying Data"><p><obj>%blt</obj> and <obj>%blt-typed</obj> are subprimitives for copying blocks of
+data, word aligned, from one place in memory to another with little
+or no type checking.
+</p>
+<definition><define key="%blt-fun" name="%blt" type="fun"><args>from to count increment</args>
+</define><define key="%blt-typed-fun" name="%blt-typed" type="fun"><args>from to count increment</args>
+</define>
+
+<description>Copies <arg>count</arg> words, separated by <arg>increment</arg>.  The word at
+address <arg>from</arg> is moved to address <arg>to</arg>, the word at address
+<arg>from</arg><obj>+</obj><arg>increment</arg> is moved to address <arg>to</arg><obj>+</obj><arg>increment</arg>,
+and so on until <arg>count</arg> words have been moved.
+
+Only the pointer fields of <arg>from</arg> and <arg>to</arg> are significant;
+they may be locatives or even fixnums.  If one of them must point
+to the unboxed data in the middle of a structure, you must make it a fixnum,
+and you must do so with interrupts disabled, or else garbage collection
+could move the structure after you have already created the fixnum.
+
+<obj>%blt-typed</obj> assumes that each copied word contains a data type field
+and checks that field, interfacing suitably with the garbage collector
+if necessary.  <obj>%blt</obj> does not check the data type fields of the copied words.
+</description></definition>
+<p><obj>%blt</obj> may be used on any data except boxed data containing pointers
+to storage, while <obj>%blt-typed</obj> may be used on any boxed data.
+Both <obj>%blt</obj> and <obj>%blt-typed</obj> can be used validly on data which is formatted with
+data types (boxed) but whose contents never point to storage.  This includes
+words whose contents are always fixnums or short floats, and also words which
+contain array headers, array leader headers, or FEF headers.  Whether or not the
+machine is told to examine the data types of such data makes no difference
+since, on examining them, it would decide that nothing needed to be done.
+</p>
+
+<p>For unboxed data (data which is formatted not containing valid data type fields),
+such as the inside of a numeric array or the instruction words of a FEF, only
+<obj>%blt</obj> may be used.  If <obj>%blt-typed</obj> were used, it would examine the data type
+fields of the data words, and probably halt due to an invalid data type code.
+</p>
+
+<p>For boxed data which may contain pointers, only <obj>%blt-typed</obj> may be used.  If
+<obj>%blt</obj> were used, it would appear to work, but problems could appear mysteriously
+later because nothing would notice the presence of the pointer there.  For
+example, the pointer might point to a bignum in the number consing area, and
+moving it in this way would fail to copy it into a nontemporary area.  Then the
+pointer would become invalidated the next time the number consing area was
+emptied out.  There could also be problems with lexical closures and with
+garbage collection.
+</p>
+</section><a name="Returning Storage"></a>
+
+<section chapter-number="16" name="Returning Storage" number="9" title="Returning Storage"><definition><define key="return-storage-fun" name="return-storage" type="fun"><args>object</args>
+</define>
+
+<description>This peculiar function attempts to return <arg>object</arg> to free storage.
+If it is a displaced array, this returns the displaced array itself,
+not the data that the array points to.  Currently <obj>return-storage</obj>
+does nothing if the object is not at the end of its region, i.e. if
+it was not either the most recently allocated non-list object in its
+area, or the most recently allocated list in its area.
+
+If you still have any references to <arg>object</arg> anywhere in the Lisp world
+after this function returns, the garbage collector can get a fatal error
+if it sees them.  Since the form that calls this function must get the
+object from somewhere, it may not be clear how to legally call <obj>return-storage</obj>.
+One of the only ways to do it is as follows:
+
+<lisp>(defun func ()
+   (let ((object (make-array 100)))
+      ...
+      (return-storage (prog1 object (setq object nil)))))
+</lisp>so that the variable <obj>object</obj> does not refer to the object when
+<obj>return-storage</obj> is called.  Alternatively, you can free the
+object and get rid of all pointers to it while interrupts are turned
+off with <obj>without-interrupts</obj>.
+
+You should only call this function if you know what you are doing;
+otherwise the garbage collector can get fatal errors.  Be careful.
+</description></definition></section><a name="Locking Subprimitive"></a>
+
+<section chapter-number="16" name="Locking Subprimitive" number="10" title="Locking Subprimitive"><definition><define key="%store-conditional-fun" name="%store-conditional" type="fun"><args>pointer old new</args>
+</define>
+
+<description>This is the basic locking primitive.  <arg>pointer</arg> is a locative to
+a cell which is uninterruptibly read and written.  If the contents of
+the cell is <obj>eq</obj> to <arg>old</arg>, then it is replaced by <arg>new</arg> and
+<obj>t</obj> is returned.  Otherwise, <obj>nil</obj> is returned and the contents
+of the cell are not changed.
+
+See also <obj>store-conditional</obj>, a higher-level function which provides
+type checking (<ref definition-in-file="proces" key="store-conditional-fun" title="Function store-conditional" type="fun"></ref>).
+</description></definition></section><a name="CADR I/O Device Subprimitives"></a>
+
+
+<section chapter-number="16" name="CADR I/O Device Subprimitives" number="11" title="CADR I/O Device Subprimitives"><p>The CADR processor has a 32-bit memory bus called the Xbus.
+In addition to main memory and TV screen memory,
+most I/O device registers are on this bus.  There is also
+a Unibus compatible with the PDP-11.  A map of Xbus and Unibus
+addresses can be found in <obj>SYS: DOC; UNADDR TEXT</obj>.
+</p>
+<definition><define key="%unibus-read-fun" name="%unibus-read" type="fun"><args>address</args>
+</define>
+
+<description>Returns as a fixnum the contents of the register at the specified Unibus
+address.  You must specify a full 18-bit address.  This
+is guaranteed to read the location only once.  Since the Lisp
+Machine Unibus does not support byte operations, this always references
+a 16-bit word, and so <arg>address</arg> should normally be an even number.
+</description></definition><definition><define key="%unibus-write-fun" name="%unibus-write" type="fun"><args>address data</args>
+</define>
+
+<description>Writes the 16-bit number <arg>data</arg> at the specified Unibus
+address, exactly once.
+</description></definition><definition><define key="%xbus-read-fun" name="%xbus-read" type="fun"><args>io-offset</args>
+</define>
+
+<description>Returns the contents
+of the register at the specified Xbus address.  <arg>io-offset</arg> is
+an offset into the I/O portion of Xbus physical address space.
+This is guaranteed to read the location exactly once.
+The returned value can be either a fixnum or a bignum.
+</description></definition><definition><define key="%xbus-write-fun" name="%xbus-write" type="fun"><args>io-offset data</args>
+</define>
+
+<description>Writes <arg>data</arg>, which can be a fixnum or a bignum, into the register at
+the specified Xbus address.  <arg>io-offset</arg> is an offset into the I/O
+portion of Xbus physical address space.  This is guaranteed to write the
+location exactly once.
+</description></definition><definition><define key="sys:%xbus-write-sync-fun" name="sys:%xbus-write-sync" type="fun"><args>w-loc w-data delay sync-loc sync-mask sync-value</args>
+</define>
+
+<description>Does <obj>(%xbus-write <arg>w-loc</arg> <arg>w-data</arg>)</obj>, but first synchronizes to
+within about one microsecond of a certain condition.  The synchronization
+is achieved by looping until
+
+<lisp>(= (logand (%xbus-read <arg>sync-loc</arg>) <arg>sync-mask</arg>) <arg>sync-value</arg>)
+</lisp>is false, then looping until it is true, then looping <arg>delay</arg> times.
+Thus the write happens a specified delay after the leading edge of the
+synchronization condition.
+The number of microseconds of delay is roughly one third of <arg>delay</arg>.
+
+This primitive is used to alter the color TV screen's color map
+during vertical retrace.
+</description></definition></section><a name="Lambda I/O-Device Subprimitives"></a>
+
+<section chapter-number="16" name="Lambda I/O-Device Subprimitives" number="12" title="Lambda I/O-Device Subprimitives"><definition><define key="sys:%nubus-read-fun" name="sys:%nubus-read" type="fun"><args>slot byte-address</args>
+</define>
+
+<description>Returns the contents of a word read from the Nu bus.
+Addresses on the Nu bus are divided into an 8-bit slot number
+which identifies which physical board is being referenced
+and a 24-bit address within slot.  The address is measured in
+bytes and therefore should be a multiple of 4.  Which addresses are valid
+depends on the type of board plugged into the specified slot.
+If, for example, the board is a 512k main memory board,
+then the valid address range from 0 to 4 * (512k - 1).
+(Of course, main memory boards are normally accessed through
+the virtual memory mechanism.)
+</description></definition><definition><define key="sys:%nubus-write-fun" name="sys:%nubus-write" type="fun"><args>slot byte-address word</args>
+</define>
+
+<description>Writes <arg>word</arg> into a word of the Nu bus, whose address is specified
+by <arg>slot</arg> and <arg>byte-address</arg> as described above.
+</description></definition><definition><define key="sys:%nubus-physical-address-fun" name="sys:%nubus-physical-address" type="fun"><args>apparent-physical-page</args>
+</define>
+
+<description>The valid portions of the Nu bus address space are not contiguous.
+Each board is allocated 16m bytes of address space, but no memory
+board actually provides 16m bytes of memory.  
+
+The Lisp Machine virtual memory system maps virtual addresses into a
+contiguous physical address space.  On the Lambda, this contiguous
+address space is mapped a second time into the discontiguous Nu bus
+address space.  Unlike the mapping of virtual addresses to physical
+ones, the second mapping is determined from the hardware configuration
+when the machine is booted and does not change during operation.
+
+This function performs exactly that mapping.  The argument is
+a physical page number (a physical address divided by <obj>sys:page-size</obj>).
+The argument is a &quot;Nu bus page number&quot;; multiplied by <obj>sys:page-size</obj>
+and then by four, it yields the Nu bus byte address of the beginning
+of that physical page.
+
+See also <obj>sys:%physical-address</obj>, <ref definition-in-file="fd-sub" key="sys:%physical-address-fun" title="Function sys:%physical-address" type="fun"></ref>.
+</description></definition></section><a name="Function-Calling Subprimitives"></a>
+
+
+<section chapter-number="16" name="Function-Calling Subprimitives" number="13" title="Function-Calling Subprimitives"><p>These subprimitives can be used (carefully!) to call a function with the
+number of arguments variable at run time.  They only work in compiled code
+and are not defined in the interpreted Lisp environment.
+The preferred higher-level primitive is <obj>apply</obj> (<ref definition-in-file="fd-eva" key="apply-fun" title="Function apply" type="fun"></ref>).  
+</p>
+<definition><define key="%open-call-block-fun" name="%open-call-block" type="fun"><args>function n-adi-pairs destination</args>
+</define>
+
+<description>Starts a call to <arg>function</arg>.  <arg>n-adi-pairs</arg> is the number of
+pairs of additional information words already <obj>%push</obj>'ed; normally
+this should be <obj>0</obj>.  <arg>destination</arg> is where to put the result;
+the useful values are 0 for the value to be ignored, 1
+for the value to go onto the stack, 3 for the value to be
+the last argument to the previous open call block, and 2
+for the value to be returned from this frame.
+</description></definition><definition><define key="%push-fun" name="%push" type="fun"><args>value</args>
+</define>
+
+<description>Pushes <arg>value</arg> onto the stack.  Use this to push the arguments.
+</description></definition><definition>
+<define key="%activate-open-call-block-fun" name="%activate-open-call-block" type="fun"></define>
+
+<description>Causes the call to happen.
+</description></definition><definition>
+<define key="%pop-fun" name="%pop" type="fun"></define>
+
+<description>Pops the top value off of the stack and returns it as its value.
+Use this to recover the result from a call made by <obj>%open-call-block</obj>
+with a destination of 1.
+</description></definition><definition><define key="%assure-pdl-room-fun" name="%assure-pdl-room" type="fun"><args>n-words</args>
+</define>
+
+<description>Call this before doing a sequence of <obj>%push</obj>'s or <obj>%open-call-block</obj>'s
+that will add <arg>n-words</arg> to the current frame.  This subprimitive checks
+that the frame will not exceed the maximum legal frame size, which is 255 words
+including all overhead.  This limit is dictated by the way stack frames are linked together.
+If the frame is going to exceed the legal limit, <obj>%assure-pdl-room</obj> signals
+an error.
+</description></definition></section><a name="Special-Binding Subprimitive"></a>
+
+<section chapter-number="16" name="Special-Binding Subprimitive" number="14" title="Special-Binding Subprimitive"><definition><define key="%bind-fun" name="%bind" type="fun"><args>locative value</args>
+</define><define key="bind-fun" name="bind" type="fun"><args>locative value</args>
+</define>
+
+<description>Binds the cell pointed to by <arg>locative</arg> to <arg>x</arg>, in the caller's
+environment. This function is not defined in the interpreted Lisp
+environment; it only works from compiled code.  Since it turns into an
+instruction, the ``caller's environment'' really means ``the binding block
+for the compiled function that executed the <obj>%bind</obj> instruction''.  The preferred
+higher-level primitives that turn into this are <obj>let</obj> (<ref definition-in-file="fd-eva" key="let-fun" title="Special Form let" type="spec"></ref>),
+<obj>let-if</obj> (<ref definition-in-file="fd-eva" key="let-if-fun" title="Special Form let-if" type="spec"></ref>), and <obj>progv</obj> (<ref definition-in-file="fd-eva" key="progv-fun" title="Special Form progv" type="spec"></ref>).
+
+The binding is in effect for the scope of the innermost binding
+construct, such as <obj>prog</obj> or <obj>let</obj>--even one that binds no
+variables itself.
+
+<obj>%bind</obj> is the preferred name; <obj>bind</obj> is an older name which will
+eventually be eliminated.
+</description></definition></section><a name="The Paging System"></a>
+
+
+<section chapter-number="16" name="The Paging System" number="15" title="The Paging System"><p>[Someday this may discuss how it works.]
+</p>
+<definition>
+<define key="sys:%disk-switches-var" name="sys:%disk-switches" type="var"></define>
+
+<description>This variable contains bits that control various disk usage features.
+
+Bit 0 (the least significant bit) enables read-compares after disk read
+operations.  This causes a considerable slowdown, so it is rarely used.
+
+Bit 1 enables read-compares after disk write operations.
+
+Bit 2 enables the
+multiple page swap-out feature.  When this is enabled, as it is by
+default, each time a page is swapped out, up to 16. contiguous pages
+are also written out to the disk if they have been modified.  This
+greatly improves swapping performance.
+
+Bit 3 controls the multiple page swap-in feature, which is also on by
+default.  This feature causes pages to be swapped in in groups; each
+time a page is needed, several contiguous pages are swapped in in the
+same disk operation.  The number of pages swapped in can be specified
+for each area using <obj>si:set-swap-recommendations-of-area</obj>.
+</description></definition><definition><define key="si:set-swap-recommendations-of-area-fun" name="si:set-swap-recommendations-of-area" type="fun"><args>area-number recommendation</args>
+</define>
+
+<description>Specifies that pages of area <arg>area-number</arg> should be swapped in in
+groups of <arg>recommendation</arg> at a time.  This recommendation is used
+only if the multiple page swap-in feature is enabled.
+
+Generally, the more memory a machine has, the higher the swap
+recommendations should be to get optimum performance.  The
+recommendations are set automatically according to the memory size when
+the machine is booted.
+</description></definition><definition><define key="si:set-all-swap-recommendations-fun" name="si:set-all-swap-recommendations" type="fun"><args>recommendation</args>
+</define>
+
+<description>Specifies the swap-in recommendation of all areas at once.
+</description></definition><definition><define key="si:wire-page-fun" name="si:wire-page" type="fun"><args>address <standard>&amp;optional</standard> (wire-p <obj>t</obj>)</args>
+</define>
+
+<description>If <arg>wire-p</arg> is <obj>t</obj>, the page containing <arg>address</arg> is <arg>wired-down</arg>; that is,
+it cannot be paged-out.  If <arg>wire-p</arg> is <obj>nil</obj>, the page ceases to be wired-down.
+</description></definition><definition><define key="si:unwire-page-fun" name="si:unwire-page" type="fun"><args>address</args>
+</define>
+
+<description><obj>(si:unwire-page <arg>address</arg>)</obj> is the same as
+<obj>(si:wire-page <arg>address</arg> <obj>nil</obj>)</obj>.
+</description></definition><definition><define key="sys:page-in-structure-fun" name="sys:page-in-structure" type="fun"><args>object</args>
+</define>
+
+<description>Makes sure that the storage that represents <arg>object</arg> is in main
+memory.  Any pages that have been swapped out to disk are read in,
+using as few disk operations as possible.  Consecutive disk pages are
+transferred together, taking advantage of the full speed of the disk.
+If <arg>object</arg> is large, this is much faster than bringing the pages
+in one at a time on demand.  The storage occupied by <arg>object</arg> is defined
+by the <obj>%find-structure-leader</obj> and <obj>%structure-total-size</obj> subprimitives.
+</description></definition><definition><define key="sys:page-in-array-fun" name="sys:page-in-array" type="fun"><args>array <standard>&amp;optional</standard> from to</args>
+</define>
+
+<description>This is a version of <obj>sys:page-in-structure</obj> that can bring in a portion
+of an array.  <arg>from</arg> and <arg>to</arg> are lists of subscripts; if they are shorter
+than the dimensionality of <arg>array</arg>, the remaining subscripts are assumed to
+be zero.
+</description></definition><definition><define key="sys:page-in-pixel-array-fun" name="sys:page-in-pixel-array" type="fun"><args>array <standard>&amp;optional</standard> from to</args>
+</define>
+
+<description>Like <obj>sys:page-in-array</obj> except that the lists <arg>from</arg> and <arg>to</arg>, if
+present, are assumed to have their subscripts in the order horizontal,
+vertical, regardless of which of those two is actually the first axis of
+the array.  See <obj>make-pixel-array</obj>, <ref definition-in-file="fd-arr" key="make-pixel-array-fun" title="Function make-pixel-array" type="fun"></ref>.
+</description></definition><definition><define key="sys:page-in-words-fun" name="sys:page-in-words" type="fun"><args>address n-words</args>
+</define>
+
+<description>Any pages that have been swapped out to disk in the range of address
+space starting at <arg>address</arg> and continuing for <arg>n-words</arg> are read in
+with as few disk operations as possible.
+</description></definition><definition><define key="sys:page-in-area-fun" name="sys:page-in-area" type="fun"><args>area-number</args>
+</define><define key="sys:page-in-region-fun" name="sys:page-in-region" type="fun"><args>region-number</args>
+</define>
+
+<description>All swapped-out pages of the specified region or area are brought into main memory.
+</description></definition><definition><define key="sys:page-out-structure-fun" name="sys:page-out-structure" type="fun"><args>object</args>
+</define><define key="sys:page-out-array-fun" name="sys:page-out-array" type="fun"><args>array <standard>&amp;optional</standard> from to</args>
+</define><define key="sys:page-out-pixel-array-fun" name="sys:page-out-pixel-array" type="fun"><args>array <standard>&amp;optional</standard> from to</args>
+</define><define key="sys:page-out-words-fun" name="sys:page-out-words" type="fun"><args>address n-words</args>
+</define><define key="sys:page-out-area-fun" name="sys:page-out-area" type="fun"><args>area-number</args>
+</define><define key="sys:page-out-region-fun" name="sys:page-out-region" type="fun"><args>region-number</args>
+</define>
+
+<description>These are similar to the above, except that they take pages out of main
+memory rather than bringing them in.  Actually, they only mark the pages
+as having priority for replacement by others.  Use these operations when
+you are done with a large object, to make the virtual memory system
+prefer reclaiming that object's memory over swapping something else out.
+</description></definition><definition><define key="sys:%page-status-fun" name="sys:%page-status" type="fun"><args>virtual-address</args>
+</define>
+
+<description>If the page containing <arg>virtual-address</arg> is swapped out, or if it is
+part of one of the low-numbered fixed areas, this returns <obj>nil</obj>.
+Otherwise it
+returns the entire first word
+of the page hash table entry for the page.
+
+The <obj>%%pht1-</obj> symbols in <obj>SYS: SYS; QCOM LISP</obj> are byte specifiers you
+can use with <obj>%logldb</obj> for decoding the value.
+</description></definition><definition><define key="sys:%change-page-status-fun" name="sys:%change-page-status" type="fun"><args>virtual-address swap-status access-status-and-meta-bits</args>
+</define>
+
+<description>The page hash table entry for the page containing <arg>virtual-address</arg>
+is found and altered as specified.  <obj>t</obj> is returned if it was found,
+<obj>nil</obj> if it was not (presumably the page is swapped out).  <arg>swap-status</arg>
+and <arg>access-status-and-meta-bits</arg> can be <obj>nil</obj> if those fields are not
+to be changed.  This doesn't make any error checks; you can really
+screw things up if you call it with the wrong arguments.
+</description></definition><definition><define key="sys:%compute-page-hash-fun" name="sys:%compute-page-hash" type="fun"><args>virtual-address</args>
+</define>
+
+<description>Makes the hashing function for the page hash table
+available to the user.
+</description></definition><definition><define key="sys:%physical-address-fun" name="sys:%physical-address" type="fun"><args>virtual-address</args>
+</define>
+
+<description>Returns the physical address which <arg>virtual-address</arg>
+currently maps into.  The value is unpredictable if the
+virtual page is not swapped in; therefore, this function should
+be used on wired pages, or you should do
+
+<lisp>(without-interrupts
+  (%p-pointer virtual-address)     ;<standard>swap it in</standard>
+  (sys:%physical-address virtual-address))
+</lisp></description></definition><definition><define key="sys:%create-physical-page-fun" name="sys:%create-physical-page" type="fun"><args>physical-address</args>
+</define>
+
+<description>This is used when adjusting the size of real memory available
+to the machine.  It adds an entry for the page frame at <arg>physical-address</arg>
+to the page hash table, with virtual address -1, swap status flushable,
+and map status 120 (read only).  This doesn't make error checks; you
+can really screw things up if you call it with the wrong arguments.
+</description></definition><definition><define key="sys:%delete-physical-page-fun" name="sys:%delete-physical-page" type="fun"><args>physical-address</args>
+</define>
+
+<description>If there is a page in the page frame at <arg>physical-address</arg>,
+it is swapped out and its entry is deleted from the page hash table,
+making that page frame unavailable for swapping in of pages in the
+future.  This doesn't make error checks; you
+can really screw things up if you call it with the wrong arguments.
+</description></definition><definition><define key="sys:%disk-restore-fun" name="sys:%disk-restore" type="fun"><args>high-16-bits low-16-bits</args>
+</define>
+
+<description>Loads virtual memory from the partition named by the concatenation of
+the two 16-bit arguments, and starts executing it.  The name <obj>0</obj>
+refers to the default load (the one the machine loads when it is
+started up).  This is the primitive used by <obj>disk-restore</obj> (see <ref definition-in-file="fd-hac" key="disk-restore-fun" title="Function disk-restore" type="fun"></ref>).
+</description></definition><definition><define key="sys:%disk-save-fun" name="sys:%disk-save" type="fun"><args>physical-mem-size high-16-bits low-16-bits</args>
+</define>
+
+<description>Copies virtual memory into the partition named by the concatenation
+of the two 16-bit arguments (<obj>0</obj> means the default), then restarts
+the world, as if it had just been restored.  The <arg>physical-mem-size</arg>
+argument should come from <obj>%sys-com-memory-size</obj> in <obj>system-communication-area</obj>.
+If <arg>physical-mem-size</arg> is negative, it is minus the memory size,
+and an incremental save is done.
+This is the primitive used by <obj>disk-save</obj> (see <ref definition-in-file="fd-hac" key="disk-save-fun" title="Function disk-save" type="fun"></ref>).
+</description></definition><definition><define key="si:set-memory-size-fun" name="si:set-memory-size" type="fun"><args>nwords</args>
+</define>
+
+<description>Specifies the size of physical memory in words.  The Lisp machine
+determines the actual amount of physical memory when it is booted, but with
+this function you can tell it to use less memory than is actually present.
+This may be useful for comparing performance based on the amount of memory.
+</description></definition></section><a name="Closure Subprimitives"></a>
+
+
+<section chapter-number="16" name="Closure Subprimitives" number="16" title="Closure Subprimitives"><p>These functions deal with things like what closures deal with: the distinction
+between internal and external value cells and control over how they work.
+</p>
+<definition><define key="sys:%binding-instances-fun" name="sys:%binding-instances" type="fun"><args>list-of-symbols</args>
+</define>
+
+<description>This is the primitive that could be used by <obj>closure</obj>.
+First, if any of the symbols in <arg>list-of-symbols</arg> has no external
+value cell, a new external value cell is created for it, with
+the contents of the internal value cell.  Then a list of locatives,
+twice as long as <arg>list-of-symbols</arg>, is created and returned.
+The elements are grouped in pairs: pointers to the internal
+and external value cells, respectively, of each of the symbols.
+<obj>closure</obj> could have been defined by:
+
+<lisp>(defun closure (variables function)
+  (%make-pointer dtp-closure
+     (cons function (sys:%binding-instances variables))))
+</lisp></description></definition><definition><define key="sys:%using-binding-instances-fun" name="sys:%using-binding-instances" type="fun"><args>instance-list</args>
+</define>
+
+<description>This function is the primitive operation that invocation of closures
+could use.  It takes a list such as <obj>sys:%binding-instances</obj> returns,
+and for each pair of elements in the list, it ``adds'' a binding to the
+current stack frame, in the same manner that the <obj>%bind</obj> function
+does.  These bindings remain in effect until the frame returns or is
+unwound.
+
+<obj>sys:%using-binding-instances</obj> checks for redundant bindings and ignores them.
+(A binding is redundant if the symbol is already bound to the desired external
+value cell.)  This check avoids excessive growth of the special pdl in some cases
+and is also made by the microcode which invokes closures, entities, and instances.
+
+Given a closure, <obj>closure-bindings</obj> extracts its list of binding instances,
+which you can then pass to <obj>sys:%using-binding-instances</obj>.
+</description></definition><definition><define key="sys:%internal-value-cell-fun" name="sys:%internal-value-cell" type="fun"><args>symbol</args>
+</define>
+
+<description>Returns the contents of the internal value cell of <arg>symbol</arg>.
+<obj>dtp-one-q-forward</obj> pointers are considered invisible, as usual, but
+<obj>dtp-external-value-cell-pointer</obj>s are <arg>not</arg>; this function can
+return a <obj>dtp-external-value-cell-pointer</obj>.  Such pointers will be
+considered invisible as soon as they leave the ``inside of the machine'',
+meaning internal registers and the stack.
+</description></definition></section><a name="Distiguishing Processor Types"></a>
+
+
+<section chapter-number="16" name="Distiguishing Processor Types" number="17" title="Distiguishing Processor Types"><p>The MIT Lisp Machine system runs on two types of processors: the CADR
+and the Lambda.  These are similar enough that there is no difference in
+compiled code for them, and no provision for compile-time
+conditionalization.  However, obscure or internal I/O code sometimes
+needs to behave differently at run-time depending on the type of
+processor.  This is possible through the use of these macros.
+</p>
+<definition>
+<define key="sys:processor-type-code-var" name="sys:processor-type-code" type="var"></define>
+
+<description>This variable is 1 on a CADR processor or equivalent, 2 on a Lambda.
+</description></definition><definition><define key="if-in-cadr-fun" name="if-in-cadr" type="mac"><args>body...</args>
+</define>
+
+<description>Executes <arg>body</arg> only when executing on a CADR.
+</description></definition><definition><define key="if-in-lambda-fun" name="if-in-lambda" type="mac"><args>body</args>
+</define>
+
+<description>Executes <arg>body</arg> only when executing on a Lambda.
+</description></definition><definition><define key="if-in-cadr-else-lambda-fun" name="if-in-cadr-else-lambda" type="mac"><args>if-cadr-form else-body...</args>
+</define>
+
+<description>Executes <arg>if-cadr-form</arg> when executing on a CADR,
+executes <arg>else-body</arg> when executing on a Lambda.
+
+<lisp>(format t &quot;~&amp;Processor is a ~A.~%&quot;
+        (if-in-cadr-else-lambda &quot;CADR&quot; &quot;Lambda&quot;))
+</lisp></description></definition><definition><define key="if-in-lambda-else-cadr-fun" name="if-in-lambda-else-cadr" type="mac"><args>if-lambda-form else-body...</args>
+</define>
+
+<description>Executes <arg>if-cadr-form</arg> when executing on a Lambda
+executes <arg>else-body</arg> when executing on a CADR.
+</description></definition><definition><define key="select-processor-fun" name="select-processor" type="mac"><args>clauses</args>
+</define>
+
+<description>Each clause consists of <obj>:cadr</obj> or <obj>:lambda</obj> followed by forms
+to execute when running on that kind of processor.  Example:
+
+<lisp>(format t &quot;~&amp;Processor is a ~A.~%&quot;
+        (select-processor
+          (:cadr &quot;CADR&quot;)
+          (:lambda &quot;Lambda&quot;)))
+</lisp></description></definition></section><a name="Microcode Variables"></a>
+
+
+<section chapter-number="16" name="Microcode Variables" number="18" title="Microcode Variables"><p>The following variables' values actually reside in the scratchpad memory
+of the processor.  They are put there by <obj>dtp-one-q-forward</obj> invisible
+pointers.  The values of these variables are used by the microcode.
+Many of these variables are highly internal and you shouldn't expect to
+understand them.
+</p>
+<definition>
+<define key="%microcode-version-number-var" name="%microcode-version-number" type="var"></define>
+
+<description>This is the version number of the currently-loaded microcode, obtained
+from the version number of the microcode source file.
+</description></definition><definition>
+<define key="sys:%number-of-micro-entries-var" name="sys:%number-of-micro-entries" type="var"></define>
+
+<description>Size of <obj>micro-code-entry-area</obj> and related areas.
+</description></definition><nopara></nopara>
+<p><obj>default-cons-area</obj> is documented on <ref definition-in-file="areas" key="default-cons-area-var" title="Variable default-cons-area" type="var"></ref>.
+</p>
+<definition>
+<define key="sys:number-cons-area-var" name="sys:number-cons-area" type="var"></define>
+
+<description>The area number of the area where bignums, ratios, full-size floats and
+complexnums are consed.  Normally this variable contains the value of
+<obj>sys:extra-pdl-area</obj>, which enables the ``temporary storage'' feature
+for numbers, saving garbage collection overhead.
+</description></definition><nopara></nopara>
+<p><obj>current-stack-group</obj> and <obj>current-stack-group-resumer</obj>
+are documented on <ref definition-in-file="fd-sg" key="current-stack-group-var" title="Variable current-stack-group" type="var"></ref>.
+</p>
+<definition>
+<define key="sys:%current-stack-group-state-var" name="sys:%current-stack-group-state" type="var"></define>
+
+<description>The <obj>sg-state</obj> of the currently-running stack group.
+</description></definition><definition>
+<define key="sys:%current-stack-group-calling-args-pointer-var" name="sys:%current-stack-group-calling-args-pointer" type="var"></define>
+
+<description>The argument list of the currently-running stack group.
+</description></definition><definition>
+<define key="sys:%current-stack-group-calling-args-number-var" name="sys:%current-stack-group-calling-args-number" type="var"></define>
+
+<description>The number of arguments to the currently-running stack group.
+</description></definition><definition>
+<define key="sys:%trap-micro-pc-var" name="sys:%trap-micro-pc" type="var"></define>
+
+<description>The microcode address of the most recent error trap.
+</description></definition><definition>
+<define key="sys:%initial-fef-var" name="sys:%initial-fef" type="var"></define>
+
+<description>The function that is called when the machine starts up.
+Normally this is the definition of <obj>si:lisp-top-level</obj>.
+</description></definition><definition>
+<define key="sys:%initial-stack-group-var" name="sys:%initial-stack-group" type="var"></define>
+
+<description>The stack group in which the machine starts up.
+Normally this is the initial Lisp Listener window's process's stack group.
+</description></definition><definition>
+<define key="sys:%error-handler-stack-group-var" name="sys:%error-handler-stack-group" type="const"></define>
+
+<description>The stack group that receives control when a microcode-detected error
+occurs.  This stack group cleans up, signals the appropriate condition,
+or assigns a stack group to run the debugger on the erring stack group.
+</description></definition><definition>
+<define key="sys:%scheduler-stack-group-var" name="sys:%scheduler-stack-group" type="const"></define>
+
+<description>The stack group that receives control when a sequence break occurs.
+</description></definition><definition>
+<define key="sys:%chaos-csr-address-var" name="sys:%chaos-csr-address" type="const"></define>
+
+<description>A fixnum, the virtual address that maps to the Unibus location of the
+Chaosnet interface.
+</description></definition><definition>
+<define key="%mar-low-var" name="%mar-low" type="var"></define>
+
+<description>A fixnum, the inclusive lower bound of the region of virtual
+memory subject to the MAR feature (see <ref chapter="31" definition-in-file="db-aid" key="mar" section="13" title="The MAR" type="section"></ref>).
+</description></definition><definition>
+<define key="%mar-high-var" name="%mar-high" type="var"></define>
+
+<description>A fixnum, the inclusive upper bound of the region of virtual
+memory subject to the MAR feature (see <ref chapter="31" definition-in-file="db-aid" key="mar" section="13" title="The MAR" type="section"></ref>).
+</description></definition><definition>
+<define key="sys:%inhibit-read-only-var" name="sys:%inhibit-read-only" type="var"></define>
+
+<description>If non-<obj>nil</obj>, you can write into read-only areas.  This is used by <obj>fasload</obj>.
+</description></definition><nopara></nopara>
+<p><obj>self</obj> is documented on <ref definition-in-file="flavor" key="self-var" title="Variable self" type="var"></ref>.
+</p>
+<nopara></nopara>
+<p><obj>inhibit-scheduling-flag</obj> is documented on <ref definition-in-file="proces" key="inhibit-scheduling-flag-var" title="Variable inhibit-scheduling-flag" type="var"></ref>.
+</p>
+<definition>
+<define key="inhibit-scavenging-flag-var" name="inhibit-scavenging-flag" type="var"></define>
+
+<description>If non-<obj>nil</obj>, the scavenger is turned off.  The scavenger is
+the quasi-asynchronous portion of the garbage collector,
+which normally runs during consing operations.
+</description></definition><definition>
+<define key="sys:scavenger-ws-enable-var" name="sys:scavenger-ws-enable" type="var"></define>
+
+<description>If this is <obj>nil</obj>, scavenging can compete for all of the physical
+memory of the machine.  Otherwise, it should be a fixnum, which
+specifies how much physical memory the scavenger can use: page numbers
+as high as this number or higher are not available to it.
+</description></definition><definition>
+<define key="sys:%region-cons-alarm-var" name="sys:%region-cons-alarm" type="var"></define>
+
+<description>Increments whenever a new region is allocated.
+</description></definition><definition>
+<define key="sys:%page-cons-alarm-var" name="sys:%page-cons-alarm" type="var"></define>
+
+<description>Increments whenever a new page is allocated.
+</description></definition><definition>
+<define key="sys:%gc-flip-ready-var" name="sys:%gc-flip-ready" type="var"></define>
+
+<description><obj>t</obj> while the scavenger is running, <obj>nil</obj> when there are no pointers
+to oldspace.
+</description></definition><definition>
+<define key="sys:%gc-generation-number-var" name="sys:%gc-generation-number" type="var"></define>
+
+<description>A fixnum which is incremented whenever the garbage collector flips, converting
+one or more regions from newspace to oldspace.
+If this number has changed, the <obj>%pointer</obj> of an object may have changed.
+</description></definition><definition>
+<define key="sys:%disk-run-light-var" name="sys:%disk-run-light" type="const"></define>
+
+<description>A fixnum, the virtual address of the TV buffer location of the run-light
+which lights up when the disk is active.  This plus 2 is the address of the run-light
+for the processor.  This minus 2 is the address of the run-light for the garbage collector.
+</description></definition><definition>
+<define key="sys:%loaded-band-var" name="sys:%loaded-band" type="var"></define>
+
+<description>A fixnum, the high 24 bits of the name of the disk partition
+from which virtual memory was booted.  Used to create the greeting message.
+</description></definition><definition>
+<define key="sys:%disk-blocks-per-track-var" name="sys:%disk-blocks-per-track" type="var"></define>
+<define key="sys:%disk-blocks-per-cylinder-var" name="sys:%disk-blocks-per-cylinder" type="var"></define>
+
+<description>Configuration of the disk being used for paging.  Don't change these!
+</description></definition><nopara></nopara>
+<p><obj>sys:%disk-switches</obj> is documented on <ref definition-in-file="fd-sub" key="sys:%disk-switches-var" title="Variable sys:%disk-switches" type="var"></ref>.
+</p>
+<definition>
+<define key="sys:%qlaryh-var" name="sys:%qlaryh" type="var"></define>
+
+<description>This is the last array to be called as a function, remembered for the
+sake of the function <obj>store</obj>.
+</description></definition><definition>
+<define key="sys:%qlaryl-var" name="sys:%qlaryl" type="var"></define>
+
+<description>This is the index used the last time an array was called as a
+function, remembered for the sake of the function <obj>store</obj>.
+</description></definition><definition>
+<define key="sys:%mc-code-exit-vector-var" name="sys:%mc-code-exit-vector" type="var"></define>
+
+<description>This is a vector of pointers that microcompiled code uses to refer to
+quoted constants.
+</description></definition><definition>
+<define key="sys:currently-prepared-sheet-var" name="sys:currently-prepared-sheet" type="var"></define>
+
+<description>Used for communication between the window system and the microcoded graphics primitives.
+</description></definition><nopara></nopara>
+<p><obj>alphabetic-case-affects-string-comparison</obj> is documented on
+<ref definition-in-file="fd-str" key="alphabetic-case-affects-string-comparison-var" title="Variable alphabetic-case-affects-string-comparison" type="var"></ref>.
+</p>
+<nopara></nopara>
+<p><obj>sys:tail-recursion-flag</obj> is documented on
+<ref definition-in-file="fd-eva" key="tail-recursion-flag-var" title="Variable tail-recursion-flag" type="var"></ref>.
+</p>
+<nopara></nopara>
+<p><obj>zunderflow</obj> is documented on <ref definition-in-file="fd-num" key="zunderflow-var" title="Variable zunderflow" type="var"></ref>.
+</p>
+<nopara></nopara>
+<p>The next four have to do with implementing the metering system described
+in <ref chapter="36" definition-in-file="fd-hac" key="meter-section" section="3" title="Metering" type="section"></ref>.
+</p>
+<definition>
+<define key="sys:%meter-global-enable-var" name="sys:%meter-global-enable" type="var"></define>
+
+<description><obj>t</obj> if the metering system is turned on for all stack-groups.
+</description></definition><definition>
+<define key="sys:%meter-buffer-pointer-var" name="sys:%meter-buffer-pointer" type="var"></define>
+
+<description>A temporary buffer used by the metering system.
+</description></definition><definition>
+<define key="sys:%meter-disk-address-var" name="sys:%meter-disk-address" type="var"></define>
+
+<description>Where the metering system writes its next block of results on the disk.
+</description></definition><definition>
+<define key="sys:%meter-disk-count-var" name="sys:%meter-disk-count" type="var"></define>
+
+<description>The number of disk blocks remaining for recording of metering information.
+</description></definition><definition>
+<define key="sys:lexical-environment-var" name="sys:lexical-environment" type="var"></define>
+
+<description>This is the static chain used in the implementation of lexical
+scoping of variable bindings in compiled code.
+</description></definition><definition>
+<define key="sys:amem-evcp-vector-var" name="sys:amem-evcp-vector" type="var"></define>
+
+<description>No longer used.
+</description></definition><nopara></nopara>
+<p><obj>background-cons-area</obj> is documented on
+<ref definition-in-file="areas" key="background-cons-area-var" title="Variable background-cons-area" type="var"></ref>.
+</p>
+<nopara></nopara>
+<p><obj>sys:self-mapping-table</obj> is documented on
+<ref definition-in-file="flavor" key="sys:self-mapping-table-var" title="Variable sys:self-mapping-table" type="var"></ref>.
+</p>
+<nopara></nopara>
+<p><obj>sys:processor-type-code</obj> is documented on
+<ref definition-in-file="fd-sub" key="sys:processor-type-code-var" title="Variable sys:processor-type-code" type="var"></ref>.
+</p>
+<definition>
+<define key="sys:a-memory-location-names-var" name="sys:a-memory-location-names" type="const"></define>
+
+<description>A list of all of the above symbols (and any others added after this documentation
+was written).
+</description></definition></section><a name="Microcode Meters"></a>
+
+
+<section chapter-number="16" name="Microcode Meters" number="19" title="Microcode Meters"><p>Microcode meters are locations in the scratchpad memory which contain
+numbers.  Most of them are used to count events of various sorts.  They
+are accessible only through the functions <obj>read-meter</obj> and
+<obj>write-meter</obj>.  They have nothing to do with the Lisp metering tools.
+</p>
+<definition><define key="read-meter-fun" name="read-meter" type="fun"><args>name</args>
+</define>
+
+<description>Returns the contents of the microcode meter named <arg>name</arg>, which can be a fixnum
+or a bignum.  <arg>name</arg> must be one of the symbols listed below.
+</description></definition><definition><define key="write-meter-fun" name="write-meter" type="fun"><args>name value</args>
+</define>
+
+<description>Writes <arg>value</arg>, a fixnum or a bignum, into the microcode meter named <arg>name</arg>.
+<arg>name</arg> must be one of the symbols listed below.
+</description></definition><nopara></nopara>
+<p>The microcode meters are as follows:
+</p>
+<definition>
+<define key="sys:%count-chaos-transmit-aborts-meter" name="sys:%count-chaos-transmit-aborts" type="meter"></define>
+
+<description>The number of times transmission on the Chaosnet was aborted, either by a collision
+or because the receiver was busy.
+</description></definition><definition>
+<define key="sys:%count-cons-work-meter" name="sys:%count-cons-work" type="meter"></define>
+<define key="sys:%count-scavenger-work-meter" name="sys:%count-scavenger-work" type="meter"></define>
+
+<description>Internal state of the garbage collection algorithm.
+</description></definition><definition>
+<define key="sys:%tv-clock-rate-meter" name="sys:%tv-clock-rate" type="meter"></define>
+
+<description>The number of TV frames per clock sequence break.
+The default value is 67., which causes clock sequence breaks to happen
+about once per second.
+</description></definition><definition>
+<define key="sys:%count-first-level-map-reloads-meter" name="sys:%count-first-level-map-reloads" type="meter"></define>
+
+<description>The number of times the first-level virtual-memory map was invalid
+and had to be reloaded from the page hash table.
+</description></definition><definition>
+<define key="sys:%count-second-level-map-reloads-meter" name="sys:%count-second-level-map-reloads" type="meter"></define>
+
+<description>The number of times the second-level virtual-memory map was invalid
+and had to be reloaded from the page hash table.
+</description></definition><definition>
+<define key="sys:%count-meta-bits-map-reloads-meter" name="sys:%count-meta-bits-map-reloads" type="meter"></define>
+
+<description>The number of times the virtual address map was reloaded to contain only
+``meta bits'', not an actual physical address.
+</description></definition><definition>
+<define key="sys:%count-pdl-buffer-read-faults-meter" name="sys:%count-pdl-buffer-read-faults" type="meter"></define>
+
+<description>The number of read references to the pdl buffer that were
+virtual memory references that trapped.
+</description></definition><definition>
+<define key="sys:%count-pdl-buffer-write-faults-meter" name="sys:%count-pdl-buffer-write-faults" type="meter"></define>
+
+<description>The number of write references to the pdl buffer that were
+virtual memory references that trapped.
+</description></definition><definition>
+<define key="sys:%count-pdl-buffer-memory-faults-meter" name="sys:%count-pdl-buffer-memory-faults" type="meter"></define>
+
+<description>The number of virtual memory references that trapped in case
+they should have gone to the pdl buffer, but turned out to be
+real memory references after all (and therefore were needlessly
+slowed down).
+</description></definition><definition>
+<define key="sys:%count-disk-page-reads-meter" name="sys:%count-disk-page-reads" type="meter"></define>
+
+<description>The number of pages read from the disk.
+</description></definition><definition>
+<define key="sys:%count-disk-page-writes-meter" name="sys:%count-disk-page-writes" type="meter"></define>
+
+<description>The number of pages written to the disk.
+</description></definition><definition>
+<define key="sys:%count-fresh-pages-meter" name="sys:%count-fresh-pages" type="meter"></define>
+
+<description>The number of fresh (newly-consed) pages created in core,
+which would have otherwise been read from the disk.
+</description></definition><definition>
+<define key="sys:%count-disk-page-read-operations-meter" name="sys:%count-disk-page-read-operations" type="meter"></define>
+
+<description>The number of paging read operations; this can be smaller than the number of
+disk pages read when more than one page at a time is read.
+</description></definition><definition>
+<define key="sys:%count-disk-page-write-operations-meter" name="sys:%count-disk-page-write-operations" type="meter"></define>
+
+<description>The number of paging write operations; this can be smaller than the number of
+disk pages written when more than one page at a time is written.
+</description></definition><definition>
+<define key="sys:%count-disk-prepages-used-meter" name="sys:%count-disk-prepages-used" type="meter"></define>
+
+<description>The number of times a page was used after being read in before it was needed.
+</description></definition><definition>
+<define key="sys:%count-disk-prepages-not-used-meter" name="sys:%count-disk-prepages-not-used" type="meter"></define>
+
+<description>The number of times a page was read in before it was needed, but got evicted
+before it was ever used.
+</description></definition><definition>
+<define key="sys:%count-disk-page-write-waits-meter" name="sys:%count-disk-page-write-waits" type="meter"></define>
+
+<description>The number of times the machine waited for a page to finish being written out
+in order to evict the page.
+</description></definition><definition>
+<define key="sys:%count-disk-page-write-busys-meter" name="sys:%count-disk-page-write-busys" type="meter"></define>
+
+<description>The number of times the machine waited for a page to finish being written out
+in order to do something else with the disk.
+</description></definition><definition>
+<define key="sys:%disk-wait-time-meter" name="sys:%disk-wait-time" type="meter"></define>
+
+<description>The time spent waiting for the disk, in microseconds.  This can be used to
+distinguish paging time from running time when measuring and optimizing the`
+performance of programs.
+</description></definition><definition>
+<define key="sys:%count-disk-errors-meter" name="sys:%count-disk-errors" type="meter"></define>
+
+<description>The number of recoverable disk errors.
+</description></definition><definition>
+<define key="sys:%count-disk-recalibrates-meter" name="sys:%count-disk-recalibrates" type="meter"></define>
+
+<description>The number of times the disk seek mechanism was recalibrated,
+usually as part of error recovery.
+</description></definition><definition>
+<define key="sys:%count-disk-ecc-corrected-errors-meter" name="sys:%count-disk-ecc-corrected-errors" type="meter"></define>
+
+<description>The number of disk errors that were corrected through the error correcting code.
+</description></definition><definition>
+<define key="sys:%count-disk-read-compare-differences-meter" name="sys:%count-disk-read-compare-differences" type="meter"></define>
+
+<description>The number of times a read compare was done, no disk error occurred, but the
+data on disk did not match the data in memory.
+</description></definition><definition>
+<define key="sys:%count-disk-read-compare-rereads-meter" name="sys:%count-disk-read-compare-rereads" type="meter"></define>
+
+<description>The number of times a disk read was done over because after the read a read
+compare was done and did not succeed (either it got an error or the data on disk
+did not match the data in memory).
+</description></definition><definition>
+<define key="sys:%count-disk-read-compare-rewrites-meter" name="sys:%count-disk-read-compare-rewrites" type="meter"></define>
+
+<description>The number of times a disk write was done over because after the write a read
+compare was done and did not succeed (either it got an error or the data on disk
+did not match the data in memory).
+</description></definition><definition>
+<define key="sys:%disk-error-log-pointer-meter" name="sys:%disk-error-log-pointer" type="meter"></define>
+
+<description>Address of the next entry to be written in the disk error log.  The function
+<obj>si:print-disk-error-log</obj> (see <ref definition-in-file="fd-hac" key="si:print-disk-error-log-fun" title="Function si:print-disk-error-log" type="fun"></ref>) prints this log.
+</description></definition><definition>
+<define key="sys:%count-aged-pages-meter" name="sys:%count-aged-pages" type="meter"></define>
+
+<description>The number of times the page ager set an age trap on a page, to determine
+whether it was being referenced.
+</description></definition><definition>
+<define key="sys:%count-age-flushed-pages-meter" name="sys:%count-age-flushed-pages" type="meter"></define>
+
+<description>The number of times the page ager saw that a page still had an age trap
+and hence made it ``flushable'', a candidate for eviction from main memory.
+</description></definition><definition>
+<define key="sys:%aging-depth-meter" name="sys:%aging-depth" type="meter"></define>
+
+<description>A number from 0 to 3 that controls how long a page must remain unreferenced
+before it becomes a candidate for eviction from main memory.
+</description></definition><definition>
+<define key="sys:%count-findcore-steps-meter" name="sys:%count-findcore-steps" type="meter"></define>
+
+<description>The number of pages inspected by the page replacement algorithm.
+</description></definition><definition>
+<define key="sys:%count-findcore-emergencies-meter" name="sys:%count-findcore-emergencies" type="meter"></define>
+
+<description>The number of times no evictable page was found and extra aging had to be done.
+</description></definition><definition>
+<define key="sys:a-memory-counter-block-names-var" name="sys:a-memory-counter-block-names" type="const"></define>
+
+<description>A list of all of the above symbols (and any others added after this documentation
+was written).
+</description></definition></section><a name="area"></a>
+
+<section chapter-number="16" name="area" number="20" title="Miscellaneous Subprimitives"><definition>
+<define key="sys:%halt-fun" name="sys:%halt" type="fun"></define>
+
+<description>Stops the machine.
+</description></definition></section></chapter>
+</document-part>

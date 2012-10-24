@@ -1,0 +1,2440 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="expression-io-chapter"></a>
+<chapter name="expression-io-chapter" number="24" title="Expression Input and Output"><index-entry index="concepts" title="printed representation"></index-entry>
+
+<p indent="1">        People cannot deal directly with Lisp objects, because the
+objects live inside the machine.  In order to let us get at and talk
+about Lisp objects, Lisp provides a representation of objects in the
+form of printed text; this is called the <arg>printed representation</arg>.
+This is what you have been seeing in the examples throughout this manual.
+Functions such as <obj>print</obj>, <obj>prin1</obj>,  and <obj>princ</obj> take a Lisp
+object and send the characters of its printed representation to a
+stream.  These functions (and the internal functions they call) are
+known as the <arg>printer</arg>.  The <obj>read</obj> function takes characters from a stream,
+interprets them as a printed representation of a Lisp object, builds a
+corresponding object, and returns it.  It and related functions are known as the <arg>reader</arg>.
+(Streams are explained in <ref chapter="23" definition-in-file="stream" key="streams" section="3" title="I/O Streams" type="section"></ref>.)
+</p>
+
+<p>For the rest of the chapter, the phrase `printed representation' is
+abbreviated as `p.r.'
+</p>
+<a name="customizing-the-printer"></a>
+
+
+<section chapter-number="24" name="customizing-the-printer" number="1" title="What the Printer Produces"><index-entry index="concepts" title="printer"></index-entry>
+
+<p indent="1">        The printed representation of an object depends on its type.  In
+this section, we consider each type of object and explain how it is
+printed.  There are several variables which you can set before calling
+the printer to control how certain kinds of objects print.  They are
+mentioned where relevant in this section and summarized in the following
+section, but one of them is so important it must be described now.  This
+is the <arg>escaping</arg> feature, controlled by the value of
+<obj>*print-escape*</obj>.
+</p>
+
+<index-entry index="concepts" title="escaping"></index-entry>
+
+<p>Escaping means printing extra syntactical delimiters and <arg>escape characters</arg>
+when necessary to avoid ambiguity.  Without escaping, a symbol is
+printed by printing the contents of its name; therefore, the symbol
+whose name consists of the three characters <obj>1</obj>, <obj>.</obj> and <obj>5</obj>
+prints just like the floating point number <obj>1.5</obj>.  Escaping causes the symbol to
+print as <obj>|1.5|</obj> to differentiate the two.  <obj>|</obj> is a kind of escape
+character; see <ref definition-in-file="rdprt" key="escape-characters" type="page"></ref> for more information on escape
+characters and what they mean syntactically.
+</p>
+
+<p>Escaping also involves printing package prefixes for symbols, printing
+double-quotes or suitable delimiters around the contents of strings,
+pathnames, host names, editor buffers, condition objects, and many other
+things.  For example, without escaping, the pathname <obj>SYS: SYS; QCP1 LISP</obj> prints as
+exactly those characters.  The string with those contents prints indistinguishably.
+With escaping, the pathname prints as 
+
+<lisp>#⊂FS:LOGICAL-PATHNAME &quot;SYS: SYS; QCP1 LISP&quot;⊃
+</lisp>and the string prints as <obj>&quot;SYS: SYS; QCP1 LISP&quot;</obj>.
+</p>
+
+<p>The non-escaped version is nicer looking in general, but if you give it
+to <obj>read</obj> it won't do the right thing.  The escaped version is
+carefully set up so that <obj>read</obj> will be able to read it in.  Printing
+with escaping is useful in writing expressions into files.  Printing without
+escaping is useful when constructing messages for the user.  However, when the purpose
+of a message printed for the user is to <arg>mention</arg> an object,
+the object should be printed with escaping:
+
+<lisp>Your output is in the file SYS: SYS; QCP1 QFASL.
+<exdent amount="96"><caption>vs </caption>Expected pathname properties missing from
+ #⊂FS:LOGICAL-PATHNAME &quot;SYS: SYS; QCP1 LISP&quot;⊃.
+</exdent></lisp></p>
+
+<index-entry index="concepts" title="Common Lisp syntax"></index-entry>
+
+<index-entry index="concepts" title="traditional syntax"></index-entry>
+
+<p>The printed representation of an object also may depend on whether
+Common Lisp syntax is in use.  Common Lisp syntax and traditional
+Zetalisp syntax are incompatible in some aspects of their specifications.  In order to
+print objects so that they can be read back in, the printer needs to
+know which syntax rules the reader will use.  This decision is based on
+the current readtable: the value of <obj>*readtable*</obj> at the time printing
+is done.
+</p>
+
+<p>Now we describe how each type of object is standardly printed.
+</p>
+<need amount="1800"></need><nopara></nopara>
+<p>Integers:
+</p>
+
+<p>For an integer (a fixnum or a bignum): the printed representation
+consists of
+
+<table><tbody><tr><td><standard>*</standard></td><td>a possible radix prefix
+</td></tr><tr><td><standard>*</standard></td><td>a minus sign, if the number is negative
+</td></tr><tr><td><standard>*</standard></td><td>the representation of the number's absolute value
+</td></tr><tr><td><standard>*</standard></td><td>a possible radix suffix.
+</td></tr></tbody></table></p>
+
+<p>The radix used for printing the number's absolute value
+is found as the value of <obj>*print-base*</obj>.  This should be either
+a positive fixnum or a symbol with an <obj>si:princ-function</obj> property.
+In the former case, the number is simply printed in that radix.
+In the latter case, the property is called as a function with two
+arguments, minus the absolute value of the number, and the stream
+to print on.  The property is responsible for all printing.
+If the value of <obj>*print-base*</obj> is unsuitable, an error is signaled.
+</p>
+
+<p>A radix prefix or suffix is used if either <obj>*nopoint</obj> is <obj>nil</obj>
+and the radix used is ten, or if <obj>*nopoint</obj> is non-<obj>nil</obj> and
+<obj>*print-radix*</obj> is non-<obj>nil</obj>.  For radix ten, a period is used
+as the suffix.  For any other radix, a prefix of the form
+<example>#<arg>radix</arg>r</example> is used.  A radix prefix or suffix is useful
+to make sure that <obj>read</obj> parses the number using the same
+radix used to print it, or for reminding the user how to interpret
+the number.
+</p>
+<need amount="1800"></need><nopara></nopara>
+<p>Ratios:
+</p>
+
+<p>The printed representation of a ratio consists of
+
+<table><tbody><tr><td><standard>*</standard></td><td>a possible radix prefix
+</td></tr><tr><td><standard>*</standard></td><td>a minus sign, if the number is negative
+</td></tr><tr><td><standard>*</standard></td><td>the numerator
+</td></tr><tr><td><standard>*</standard></td><td>a ratio delimiter
+</td></tr><tr><td><standard>*</standard></td><td>the denominator
+</td></tr></tbody></table></p>
+
+<p>If Common Lisp syntax is in use, the ratio delimiter is a slash (<obj>/</obj>).
+If traditional syntax is in use, backslash (<obj>\</obj>) is used.  The
+numerator and denominator are printed according to <obj>*print-base*</obj>.
+</p>
+
+<p>The condition for printing a radix prefix is the same as for integers,
+but a prefix <example>#10r</example> is used to indicate radix ten, rather than a
+period suffix.
+</p>
+<need amount="1800"></need><nopara></nopara>
+<p>Floating Point Numbers:
+</p>
+
+<table><tbody><tr><td><standard>*</standard></td><td>a minus sign, if the number is negative
+</td></tr><tr><td><standard>*</standard></td><td>one or more decimal digits
+</td></tr><tr><td><standard>*</standard></td><td>a decimal point
+</td></tr><tr><td><standard>*</standard></td><td>one or more decimal digits
+</td></tr><tr><td><standard>*</standard></td><td>an exponent, if the number is small enough or large enough to require one.
+The exponent, if present, consists of
+
+<table><tbody><tr><td><standard>*</standard></td><td>a delimiter, the letter <obj>e</obj>, <obj>s</obj> or <obj>f</obj>
+</td></tr><tr><td><standard>*</standard></td><td>a minus sign, if the exponent is negative
+</td></tr><tr><td><standard></standard></td><td>one to three decimal digits
+</td></tr></tbody></table></td></tr></tbody></table>
+<p>The number of digits printed is just enough to represent all the
+significant mantissa bits the number has.  Feeding the p.r. of a float
+back to the reader is always supposed to produce an equal float.
+Floats are always printed in decimal; they are not affected by escaping
+or by <obj>*print-base*</obj>, and there are never any radix prefixes or
+suffixes.
+</p>
+
+<p>The Lisp Machine supports two floating point number formats.  At any
+time, one of them is the default; this is controlled by the value of
+<obj>*read-default-float-format*</obj>.  When a floating point number whose
+format is <arg>not</arg> currently the default is printed, it must be printed
+with an exponent so that the exponent delimiter can specify the format.
+The exponent is introduced in this case by <obj>f</obj> or <obj>s</obj> to specify the
+format.  To the reader, <obj>f</obj> specifies <obj>single-float</obj> format and
+<obj>s</obj> specifies <obj>short-float</obj> format.
+</p>
+
+<p>A floating point number of the default format is printed with no exponent
+if this looks nice; namely, if this does not require too many extra zeros
+to be printed before or after the decimal point.  Otherwise, an exponent
+is printed and is delimited with <obj>e</obj>.  To the reader, <obj>e</obj> means
+`use the default format'.
+</p>
+
+<p>Normally the default float format is <obj>single-float</obj>.  Therefore, the
+printer may print full size floats without exponents or with <obj>e</obj>
+exponents, but short floats are always printed with exponents
+introduced by <obj>s</obj> so as to tell the reader to make a short float.
+</p>
+<need amount="1800"></need><nopara></nopara>
+<p>Complex Numbers:
+</p>
+
+<p>The traditional printed representation of a complex number consists of
+
+<table><tbody><tr><td><standard>*</standard></td><td>the real part
+</td></tr><tr><td><standard>*</standard></td><td>a plus sign, if the imaginary part is positive
+</td></tr><tr><td><standard>*</standard></td><td>the imaginary part
+</td></tr><tr><td><standard>*</standard></td><td>the letter <obj>i</obj>, printed in lower case
+</td></tr></tbody></table></p>
+
+<p>If the imaginary part is negative, the <obj>+</obj> is omitted since the initial <obj>-</obj>
+of the imaginary part serves to separate it from the real part.
+</p>
+
+<p>In Common Lisp syntax, a complex number is printed as <example>#C(<arg>realpart</arg>
+<arg>imagpart</arg>)</example>; for example, <obj>#C(5 3)</obj>.  Common Lisp inexplicably
+does not allow the more natural <obj>5+3i</obj> syntax.
+</p>
+
+<p>The real and imaginary parts are printed individually according to the
+specifications above.
+<need amount="1800"></need><nopara></nopara>Symbols:
+</p>
+
+<p>If escaping is off, the p.r. is simply the successive
+characters of the print-name of the symbol. If escaping is on,
+two changes must be made.  First, the symbol might require a package prefix
+in order that <obj>read</obj> work correctly, assuming that the package into which
+<obj>read</obj> will read the symbol is the one in which it is being printed.
+See the chapter on packages (<ref chapter="28" definition-in-file="packd" key="package" section="0" title="Packages" type="section"></ref>) for an explanation
+of the package name prefix.  If the symbol is one which would have
+another symbol substituted for it if printed normally and read back,
+such as the symbol <obj>member</obj> printed using Common Lisp syntax
+which would be replaced with <obj>cli:member</obj> if read in thus,
+it is printed with a package prefix (e.g., <obj>global:member</obj>)
+to make it read in properly.  See <ref definition-in-file="rdprt" key="reader-symbol-substitutions" type="page"></ref>
+for more information on this.
+</p>
+
+<p>If the symbol is uninterned, <example>#:</example> is printed instead of a package
+prefix, provided <obj>*print-gensym*</obj> is non-<obj>nil</obj>.
+</p>
+
+<p>Secondly, if the p.r. would not read in as a symbol at all (that is, if
+the print-name looks like a number, or contains special characters),
+then escape characters are added so as to suppress the other reading.
+Two kinds of escape characters may be used: single-character escapes
+and multiple escapes.  A single-character escape can be used in front of
+a character to overrule its special syntactic meaning.  Multiple escapes
+are used in pairs, and all the characters between the pair have their
+special syntactic meanings suppressed <arg>except single-character escapes</arg>.
+If the symbol name contains escape characters, they are escaped with
+single-character escapes.  If the symbol name contains anything else
+problematical, a pair of multiple escape characters are printed around it.
+</p>
+
+<p>The single-character and multiple escape characters are determined by
+the current readtable.  Standardly the multiple escape character is
+vertical bar (<obj>|</obj>), in both traditional and Common Lisp syntax.  The
+single-character escape character is slash (<obj>/</obj>) in traditional syntax
+and backslash (<obj>\</obj>) in Common Lisp syntax.
+</p>
+
+<lisp>FOO        ;<standard>typical symbol, name composed of upper case letters</standard>
+A/|B       ;<standard>symbol with a vertical bar in its name</standard>
+|Symbol with lower case and spaces in its name|
+|One containing slash (//) and vertical bar (/|) also|
+</lisp>
+<p>Except when multiple escape characters are printed, any upper case
+letters in the symbol's name may be printed as lower case, according to
+the value of the variable <obj>*print-case*</obj>.  This is true whether escaping
+is enabled or not.  See the next section for
+details.
+</p>
+<need amount="1800"></need><nopara></nopara>
+<p>Conses:
+</p>
+
+<p>The p.r. for conses tends to favor <arg>lists</arg>.  It starts with an
+open-parenthesis.  Then the car of the cons is printed and the
+cdr of the cons is examined.  If it is <obj>nil</obj>, a close-parenthesis
+is printed.  If it is anything else but a cons, space dot space followed
+by that object is printed.  If it is a cons, we print a space and start
+all over (from the point <arg>after</arg> we printed the open-parenthesis)
+using this new cons.  Thus, a list is printed as an open-parenthesis,
+the p.r.'s of its elements separated by spaces, and a close-parenthesis.
+This is how the printer produces representations such as <obj>(a b (foo bar)
+c)</obj> in preference to synonymous forms such as <obj>(a . (b . ((foo . (bar
+. nil)) . (c . nil))))</obj>.
+</p>
+
+<p>The following additional feature is provided for the p.r. of conses: as
+a list is printed, <obj>print</obj> maintains the length of the list so far and
+the depth of recursion of printing lists.  If the length exceeds the
+value of the variable <obj>*print-length*</obj>, <obj>print</obj> terminates the
+printed representation of the list with an ellipsis (three periods) and
+a close-parenthesis.  If the depth of recursion exceeds the value of the
+variable <obj>*print-level*</obj>, then the character <example>#</example> is printed instead
+of the list.  These two features allow a kind of abbreviated printing
+that is more concise and suppresses detail.  Of course, neither the
+ellipsis nor the <example>#</example> can be interpreted by <obj>read</obj>, since the
+relevant information is lost.  In Common Lisp read syntax, either one
+causes <obj>read</obj> to signal an error.
+</p>
+
+<p>If <obj>*print-pretty*</obj> is non-<obj>nil</obj>, conses are given to the grinder to print.
+</p>
+
+<p>If <obj>*print-circle*</obj> is non-<obj>nil</obj>, a check is made for cars or cdrs
+that are circular or shared structure, and any object (except for an
+interned symbol) already mentioned is replaced by a <example>#<arg>n</arg>#</example> label
+reference.  See <ref definition-in-file="rdprt" key="circular-structure-reading" type="page"></ref> for more information on them.
+</p>
+
+<lisp>(let ((*print-circle* t))
+  (prin1 (circular-list 3 4)))
+<exdent amount="96"><caption>prints </caption>#1= (3 4 . #1#)
+</exdent></lisp><need amount="1800"></need><nopara></nopara>
+<p>Character Objects:
+</p>
+
+<p>When escaping is off, a character object is printed by printing the
+character itself, with no delimiters.
+</p>
+
+<p>In Common Lisp syntax, a character object is printed with escaping as
+<example>#<arg>font</arg>\<arg>character-or-name</arg></example>.  <arg>font</arg> is the character's font
+number, in decimal, or is omitted if zero.  <arg>character-or-name</arg> begins
+with prefixes for any modifier bits (control, meta, etc.) present in
+the character, each followed by a hyphen.  Then comes a representation
+of the character sans font and modifier bits.  If this reduced character
+is a graphic character, it represents itself.  Otherwise, it certainly
+has a standard name; the name is used.  If a graphic characters has special
+syntactic properties (such as whitespace, paretheses, and macro characters)
+and modifier bit prefixes have been printed then
+a single-character escape character is printed before it.
+</p>
+
+<p>In traditional syntax, the p.r. is the similar except that the <example>\</example> is
+replaced by <example>≠/</example>.
+</p>
+<need amount="1800"></need><nopara></nopara>
+<p>Strings:
+</p>
+
+<p>If escaping is off, the p.r. is simply the successive characters of the
+string.  If escaping is on, double-quote characters (`<obj>&quot;</obj>') are printed
+surrounding the contents, and any single-character escape characters or
+double-quotes inside the contents are preceded by single-character
+escapes.  If the string contains a Return character followed by an open
+parenthesis, a single-character escape is printed before the open
+parenthesis.  Examples:
+
+<lisp>&quot;Foo&quot;
+&quot;/&quot;Foo/&quot;, he said.&quot;
+</lisp></p>
+<need amount="1800"></need><nopara></nopara>
+<p>Named Structures:
+</p>
+
+<p>If the named structure type symbol has a <obj>named-structure-invoke</obj>
+property, the property is called as a function with four arguments: the
+symbol <obj>:print-self</obj>, the named structure itself, the stream to print
+on, and the current <arg>depth</arg> of list structure (see below).  It is this
+function's responsibility to output a suitable printed representation to
+the stream.  This allows a user to define his own p.r. for his named
+structures; more information can be found in the named structure section
+(see <ref definition-in-file="defstr" key="named-structure" type="page"></ref>).  Typically the printed representation used
+starts with either <example>#</example><obj>&lt;</obj> if it is not supposed to be readable or <example>#⊂</example>
+(see <ref definition-in-file="rdprt" key="horseshoe-read" type="page"></ref>) if it is supposed to be readable.
+</p>
+
+<p>If the named structure symbol does not have a <obj>named-structure-invoke</obj>
+property, the printed-representation depends on whether escaping is in
+use.  If it is, <example>#s</example> syntax is used:
+
+<lisp>#s(<arg>named-structure-symbol</arg>
+   <arg>component</arg> <arg>value</arg>
+   <arg>component</arg> <arg>value</arg>
+   ...)
+</lisp>Named structure component values are checked for circular or shared structure
+if <obj>*print-circle*</obj> is non-<obj>nil</obj>.
+</p>
+
+<p>If escaping is off, the p.r. is like that used for miscellaneous data-types: <example>#</example><obj>&lt;</obj>,
+the named structure symbol, the numerical address of the structure, and <obj>&gt;</obj>.
+</p>
+<need amount="1800"></need><nopara></nopara>
+<p>Other Arrays:
+</p>
+
+<p>If <obj>*print-array*</obj> is non-<obj>nil</obj>, the array is printed in a way which
+shows the elements of the array.  Bit vectors use <example>#*</example> syntax, other
+vectors use <example>#(...)</example> syntax, and arrays of rank other than one use
+<example>#<arg>n</arg>a(...)</example> syntax.  The printed representation does not indicate
+the array type (that is, what elements it is allowed to contain).  If
+the printed representation is read in, a general array (array type
+<obj>art-q</obj>) is always created.  See <ref definition-in-file="rdprt" key="array-syntax" type="page"></ref> for more information
+on these syntaxes.  Examples:
+
+<lisp>(vector 1 2 5) =&gt; #(1 2 5)
+(make-array '(2 4) :initial-element t) =&gt; #2a((t t t t) (t t t t))
+</lisp></p>
+
+<p>Vector and array groupings count like list groupings in maintaining the
+depth value that is compared with <obj>*print-level*</obj> for cutting off
+things that get too deep.  More than <obj>*print-length*</obj> elements in a
+given vector or array grouping level are cut off with an ellipsis just
+like a list that is so long.
+</p>
+
+<p>Array elements are checked for circular or shared structure if
+<obj>*print-circle*</obj> is non-<obj>nil</obj>.
+</p>
+
+<p>If <obj>*print-array*</obj> is <obj>nil</obj>, the p.r. starts with <example>#</example><obj>&lt;</obj>.  Then the
+<obj>art-</obj> symbol for the array type is printed.  Next the dimensions of
+the array are printed, separated by hyphens.  This is followed by a
+space, the machine address of the array, and a <obj>&gt;</obj>, as in
+<obj>#&lt;ART-COMPLEX-FLOAT-3-6 34030451&gt;</obj>.
+</p>
+<need amount="1800"></need><nopara></nopara>
+<p>Instances and Entities:
+</p>
+
+<p>If the object says it can handle the
+<obj>:print-self</obj> message, that message is sent with three arguments: the
+stream to print to, the current <arg>depth</arg> of list structure (see below),
+and whether escaping is enabled.  The object should print a
+suitable p.r. on the stream.  See <ref chapter="22" definition-in-file="flavor" key="flavor" section="0" title="Objects, Message Passing, and Flavors" type="section"></ref> for documentation on
+instances.  Most such objects print like ``any other data type'' below,
+except with additional information such as a name.  Some objects print
+only their name when escaping is not in effect (when
+<obj>princ</obj>'ed).  Some objects, including pathnames, use a printed
+representation that begins with <example>#⊂</example>, ends with <obj>⊃</obj>, and contains
+sufficient information for the reader to reconstruct an
+equivalent object.  See <ref definition-in-file="rdprt" key="horseshoe-read" type="page"></ref>.  If the object cannot handle
+<obj>:print-self</obj>, it is printed like ``any other data type''.
+</p>
+<need amount="1800"></need><nopara></nopara>
+<p>Any Other Data Type:
+</p>
+
+<p>The printed representation starts with <example>#</example><obj>&lt;</obj> and ends with <obj>&gt;</obj>.  This
+sort of printed representation cannot be read back in.  The <example>#</example><obj>&lt;</obj> is
+followed by the <obj>dtp-</obj> symbol for this datatype, a space, and the
+octal machine address of the object.  The object's name, if one can be
+determined, often appears before the address.  If this style of printed
+representation is being used for a named structure or instance, other
+interesting information may appear as well.  Finally a greater-than sign
+(<example>&gt;</example>) is printed in octal.  Examples:
+
+<lisp>#'equal =&gt; #&lt;DTP-U-ENTRY EQUAL 410&gt;
+(value-cell-location nil) =&gt; #&lt;DTP-LOCATIVE 1&gt;
+</lisp></p>
+
+<p>Including the machine address in the p.r. makes it possible to tell two objects of this
+kind apart without explicitly calling <obj>eq</obj> on them.  This can be very useful during
+debugging.  It is important to know that if garbage collection is turned on, objects
+will occasionally be moved, and therefore their octal machine addresses will be
+changed.  It is best to shut off garbage collection temporarily when depending on
+these numbers.
+</p>
+
+<p>Printed representations that start with `<example>#</example><obj>&lt;</obj>' can never be read
+back.
+This can be a problem if, for example, you are printing a structure into a
+file with the intent of reading it in later.  The following feature allows
+you to make sure that what you are printing may indeed be read with the reader.
+</p>
+<definition>
+<define key="si:print-readably-var" name="si:print-readably" type="var"></define>
+
+<description>When <obj>si:print-readably</obj> is bound to <obj>t</obj>, the printer signals an error
+if there is an attempt to print an object that cannot be interpreted by <obj>read</obj>.
+When the printer sends a <obj>:print-self</obj> or a <obj>:print</obj> message, it assumes
+that this error checking is done for it.  Thus it is possible for these messages
+<arg>not</arg> to signal an error, if they see fit.
+</description></definition><definition><define key="si:printing-random-object-fun" name="si:printing-random-object" type="mac"><args>(object stream . keywords) <standard>&amp;body</standard> body</args>
+</define>
+
+<description>The vast majority of objects that define <obj>:print-self</obj> messages have much
+in common.  This macro is provided for convenience so that users do not
+have to write out that repetitious code.  It is also the preferred interface
+to <obj>si:print-readably</obj>.  With no keywords, <obj>si:printing-random-object</obj>
+checks the value of <obj>si:print-readably</obj> and signals an error if it is not
+<obj>nil</obj>.  It then prints a number sign and a less-than sign, evaluates the
+forms in <arg>body</arg>, then prints a space, the octal machine address
+of the object and
+a greater-than sign.  A typical use of this macro might look like:
+
+<lisp>(si:printing-random-object (ship stream :typep)
+  (tyo #\space stream)
+  (prin1 (ship-name ship) stream))
+</lisp>This might print <obj>#&lt;ship &quot;ralph&quot; 23655126&gt;</obj>.
+</description></definition>
+<p>The following keywords may be used to modify the behaviour of <obj>si:printing-random-object</obj>:
+</p>
+
+<table><tbody><tr><td><obj>:no-pointer</obj></td><td>This suppresses printing of the octal address of the object.
+
+</td></tr><tr><td><obj>:type</obj></td><td>This prints the result of <obj>(type-of <arg>object</arg>)</obj> after the less-than sign.
+In the example above, this option could have been used instead of
+the first two forms in the body.
+</td></tr></tbody></table><definition><define key="sys:print-not-readable-condition" name="sys:print-not-readable" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This condition is signaled by <obj>si:print-readably</obj> when the object
+cannot be printed readably.
+
+The condition instance supports the operation <obj>:object</obj>, which
+returns the object that was being printed.
+</description></definition>
+<p>If you want to control the printed representation of some object,
+usually the right way to do it is to make the object an array that is a
+named structure (see <ref definition-in-file="defstr" key="named-structure" type="page"></ref>), or an instance of a flavor
+(see <ref chapter="22" definition-in-file="flavor" key="flavor" section="0" title="Objects, Message Passing, and Flavors" type="section"></ref>).  However, occasionally it is desirable to get control
+over all printing of objects, in order to change, in some way, how they
+are printed.  If you need to do this, the best way to proceed is to
+customize the behavior of <obj>si:print-object</obj> (see
+<ref definition-in-file="rdprt" key="si:print-object-fun" title="Function si:print-object" type="fun"></ref>), which is the main internal function of the
+printer.  All of the printing functions, such as <obj>print</obj> and
+<obj>princ</obj>, as well as <obj>format</obj>, go through this function.  The way to
+customize it is by using the ``advice'' facility (see <ref chapter="31" definition-in-file="db-aid" key="advise" section="10" title="Advising a Function" type="section"></ref>).
+</p>
+</section><a name="Options that Control Printing"></a>
+
+
+<section chapter-number="24" name="Options that Control Printing" number="2" title="Options that Control Printing"><p>Several special variables are defined by the system for the user to set or bind
+before calling <obj>print</obj> or other printing functions.  Their values, as set
+up by the user, control how various kinds of objects are printed.
+</p>
+<definition>
+<define key="*print-escape*-var" name="*print-escape*" type="var"></define>
+
+<description>Escaping is done if this variable is non-<obj>nil</obj>.  See the previous section
+for a description of the many effects of escaping.  Most of the output functions
+bind this variable to <obj>t</obj> or to <obj>nil</obj>, so you rarely use the variable itself.
+</description></definition><definition>
+<define key="*print-base*-var" name="*print-base*" type="var"></define>
+<define key="base-var" name="base" type="var"></define>
+
+<description>The radix to use for printing integers and ratios.  The value must be either an
+integer from 2 to 36 or a symbol with a valid <obj>si:princ-function</obj>
+property, such as <obj>:roman</obj> or <obj>:english</obj>.
+
+The default value of <obj>*print-base*</obj> is ten.  In input from files, the
+<obj>Base</obj> attribute (see <ref chapter="26" definition-in-file="files" key="file-attribute-list" section="5" title="File Attribute Lists" type="section"></ref>) controls the value of
+<obj>*print-base*</obj> (and of <obj>*read-base*</obj>).
+
+The synonym <obj>base</obj> is from Maclisp.
+</description></definition><definition>
+<define key="*print-radix*-var" name="*print-radix*" type="var"></define>
+
+<description>If non-<obj>nil</obj>, integers and ratios are output with a prefix or suffix
+indicating the radix used to print them.  For integers and radix ten, a
+period is printed as a suffix.  Otherwise, a prefix such as <example>#x</example> or
+<example>#3r</example> is printed.  The default value of <obj>*print-radix*</obj> is <obj>nil</obj>.
+</description></definition><definition>
+<define key="*nopoint-var" name="*nopoint" type="var"></define>
+
+<description>If the value of <obj>*nopoint</obj> is <obj>nil</obj>, a trailing decimal point
+is printed when a fixnum is printed out in base 10.  This allows
+the numbers to be read back in correctly even if <obj>*read-base*</obj>
+is not 10 at the time of reading.  The default value of <obj>*nopoint</obj>
+is <obj>t</obj>.  <obj>*nopoint</obj> has no effect if <obj>*print-radix*</obj> is non-<obj>nil</obj>.
+
+<obj>*nopoint</obj> exists for Maclisp compatibility.  But to get truly
+compatible behavior, you must set <obj>*nopoint</obj> to <obj>nil</obj>
+(and, by default, <obj>base</obj> and <obj>ibase</obj> to eight).
+</description></definition><definition>
+<define key="*print-circle*-var" name="*print-circle*" type="var"></define>
+
+<description>If non-<obj>nil</obj>, the printer recognizes circular and shared structure and
+prints it using <example>#<arg>n</arg>=</example> labels so that it has a finite printed
+representation (which can be read back in).  The default is <obj>nil</obj>,
+since <obj>t</obj> makes printing slower.  See <ref definition-in-file="rdprt" key="circular-structure-reading" type="page"></ref>
+for information on the <example>#<arg>n</arg>=</example> construct.
+</description></definition><definition>
+<define key="*print-pretty*-var" name="*print-pretty*" type="var"></define>
+
+<description>If non-<obj>nil</obj>, the printer actually calls <obj>grind-top-level</obj> so that it prints extra
+whitespace for the sake of formatting.  The default is <obj>nil</obj>.
+</description></definition><definition>
+<define key="*print-gensym*-var" name="*print-gensym*" type="var"></define>
+
+<description>If non-<obj>nil</obj>, uninterned symbols are printed with the prefix <example>#:</example> to mark them as such
+(but only when <obj>*print-escape*</obj> is non-<obj>nil</obj>).  The prefix causes the
+reader to construct a similar uninterned symbol when the expression is read.
+If <obj>nil</obj>, no prefix is used for uninterned symbols.  The default is <obj>t</obj>.
+</description></definition><definition>
+<define key="*print-array*-var" name="*print-array*" type="var"></define>
+
+<description>If non-<obj>nil</obj>, non-string arrays are printed using the <example>#</example><obj>(...)</obj>,
+<example>#*</example> or <example>#<arg>n</arg>a</example><obj>(...)</obj> syntax so that you can see their contents
+(and so that they can be read back in).  If <obj>nil</obj>, such arrays are
+printed using <example>#</example><obj>&lt;...&gt;</obj> syntax and do not show their contents.  The
+default is <obj>nil</obj>.  The printing of strings is not affected by this
+variable.
+</description></definition><definition>
+<define key="*print-case*-var" name="*print-case*" type="var"></define>
+
+<description>Controls the case used for printing upper-case letters in the names of
+symbols.  Its value should be <obj>:upcase</obj>, <obj>:downcase</obj> or
+<obj>:capitalize</obj>.  These mean, respectively, to print those letters as
+upper case, to print them as lower case, or to capitalize each word (see
+<obj>string-capitalize</obj>, <ref definition-in-file="fd-str" key="string-capitalize-fun" title="Function string-capitalize" type="fun"></ref>).  Any lower case
+letters in the symbol name are printed as lower case and escaped
+suitably; this flag does not affect them.  Note that the case used for
+printing the upper case letters has no effect on reading the symbols
+back in, since they are case-converted by <obj>read</obj>.  Any upper case
+letters that happen to be escaped are always printed in upper case.
+
+
+<lisp>(dolist (*print-case* '(:upcase :downcase :capitalize))
+  (prin1-then-space 'foo)
+  (prin1-then-space '|Foo|))
+</lisp>prints <obj>FOO |Foo| foo |Foo| Foo |Foo| </obj>.
+</description></definition><definition>
+<define key="*print-level*-var" name="*print-level*" type="var"></define>
+<define key="prinlevel-var" name="prinlevel" type="var"></define>
+
+<description><obj>*print-level*</obj> can be set to the maximum number of nested lists that
+can be printed before the printer gives up and just prints a <example>#</example>
+instead of a list element.  If it is <obj>nil</obj>, which it is initially, any
+number of nested lists can be printed.  Otherwise, the value of
+<obj>*print-level*</obj> must be a fixnum.  Example:
+
+<lisp>(let ((*print-level* 2))
+  (prin1 '(a (b (c (d e))))))
+</lisp>prints <obj>(a (b #))</obj>.
+
+The synonym <obj>prinlevel</obj> is from Maclisp.
+</description></definition><definition>
+<define key="*print-length*-var" name="*print-length*" type="var"></define>
+<define key="prinlength-var" name="prinlength" type="var"></define>
+
+<description><obj>*print-length*</obj> can be set to the maximum number of elements of a
+list that can be printed before the printer gives up and prints an
+ellipsis (three periods).  If it is <obj>nil</obj>, which it is initially,
+any length list may be printed.  Example:
+
+<lisp>(let ((*print-length* 3))
+  (prin1 '((a b c d) #(e f g h) (i j k l) (m n o p))))
+</lisp>prints <obj>((a b c ...) #(e f g ...) (i j k ...) ...)</obj>.
+
+The synonym <obj>prinlength</obj> is from Maclisp.
+</description></definition></section><a name="reader"></a>
+
+
+<section chapter-number="24" name="reader" number="3" title="What The Reader Accepts"><index-entry index="concepts" title="reader"></index-entry>
+
+<p indent="1">        The purpose of the reader is to accept characters, interpret
+them as the p.r. of a Lisp object, and create and return such an
+object.  The reader cannot accept everything that the printer produces;
+for example, the p.r.'s of compiled code objects, closures, stack
+groups, etc., cannot be read in.  However, it has many features that are
+not seen in the printer at all, such as more flexibility, comments, and
+convenient abbreviations for frequently-used unwieldy constructs.
+</p>
+
+<p indent="1">        This section shows what kind of p.r.'s the reader understands,
+and explains the readtable, reader macros, and various features
+provided by <obj>read</obj>.
+</p>
+
+<index-entry index="concepts" title="Common Lisp syntax"></index-entry>
+
+<index-entry index="concepts" title="traditional syntax"></index-entry>
+
+<p>The syntax specified for Common Lisp is incompatible with the
+traditional Zetalisp syntax.  Therefore, the Lisp Machine supports
+both traditional and Common Lisp syntax, but <obj>read</obj> must be told
+in advance which one to use.  This is controlled by the choice of
+readtable (see <ref chapter="24" definition-in-file="rdprt" key="readtable" section="6" title="The Readtable" type="section"></ref>).  When reading input from a file, the Lisp
+system chooses the syntax according to the file's attribute list:
+Common Lisp syntax is used if the <obj>Common Lisp</obj> attribute is present
+(see <ref chapter="26" definition-in-file="files" key="file-attribute-list" section="5" title="File Attribute Lists" type="section"></ref>).
+</p>
+
+<p>The main difference between traditional and Common Lisp syntax is
+that traditionally the single-character escape is slash (<obj>/</obj>), whereas
+in Common Lisp syntax it is backslash (<obj>\</obj>).  Thus, the division
+function which in traditional syntax is written <obj>//</obj> is written
+just <obj>/</obj> in Common Lisp syntax.  The other differences are obscure
+and are mentioned below where they occur.
+</p>
+
+<p>In general, the reader operates by recognizing tokens in the input
+stream.  Tokens can be self-delimiting or can be separated by delimiters such as
+whitespace.  A token is the p.r. of an atomic object such as a symbol or
+number, or a special character such as a parenthesis.  The reader reads one
+or more tokens until the complete p.r. of an object has been seen, then
+constructs and returns that object.
+</p>
+
+<index-entry index="concepts" title="escape characters"></index-entry>
+
+<p><arg>Escape characters</arg> can be used to suppress the special syntactic
+significance of any character, including <obj>:</obj>, <obj>Space</obj>, <obj>(</obj> or
+<obj>&quot;</obj>.  There are two kinds of escape character: the <arg>single-character
+escape</arg> (<obj>/</obj> in traditional syntax, <obj>\</obj> in Common Lisp syntax)
+suppresses the significance of the immediately following character;
+<arg>multiple escapes</arg> (vertical bar, <obj>|</obj>) are used in pairs, and
+suppress the special significance of all the characters except escapes
+between the pair.  Escaping a character causes it to be treated as a
+token constituent and causes the token containing it to be read as a
+symbol.  For example, <obj>(12 5 x)</obj> represents a list of three elements,
+two of which are integers, but <obj>(/12 5/ x)</obj> or <obj>(|15| |5 X|)</obj>
+represents a list of two elements, both symbols.  Escaping also prevents
+conversion of letters to upper case, so that <obj>|x|</obj> is
+the symbol whose print name contains a lower-case <obj>x</obj>.
+</p>
+
+<p>The circle-cross (<example>⊗</example>) character an <arg>octal escape character</arg>
+which may be useful for including weird characters in the input.  The
+next three characters are read and interpreted as an octal number, and the
+character whose code is that number replaces the circle-cross and the digits in the
+input stream.  This character is always treated as a token constituent and
+forces the token to be read as a symbol.  <example>⊗</example> is allowed in both traditional
+and Common Lisp syntax, but it is not valid Common Lisp.
+</p>
+<need amount="1800"></need><nopara></nopara>
+<p>Integers:
+</p>
+
+<p indent="1">        The reader understands the p.r.'s of integers in a way
+more general than is employed by the printer.  Here is a complete
+description of the format for integers.
+</p>
+
+<p indent="1">        Let a <arg>simple integer</arg> be a string of digits, optionally
+preceded by a plus sign or a minus sign, and optionally followed by a
+trailing decimal point.  A simple integer is interpreted by
+<obj>read</obj> as an integer.  If the trailing decimal point is present, the
+digits are interpreted in decimal radix; otherwise, they are
+considered as a number whose radix is the value of the variable
+<obj>*read-base*</obj>.
+</p>
+<definition>
+<define key="*read-base*-var" name="*read-base*" type="var"></define>
+<define key="ibase-var" name="ibase" type="var"></define>
+
+<description>The value of <obj>ibase</obj> or <obj>*read-base*</obj> is an integer between 2 and 36
+that is the radix in which integers and ratios are read.  The initial value of is
+ten.  For input from files or editor buffers, the <obj>Base</obj> attribute
+specifies the value to be used (see <ref chapter="26" definition-in-file="files" key="file-attribute-list" section="5" title="File Attribute Lists" type="section"></ref>); if it is
+not given, the ambient value is used.
+
+The synonym <obj>ibase</obj> is from Maclisp.
+</description></definition>
+<p>If the input radix is greater than ten, letters starting with <obj>a</obj> are
+used as additional ``digits'' with values ten and above.  For example, in
+radix 16, the letters <obj>a</obj> through <obj>f</obj> are digits with values ten
+through 15.  Alphabetic case is not significant.  These additional
+digits can be used wherever a simple integer is expected and are parsed
+using the current input radix.  For example, if <obj>*read-base*</obj> is 16
+then <example>ff</example> is recognized as an integer (255 decimal).  So is <obj>10e5</obj>,
+which is a float when <obj>*read-base*</obj> is ten.
+</p>
+
+<p>Traditional syntax also permits a simple integer,
+followed by an underscore (<obj>_</obj>) or a circumflex (<obj>^</obj>),
+followed by another simple integer.  The two simple integers
+are interpreted in the usual way;
+the character in between indicates an operation that is then
+performed on the two integers.  The underscore indicates a binary
+``left shift''; that is, the integer to its left is doubled the
+number of times indicated by the integer to its right.  The circumflex
+multiplies the integer to its left by <obj>*read-base*</obj> the number of
+times indicated by the integer to its right.  (The second simple
+integer is not allowed to have a leading minus sign.)  Examples:  <obj>3_2</obj>
+means <obj>12</obj> and <obj>645^3</obj> means <obj>645000</obj>.
+</p>
+
+<p>Here are some examples of valid representations
+of integers to be given to <obj>read</obj>:
+
+<lisp>4
+23456.
+-546
++45^+6     ;<standard>means</standard> 45000000
+2_11       ;4096
+72361356126536125376512375126535123712635
+-123456789.
+105_1000   ;(ash 105 1000) has this value.
+105_1000.
+</lisp></p>
+<need amount="1800"></need><nopara></nopara>
+<p>Floating Point Numbers:
+</p>
+
+<p>Floats can be written with or without exponent.
+The syntax for a float without exponent is an optional plus or minus sign, optionally
+some digits, a decimal point, and one or more digits.  A float with exponent
+consists of a simple integer or a float without exponent, followed by an exponent
+delimiter (a letter) and a simple integer (the exponent itself) which is the
+power of ten by which the number is to be scaled.  The exponent may not have
+a trailing decimal point.  Both the mantissa and the exponent are always
+interpreted in base ten, regardless of the value of <obj>*read-base*</obj>.
+</p>
+
+<p>Only certain letters are allowed for delimiting the exponent: <obj>e</obj>, <obj>s</obj>, <obj>f</obj>,
+<obj>d</obj> and <obj>l</obj>.  The case of the letter is not significant.  <obj>s</obj> specifies
+that the number should be a short float; <obj>f</obj>, that it should be a full-size
+float.  <obj>d</obj> or <obj>l</obj> are equivalent to <obj>f</obj>; Common Lisp defines them
+to mean `double float' or `long float', but the Lisp Machine does not support
+anything longer than a full-size float, so it regards <obj>d</obj> and <obj>l</obj> as synonymous
+with <obj>f</obj>.  <obj>e</obj> tells the reader to use the current default format,
+whatever it may be, as specified by the value of <obj>*read-default-float-format*</obj>.
+</p>
+<definition>
+<define key="*read-default-float-format*-var" name="*read-default-float-format*" type="var"></define>
+
+<description>The value is the type for read to produce by default for floats whose
+precise type is not specified by the syntax.  The value should be either
+<obj>global:small-float</obj> or <obj>global:single-float</obj>, these being the only
+distinct floating formats that the Lisp Machine has.  The default is
+<obj>single-float</obj>, to make full-size floats.
+</description></definition>
+<p>Here are some examples of printed-representations that always read as full-size floats:
+
+<lisp>6.03f23  1F-9     1.f3      3d6
+</lisp></p>
+
+<p>Here are some examples of printed-representations that always read as short floats:
+
+<lisp>0s0      1.5s9    -42S3     1.s5
+</lisp></p>
+
+<p>These read as floats or as a short floats according to <obj>*read-default-float-format*</obj>:
+
+<lisp>0.0      1.5      14.0      0.01
+.707     -.3      +3.14159  6.03e23
+1E-9     1.e3
+</lisp></p>
+<need amount="1800"></need><nopara></nopara>
+<p>Rationals:
+</p>
+
+<p>The syntax for a rational is an integer, a ratio delimiter, and another integer.
+The integers may not include the <obj>^</obj> and <obj>_</obj> scaling characters
+or decimal points, and only the first one may have a sign.
+The ratio delimiter is backslash (<obj>\</obj>) in traditional syntax, slash (<obj>/</obj>) in
+Common Lisp syntax.  Here are examples:
+
+<lisp>1\2      -100000000000000\3     80\10    <standard>traditional</standard>
+1/2      -100000000000000/3     80/10    <standard>Common Lisp</standard>
+</lisp>Recall that rationals include the integers; <obj>80\10</obj> as input to the
+reader is equivalent to <obj>8</obj>.
+</p>
+<need amount="1800"></need><nopara></nopara>
+<p>Complex Numbers:
+</p>
+
+<p>The traditional syntax for a complex number is a number (for the real
+part), a sign (+ or <example>-</example>), an unsigned number (for the imaginary part),
+and the letter <obj>i</obj>.  The real and imaginary parts can be any type of
+number, but they are converted to be of the same type (both floating of
+the same format, or both rational).  For example:
+
+<lisp>1-3\4i
+1.2s0+3.45s8i
+</lisp></p>
+
+<p>The Common Lisp syntax for a complex number is <example>#c(<arg>real</arg> <arg>imag</arg>)</example>,
+where <arg>real</arg> is the real part and <arg>imag</arg> is the imaginary part.
+This construction is allowed in traditional syntax too.
+
+<lisp>#c(1 -3/4)
+#c(1.2s0 3.45s8)
+</lisp></p>
+<need amount="1800"></need><nopara></nopara>
+<p>Symbols:
+</p>
+
+<p indent="1">        A string of letters, numbers, and characters without
+special syntactic meaning is recognized by the reader as a symbol, provided
+it cannot be interpreted as a number.  Alphabetic case is ignored
+in symbols; lower-case letters are translated to upper-case unless
+escaped.
+When the reader sees the p.r. of a symbol, it <arg>interns</arg> it on a <arg>package</arg>
+(see <ref chapter="28" definition-in-file="packd" key="package" section="0" title="Packages" type="section"></ref>, for an explanation of interning and the package system).
+Symbols may start with digits; you could even
+have one named <obj>-345t</obj>; <obj>read</obj> accepts this as a symbol
+without complaint.  If you want to put strange characters (such as
+lower-case letters, parentheses, or reader macro characters) inside the name of a symbol,
+they must be escaped.  If the symbol's name would look like a number,
+at least one character in the name must be escaped, but it matters not which one.
+
+<lisp><exdent amount="96"><caption>Examples of symbols: </caption>foo
+bar/(baz/)    <standard>; traditional</standard>
+bar\(baz\)    <standard>; Common Lisp</standard>
+34w23
+|Frob Sale| <standard>and</standard> F|rob |S|ale| <standard>are equivalent</standard>
+
+|a/|b|    <standard>; traditional</standard>
+|a\|b|    <standard>; Common Lisp</standard>
+</exdent></lisp></p>
+
+<p>In Common Lisp syntax, a symbol composed only of two or more periods is not allowed
+unless escaping is used.
+</p>
+
+<p>The reader can be directed to perform substitutions on the symbols it
+reads.  Symbol substitutions are used to implement the incompatible
+Common Lisp definitions of various system functions.  Reading of Common
+Lisp code is done with substitutions that replace <obj>subst</obj> with
+<obj>cli:subst</obj>, <obj>member</obj> with <obj>cli:member</obj>, and so on.  This is why,
+when a Common Lisp program uses the function <obj>member</obj>, it gets the
+standard Common Lisp <obj>member</obj> function rather than the traditional
+one.  This is why we say that <obj>cli:member</obj> is ``the Common Lisp
+version of <obj>member</obj>''.  While <obj>cli:member</obj> can be referred to from
+any program in just that way, it exists primarily to be referred to from
+a Common Lisp program which says simply <obj>member</obj>.
+</p>
+
+<p>Symbol substitutions do not apply to symbols written with package
+prefixes, so one can use a package prefix to force a reference to a
+symbol that is normally substituted for, such as using <obj>global:member</obj>
+in a Common Lisp program.
+</p>
+<need amount="1800"></need><nopara></nopara>
+<p>Strings:
+</p>
+
+<p>Strings are written with double-quote characters (<obj>&quot;</obj>) before and after
+the string contents.  To include a double-quote character or single-character escape
+character in the contents, write an extra single-character escape character
+in front of it.
+
+<lisp><exdent amount="96"><caption>Examples of strings: </caption>&quot;This is a typical string.&quot;
+&quot;That is a /&quot;cons cell/&quot;.&quot;    <standard>;; traditional</standard>
+&quot;That is a \&quot;cons cell\&quot;.&quot;    <standard>;; Common Lisp</standard>
+&quot;Strings are often used for I//O.&quot;    <standard>;; traditional</standard>
+&quot;Strings are often used for I/O.&quot;     <standard>;; Common Lisp</standard>
+&quot;Here comes one backslash: \\&quot;        <standard>;; Common Lisp</standard>
+</exdent></lisp></p>
+<need amount="1800"></need><nopara></nopara>
+<p>Conses:
+</p>
+
+<p indent="1">        When <obj>read</obj> sees an open-parenthesis, it knows that
+the p.r. of a cons is coming, and calls itself recursively to
+get the elements of the cons or the list that follows.
+The following are valid p.r.'s of conses:
+
+<lisp>(foo . bar)
+(foo &quot;bar&quot; 33)
+(foo . (&quot;bar&quot; . (33 . nil)))
+(foo bar . quux)
+</lisp>The first is a cons, whose car and cdr are both symbols.  The second
+is a list, and the third is equivalent to the second (although
+<obj>print</obj> would never produce it).  The fourth is a dotted list;
+the cdr of the last cons cell (the second one) is not <obj>nil</obj>, but
+<obj>quux</obj>.
+
+<index-entry index="concepts" title="dotted list"></index-entry>
+</p>
+
+<p>The reader always allocates new cons cells to represent parentheses.
+They are never shared with other structure, not even part of the same read.
+For example,
+
+<lisp>(let ((x (read)))
+  (eq (car x) (cdr x)))
+((a b) . (a b))          <standard>;; data for <obj>read</obj></standard>
+  =&gt; nil
+</lisp>because each time <obj>(a b)</obj> is read, a new list is constructed.  This contrasts
+with the case for symbols, as very often <obj>read</obj> returns symbols
+that it found interned in the package rather than creating new symbols
+itself.  Symbols are the only thing that work this way.
+</p>
+
+<p indent="1">        The dot that separates the two elements of a dotted-pair p.r.
+for a cons is only recognized if it is surrounded by delimiters
+(typically spaces).  Thus dot may be freely used within print-names of
+symbols and within numbers.  This is not compatible with Maclisp; in
+Maclisp <obj>(a.b)</obj> reads as a cons of symbols <obj>a</obj> and <obj>b</obj>, whereas in
+Zetalisp it reads as a list of a symbol <obj>a.b</obj>.
+</p>
+<need amount="1800"></need><nopara></nopara>
+<p>Comments:
+</p>
+
+<p>A comment begins with a semicolon (<obj>;</obj>) and continues to the end of
+the line.  Comments are ignored completely by the reader.  If the
+semicolon is escaped or inside a string, it is not recognized as
+starting a comment; it is part of a symbol or part of the string.
+
+<lisp>;; This is a comment.
+&quot;This is a string; but no comment.&quot;
+</lisp></p>
+
+<p>Another way to write a comment is to start it with <example>#|</example> and end it with <example>|#</example>.
+This is useful for commenting out multiple-line segments of code.
+The two delimiters nest, so that <example>#| #| |# |#</example> is a single comment.
+This prevents surprising results if you use this construct to comment out
+code which already contains such a comment.
+</p>
+
+<lisp>(cond ((atom x) y)
+ #|
+      ((foo x)
+       (do-it y))
+    |#
+      (t (hack y)))
+</lisp><need amount="1800"></need><nopara></nopara>
+<p>Abbreviations:
+</p>
+
+<p>The single-quote character (<obj>'</obj>) is an abbreviation for a list starting with the
+symbol <obj>quote</obj>.  The following pairs of p.r.'s produce equal lists:
+
+<lisp>'a   <standard>and</standard>   (quote a)
+'(x (y))   <standard>and</standard>   (quote (x (y)))
+</lisp></p>
+
+<p>The backquote character (<obj>`</obj>) and comma are used in a syntax that
+abbreviates calls to the list and vector construction functions.
+For example,
+
+<lisp>`(a ,b c)
+</lisp>reads as a list whose meaning as a Lisp form is equivalent to
+
+<lisp>(list 'a b 'c)
+</lisp>See <ref chapter="19" definition-in-file="macros" key="backquote" section="2" title="Aids for Defining Macros" type="section"></ref> for full details about backquote.
+</p>
+
+
+
+<subsection name="NIL" title="Sharp-sign Constructs"><index-entry index="concepts" title="sharp sign reader macros"></index-entry>
+
+<index-entry index="concepts" title="# reader macros"></index-entry>
+
+<p>Sharp-sign (<obj>#</obj>) is used to introduce syntax extensions.
+It is the beginning of a two-character sequence whose meaning
+depends on the second character.  Sharp-sign is only recognized with
+a special meaning if it occurs at the beginning of a token.
+If encountered while a token is in progress, it is a symbol constituent.
+For example, <example>#xff</example> is a sharp-sign construct that interprets
+<example>ff</example> as a hexidecimal number, but <example>1#xff</example> is just a symbol.
+</p>
+
+<p>If the sharp-sign is followed by decimal digits, the digits form a
+parameter.  The first non-digit determines which sharp-sign construct
+is actually in use, and the decimal integer parsed from the digits
+is passed to it.  For example, <example>#r</example> means ``read in specified radix'';
+it must actually be used with a radix notated in decimal between the <example>#</example>
+and the <example>r</example>, as in <example>#8r</example>.
+</p>
+
+<p>It is possible for a sharp-sign construct to have different meanings
+in Common Lisp and traditional syntax.  The only constructs which
+differ are <example>#\</example> and <example>#/</example>.
+</p>
+
+<p>The function <obj>set-dispatch-macro-character</obj> (see
+<ref definition-in-file="rdprt" key="set-dispatch-macro-character-fun" title="Function set-dispatch-macro-character" type="fun"></ref>) can be used to define additional
+sharp sign abbreviations.
+</p>
+
+<p>Here are the currently-defined sharp sign constructs:
+</p>
+
+<table><tbody><tr><td><obj>#/</obj></td><td><example>#/</example> is used in traditional syntax only to represent the number that
+is the character code for a character.  You can follow the <example>#/</example> with
+the character itself, or with the character's name.  The name is
+preferable for nonprinting characters, and it is the only way to
+represent characters which have control bits since they cannot go in
+files.  Here are examples of <example>#/</example>:
+
+<lisp>#/a          #o141
+#/A          #o101
+#/(          #o50
+#/c-a        <standard>the character code for <obj>Control-A</obj></standard>
+#/c-/a       <standard>the character code for <obj>Control-a</obj></standard>
+#/c-sh-a     <standard>the character code for <obj>Control-a</obj></standard>
+#/c-/A       <standard>the character code for <obj>Control-A</obj></standard>
+#/c-/(       <standard>the character code for <obj>Control-(</obj></standard>
+#/return     <standard>the character code for <obj>Return</obj></standard>
+#/h-m-system <standard>the character code for <obj>Hyper-Meta-System</obj></standard>
+</lisp>
+To represent a printing character, write <example>#/<arg>x</arg></example> where <arg>x</arg> is the
+character.  For example, <example>#/a</example> is equivalent to <obj>#o141</obj> but clearer
+in its intent.  To avoid ambiguity, the character following <arg>x</arg> should
+not be a letter; good style would require this anyway.
+
+As in strings, upper and lower-case letters are distinguished after
+<example>#/</example>.  Any character works after <example>#/</example>, even those that are normally
+special to <obj>read</obj>, such as parentheses.  Thus, <example>#/A</example> is equivalent
+to <obj>#o101</obj>, and <example>#/(</example> is equivalent to <obj>#o50</obj>.  Note that the
+slash causes this construct to be parsed correctly by the editors Emacs
+and Zmacs.  Even non-printing characters may be used, but for them it is
+preferable to use the character's name.
+
+To refer to a character by name, write <example>#/</example> followed by the name.  For
+example, <example>#/</example><obj>return</obj> reads as the numeric code for the character
+<obj>Return</obj>.  The defined character names are documented below (see
+<ref chapter="11" definition-in-file="fd-str" key="xr-special-character-names" section="1" title="Characters" type="section"></ref>).  In general, the names that are written
+on the keyboard keys are accepted.  In addition, all the nonalphanumeric
+characters have names.  The abbreviations <obj>cr</obj> for <obj>return</obj> and
+<obj>sp</obj> for <obj>space</obj> are accepted, since these characters are used so
+frequently.  The page separator character is called <obj>page</obj>, although
+<obj>form</obj> and <obj>clear-screen</obj> are also accepted since the keyboard has
+one of those legends on the page key.  The rules for reading <arg>name</arg>
+are the same as those for symbols; thus letters are converted to upper
+case unless escaped, and the name must be terminated by a delimiter such
+as a space, a carriage return, or a parenthesis.
+
+When the system types out the name of a special character, it uses the same table
+that <example>#/</example> uses; therefore, any character name typed out is acceptable as input.
+
+<example>#/</example> can also be used to read in the names of characters that have
+modifier bits (Control, Meta, Super and Hyper).  The syntax looks like
+<example>#/</example><obj>control-meta-b</obj> to get a `B' character with the control and
+meta bits set.  You can use any of the prefix bit names <obj>control</obj>,
+<obj>meta</obj>, <obj>hyper</obj>, and <obj>super</obj>.  They may be in any order, and case
+is not significant.  Prefix bit names can be abbreviated as the single
+letters <obj>c</obj>, <obj>m</obj>, <obj>h</obj> and <obj>s</obj>, and <obj>control</obj> may be spelled
+<obj>ctrl</obj> as it is on the keyboard.  The last hyphen may be followed by a
+single character or by any of the special character names normally
+recognized by <example>#/</example>.  A single character is treated the same way the
+reader normally treats characters in symbols; if you want to use a
+lower-case character or a special character such as a parenthesis, you
+must precede it by a slash character.  Examples:
+<example>#/</example><obj>Hyper-Super-A</obj>, <example>#/</example><obj>meta-hyper-roman-i</obj>,
+<example>#/</example><obj>CTRL-META-/(</obj>.
+
+An obsolete method of specifying control bits in a character is to
+insert the characters <obj>α</obj>, <obj>β</obj>, <obj>ε</obj>, <obj>π</obj> and <obj>λ</obj> between the
+<example>#</example> and the <example>/</example>.  Those stand for <obj>control</obj>, <obj>meta</obj>,
+<obj>control-meta</obj>, <obj>super</obj> and <obj>hyper</obj>, respectively.  This syntax should
+be converted to the new <example>#\</example><obj>control-meta-x</obj> syntax described below.
+
+<obj>greek</obj> (or <obj>front</obj>), <obj>top</obj>, and <obj>shift</obj> (or <obj>sh</obj>) are also
+allowed as prefixes of names.  Thus, <example>#/</example><obj>top-g</obj> is equivalent to
+<example>#/↑</example> or <example>#/</example><obj>uparrow</obj>.  <example>#/</example><obj>top-g</obj> should be used if you are
+specifying the keyboard commands of a program and the mnemonic
+significance belongs to the `<obj>G</obj>' rather than to the actual character
+code.
+
+</td></tr><tr><td><obj>#\</obj></td><td>In traditional syntax, <example>#\</example> is a synonym for <example>#/</example>.
+In the past, <example>#/</example> had to be used before a single character
+and <example>#\</example> had to be used in all other cases.  Now either one is allowed
+in either case.
+
+In Common Lisp syntax, <example>#\</example> produces a character object rather than
+a fixnum representing a character.
+
+</td></tr><tr><td><obj>#≠/</obj></td><td><example>#≠/</example><arg>x</arg> is the traditional syntax way to produce a character object.
+It is used just like <example>#/</example>.  Thus, Common Lisp <example>#\</example> is equivalent to
+traditional syntax <example>#≠/</example>.
+
+</td></tr><tr><td><obj>#^</obj></td><td><example>#^<arg>x</arg></example> is exactly like <example>#/</example><obj>control-<arg>x</arg></obj> if the input is being
+read by Zetalisp; it generates Control-<arg>x</arg>.
+In Maclisp <arg>x</arg> is converted to upper case and then exclusive-or'ed with 100 (octal).
+Thus <example>#^<arg>x</arg></example> always generates the character returned by <obj>tyi</obj> if
+the user holds down the control key and types <arg>x</arg>.
+(In Maclisp <example>#/</example><obj>control-<arg>x</arg></obj> sets the bit set by the Control key when the TTY is
+open in <obj>fixnum</obj> mode.)
+
+</td></tr><tr><td><obj>#'</obj></td><td><example>#'<arg>foo</arg></example> is an abbreviation for <obj>(function <arg>foo</arg>)</obj>.
+<arg>foo</arg> is the p.r. of any object.  This abbreviation can be remembered by
+analogy with the <obj>'</obj> macro-character, since the <obj>function</obj> and <obj>quote</obj>
+special forms are somewhat analogous.
+
+</td></tr><tr><td><obj>#(</obj></td><td><example>#(<arg>elements</arg>...)</example> constructs a vector (rank-one array) of type
+<obj>art-q</obj> with elements <arg>elements</arg>.  The length of the vector is the
+number of elements written.  Thus, <example>#</example><obj>(a 5 &quot;Foo&quot;)</obj> reads as a vector
+containing a symbol, an integer and a string.  If a decimal integer
+appears after the <example>#</example>, it specifies the length of the vector.
+The last element written is replicated to fill the remaining elements.
+
+</td></tr><tr><td><obj>#a</obj></td><td><example>#<arg>n</arg>a <arg>contents</arg></example> signifies an array of rank <arg>n</arg>, containing <arg>contents</arg>.
+<arg>contents</arg> is passed to <obj>make-array</obj> as the <arg>initial-contents</arg>
+argument.  It is a list of lists of lists... or vector of vectors...
+as deep as <arg>n</arg>.  The dimensions of the array are specified by the
+lengths of the lists or vectors.  The rank is specified
+explicitly so that the reader can distinguish whether a list or vector
+in the contents is a sequence of array elements or a single array element.
+The array type is always <obj>art-q</obj>.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>#2a ((x y) (a b) ((uu 3) &quot;VV&quot;))
+</exdent><exdent amount="96"><caption>produces a 3 by 2 array.  <obj>(uu 3)</obj> is one of the elements. </caption>#2a (&quot;foo&quot; &quot;bar&quot;)
+</exdent></lisp>produces a 2 by 3 array whose elements are character objects.
+Recall that a string is a kind of vector.
+
+<lisp>#0a 5
+</lisp>produces a rank-0 array whose sole element is 5.
+
+</td></tr><tr><td><obj>#*</obj></td><td><example>#*<arg>bbb</arg>...</example> signifies a bit vector; <arg>bbb</arg>... are the bits
+(characters <obj>1</obj> or <obj>0</obj>).  A vector of type <obj>art-1b</obj> is created
+and filled with the specified bits, the first bit specified going in
+array element 0.  The length is however many bits you specify.
+Alternatively, specify the length with a decimal number between the
+<example>#</example> and the <example>*</example>.  The last <obj>1</obj> or <obj>0</obj> specified is duplicated
+to fill the additional bits.  Thus, <example>#8</example><obj>*0101</obj> is the same as <example>#*</example><obj>01011111</obj>.
+
+</td></tr><tr><td><obj>#s</obj></td><td><example>#s(<arg>type</arg> <arg>slot</arg> <arg>value</arg> <arg>slot</arg> <arg>value</arg> <arg>slot</arg> <arg>value</arg> ...)</example>
+constructs a structure of type <arg>type</arg>.  Any structure type defined with
+<obj>defstruct</obj> can be used as <arg>type</arg> provided it has a standard constructor
+taking slot values as keyword arguments.  (Standard constructors can be
+functions or macros; either kind works for <example>#s</example>.)  The slot names
+and values appearing in the read syntax are passed to the constructor
+so that they initialize the structure.  Example:
+
+<lisp>(defstruct (foo :named)
+  bar
+  lose)
+#s (foo :bar 5 :lose haha)
+</lisp>produces a <obj>foo</obj> whose <obj>bar</obj> component is 5 and whose <obj>lose</obj> component
+is <obj>haha</obj>.
+
+</td></tr><tr><td><obj>#=</obj></td><td></td></tr><tr><td><obj>##</obj></td><td>Are used to represent circular structure or shared structure.
+<example>#<arg>n</arg>=</example> preceding an object ``labels'' that object with the label <arg>n</arg>,
+a decimal integer.  This has no effect on the way the object labeled
+is read, but it makes the label available for use in a <example>#<arg>n</arg>#</example> construct
+within that object (to create circular structure) or later on (to create
+shared structure).  <example>#<arg>n</arg>#</example> counts as an object in itself, and reads
+as the object labeled by <arg>n</arg>.  
+
+For example, <example>#1=</example><obj>(a . <example>#1#</example>)</obj> is a way of notating a circular list such
+as would be produced by <obj>(circular-list 'a)</obj>.  The list is labeled
+with label 1, and then its cdr is given as a reference to label 1.
+<obj>(<example>#1=#:</example>foo <example>#1#</example>)</obj> is an example of shared structure.  An uninterned
+symbol named <obj>foo</obj> is used as the first element of the list, and
+labeled.  The second element of the list is the very same uninterned
+symbol, by virtue of a reference to the label.
+
+Printing outputs <example>#<arg>n</arg>=</example> and <example>#<arg>n</arg>#</example> to represent circular or
+shared structure when <obj>*print-circle</obj> is non-<obj>nil</obj>.
+
+</td></tr><tr><td><obj>#,</obj></td><td>Evaluate a form at load time.
+<example>#, <arg>foo</arg></example> evaluates <arg>foo</arg> (the p.r. of a Lisp form) at read
+time, except that during file-to-file compilation it is arranged
+that <arg>foo</arg> will be evaluated when the QFASL file is loaded.  This is a way,
+for example, to include in your code complex list-structure constants that cannot
+be written with <obj>quote</obj>.  Note that the reader does not put <obj>quote</obj>
+around the result of the evaluation.  You must do this yourself if you
+want it, typically by using the <obj>'</obj> macro-character.  An example of 
+a case where you do not want <obj>quote</obj> around it is when this object is
+an element of a constant list.
+
+</td></tr><tr><td><obj>#.</obj></td><td><example>#. <arg>foo</arg></example> evaluates <arg>foo</arg> (the p.r. of a lisp form) at read
+time, regardless of who is doing the reading.
+
+</td></tr><tr><td><obj>#`</obj></td><td><example>#`</example> is a construct for repeating an expression with some
+subexpressions varying.  It is an abbreviation for writing several
+similar expressions or for the use of <obj>mapc</obj>.  Each subexpression
+that is to be varied is written as a comma followed by a list of the
+things to substitute.  The expression is expanded at read time into
+a <obj>progn</obj> containing the individual versions.
+
+<lisp>#`(send stream ',(:clear-input :clear-output))
+</lisp>expands into
+
+<lisp>(progn (send stream :clear-input)
+       (send stream :clear-output))
+</lisp>
+Multiple repetitions can be done in parallel by using commas
+in several subexpressions:
+
+<lisp>#`(rename-file ,(&quot;foo&quot; &quot;bar&quot;) ,(&quot;ofoo&quot; &quot;obar&quot;))
+</lisp>expands into
+
+<lisp>(progn (rename-file &quot;foo&quot; &quot;ofoo&quot;)
+       (rename-file &quot;bar&quot; &quot;obar&quot;))
+</lisp>
+If you want to do multiple independent repetitions, you must use nested
+<example>#`</example> constructs.  Individual commas inside the inner <example>#`</example> apply to
+that <example>#`</example>; they vary at maximum speed.  To specify a subexpression
+that varies in the outer <example>#`</example>, use two commas.
+
+<lisp>#`#`(print (* ,(5 7) ,,(11. 13.)))
+</lisp>expands into
+
+<lisp>(progn (progn (print (* 5 11.)) (print (* 7 11.)))
+       (progn (print (* 5 13.)) (print (* 7 13.)))
+</lisp>
+</td></tr><tr><td><obj>#o</obj></td><td><example>#o <arg>number</arg></example> reads <arg>number</arg> in octal regardless of the
+setting of <obj>*read-base*</obj>.  Actually, any expression can be prefixed
+by <example>#o</example>; it is read with <obj>*read-base*</obj> bound to 8.
+
+</td></tr><tr><td><obj>#b</obj></td><td>Like <example>#o</example> but reads in binary.
+
+</td></tr><tr><td><obj>#x</obj></td><td>Like <example>#x</example> but reads in radix 16 (hexadecimal).  The letters <obj>a</obj>
+through <obj>f</obj> are used as the digits beyond 9.
+
+</td></tr><tr><td><obj>#r</obj></td><td><example>#<arg>radix</arg>r <arg>number</arg></example> reads <arg>number</arg> in radix <arg>radix</arg> regardless
+of the setting of <obj>*read-base*</obj>.  As with <example>#o</example>, any expression
+can be prefixed by <example>#<arg>radix</arg>r</example>; it is read with <obj>*read-base*</obj>
+bound to <arg>radix</arg>.  <arg>radix</arg> must be a valid decimal integer between
+2 and 36.
+
+For example, <example>#3r102</example> is another way of writing <obj>11.</obj> and
+<example>#11r32</example> is another way of writing <obj>35</obj>.  Bases larger than ten use
+the letters starting with <obj>a</obj> as the additional digits.
+
+</td></tr><tr><td><obj>#c</obj></td><td><example>#c(<arg>real</arg> <arg>imag</arg>)</example> constructs a complex number with real part
+<arg>real</arg> and imaginary <arg>part</arg>.  It is equivalent to <obj><arg>real</arg>+<arg>imag</arg>i</obj>,
+except that <example>#c</example> is allowed in Common Lisp syntax and the other is not.
+
+
+<index-entry index="concepts" title="conditionalization, read-time"></index-entry>
+</td></tr><tr><td><obj>#+</obj></td><td>This abbreviation provides a read-time conditionalization facility.  It
+is used as <example>#+<arg>feature</arg> <arg>form</arg></example>.  If <arg>feature</arg> is a symbol, then
+this is read as <arg>form</arg> if <arg>feature</arg> is present in the list
+<obj>*features*</obj> (see <ref definition-in-file="fd-hac" key="*features*-var" title="Variable *features*" type="var"></ref>).  Otherwise, the construct is
+regarded as whitespace.
+
+Alternately, <arg>feature</arg> may be a boolean expression composed of <obj>and</obj>, <obj>or</obj>, and
+<obj>not</obj> operators and symbols representing items that may appear on
+<obj>*features*</obj>.  Thus,
+<example>#+</example><obj>(or lispm amber)</obj> causes the following object to be seen
+if either of the features <obj>lispm</obj> or <obj>amber</obj> is present.
+
+For example, <example>#+</example><obj>lispm <arg>form</arg></obj> makes <arg>form</arg> count if being read by Zetalisp,
+and is thus equivalent to <example>#q <arg>form</arg></example>.  Similarly, <example>#+</example><obj>maclisp <arg>form</arg></obj> is equivalent
+to <example>#m <arg>form</arg></example>.  <example>#+</example><obj>(or lispm nil) <arg>form</arg></obj> makes <arg>form</arg> count on either
+Zetalisp or in NIL.
+
+Here is a list of features with standard meanings:
+
+<table><tbody><tr><td><obj>lispm</obj></td><td>This feature is present on any Lisp machine (no matter what version of hardware
+or software).
+
+</td></tr><tr><td><obj>maclisp</obj></td><td>This feature is present in Maclisp.
+
+</td></tr><tr><td><obj>nil</obj></td><td>This feature is present in NIL (New Implementation of Lisp).
+
+</td></tr><tr><td><obj>mit</obj></td><td>This feature is present in the MIT Lisp machine system,
+which is what this manual is about.
+
+</td></tr><tr><td><obj>symbolics</obj></td><td>This feature is present in the Symbolics version of the Lisp machine system.
+May you be spared the dishonor of using it.
+</td></tr></tbody></table>
+<example>#+</example>, and the other read-time conditionalization constructs that
+follow, discard the following expression by reading it with
+<obj>*read-suppress*</obj> bound to <obj>t</obj> if the specified condition is false.
+
+</td></tr><tr><td><obj>#-</obj></td><td><example>#-<arg>feature</arg> <arg>form</arg></example> is equivalent to <example>#+</example><obj>(not <arg>feature</arg>) <arg>form</arg></obj>.
+
+</td></tr><tr><td><obj>#q</obj></td><td><example>#q <arg>foo</arg></example> reads as <arg>foo</arg> if the input is being read by
+Zetalisp, otherwise it reads as nothing (whitespace).
+This is considered obsolete; use <example>#+</example><obj>lispm</obj> instead.
+
+</td></tr><tr><td><obj>#m</obj></td><td><example>#m <arg>foo</arg></example> reads as <arg>foo</arg> if the input is being read into Maclisp,
+otherwise it reads as nothing (whitespace).
+This is considered obsolete; use <example>#+</example><obj>maclisp</obj> instead.
+
+</td></tr><tr><td><obj>#n</obj></td><td><example>#n <arg>foo</arg></example> reads as <arg>foo</arg> if the input is being read into NIL
+or compiled to run in NIL, otherwise it reads as nothing (white space).
+This is considered obsolete; use <example>#+</example><obj>nil</obj> instead.
+
+</td></tr><tr><td><obj>#⋄</obj></td><td><example>#</example><obj>⋄</obj> introduces an expression in infix notation.  <obj>⋄</obj> should be used
+to terminate it.  The text in between describes a Lisp object such as a symbol,
+number or list but using a nonstandard, infix-oriented syntax.  For example,
+
+<lisp>#⋄x:y+car(a1[i,j])⋄
+<exdent amount="96"><caption>is equivalent to </caption>(setq x (+ y (car (aref a1 i j))))
+</exdent></lisp>
+It is not strictly true that the Lisp object produced in this way has to be
+an expression.  Since the conversion is done at read time, you can use
+a list expressed this way for any purpose.  But the infix syntax is designed
+to be used for expressions.
+
+For full details, refer to the file <obj>SYS: IO1; INFIX LISP</obj>.
+
+</td></tr><tr><td><obj>#&lt;</obj></td><td>This is not legal reader syntax.  It is used in the p.r. of objects that cannot
+be read back in.  Attempting to read a <example>#</example><obj>&lt;</obj> signals an error.
+
+</td></tr><tr><td><obj>#⊂</obj></td><td>This is used in the p.r. of miscellaneous objects (usually named
+structures or instances) that can be read back in.  <example>#⊂</example><obj></obj> should be
+followed by a typename and any other data needed to construct an
+object, terminated with a <obj>⊃</obj>.  For example, a pathname might print as
+
+<lisp>#⊂FS:ITS-PATHNAME &quot;AI: RMS; TEST 5&quot;⊃
+</lisp>The typename is a keyword that <obj>read</obj> uses to figure out how to read in
+the rest of the printed representation and construct the object.  It is read in in
+package <obj>user</obj> (but it can contain a package prefix).  The resulting symbol
+should either have a <obj>si:read-instance</obj> property or be the name of a flavor
+that handles the <obj>:read-instance</obj> operation.
+
+In the first case, the property is applied as a function to the typename
+symbol itself and the input stream.  In the second, the handler for that
+operation is applied to the operation name (as always), the typename
+symbol, and the input stream (three arguments, but the first is implicit
+and not mentioned in the <obj>defmethod</obj>).  <obj>self</obj> will be <obj>nil</obj> and
+instance variables should not be referred to.
+<obj>si:print-readably-mixin</obj> is a useful implementation the
+<obj>:read-instance</obj> operation for general purposes; see
+<ref definition-in-file="flavor" key="si:print-readably-mixin-flavor" title="Flavor si:print-readably-mixin" type="flavor"></ref>.
+
+In either case, the handler function should read the remaining data from
+the stream, and construct and return the datum it describes.  It should
+return with the <obj>⊃</obj> character waiting to be read from the input stream
+(<obj>:untyi</obj> it if necessary).  <obj>read</obj> signals an error after it is returned
+to if a <obj>⊃</obj> character is not next.
+
+The typename can be any symbol with an appropriate property or flavor, not
+necessarily related to the type of object that is created; but for clarity, it is good
+if it is the same as the <obj>type-of</obj> of the object printed.  Since the type symbol is
+passed to the handler, one flavor's handler can be inherited by many other
+flavors and can examine the type symbol read in to decide what flavor to
+construct.
+
+</td></tr><tr><td><obj>#|</obj></td><td><example>#|</example> is used to comment out entire pieces of code.  Such a comment
+begins with <example>#|</example> and ends with <example>|#</example>.  The text in between should be
+one or more properly balanced p.r.'s of Lisp objects, possibly
+including nested <example>#|...|#</example> comments.  This text is skipped over by the
+reader, and does not contribute to the value returned by <obj>read</obj>.
+</td></tr></tbody></table></subsection></section><a name="expression-output"></a>
+
+
+<section chapter-number="24" name="expression-output" number="4" title="Expression Output Functions"><index-entry index="concepts" title="printing"></index-entry>
+
+<index-entry index="concepts" title="expression output"></index-entry>
+
+<p>These functions all take an optional argument called <arg>stream</arg>, which is
+where to send the output.  If unsupplied <arg>stream</arg> defaults to the value of
+<obj>*standard-output*</obj>.  If <arg>stream</arg> is <obj>nil</obj>, the value of
+<obj>*standard-output*</obj> (i.e. the default) is used.  If it is <obj>t</obj>, the value of
+<obj>*terminal-io*</obj> is used (i.e. the interactive terminal).  This is all
+more-or-less compatible with Maclisp, except that instead of the
+variable <obj>*standard-output*</obj> Maclisp has several variables and complicated rules.
+For detailed documentation of streams, refer to <ref chapter="23" definition-in-file="stream" key="streams" section="3" title="I/O Streams" type="section"></ref>.
+</p>
+<definition><define key="prin1-fun" name="prin1" type="fun"><args>object <standard>&amp;optional</standard> stream</args>
+</define>
+
+<description>Outputs the printed representation of <arg>object</arg> to
+<arg>stream</arg>, with escaping (see <ref definition-in-file="rdprt" key="escaping" type="page"></ref>).
+<arg>object</arg> is returned.
+</description></definition><definition><define key="prin1-then-space-fun" name="prin1-then-space" type="fun"><args>object <standard>&amp;optional</standard> stream</args>
+</define>
+
+<description>Like <obj>prin1</obj> except that output
+is followed by a space.
+</description></definition><definition><define key="print-fun" name="print" type="fun"><args>object <standard>&amp;optional</standard> stream</args>
+</define>
+
+<description>Like <obj>prin1</obj> except that output
+is preceded by a carriage return and followed by a space.
+<arg>object</arg> is returned.
+</description></definition><definition><define key="princ-fun" name="princ" type="fun"><args>object <standard>&amp;optional</standard> stream</args>
+</define>
+
+<description>Like <obj>prin1</obj> except that the output is not escaped.  <arg>object</arg> is
+returned.
+</description></definition><definition><define key="write-fun" name="write" type="fun"><args>object <standard>&amp;key</standard> stream escape radix base circle pretty level length case gensym array</args>
+</define>
+
+<description>Prints <arg>object</arg> on <arg>stream</arg>, having bound all the printing flags according to the
+keyword arguments if specified.  For example, the keyword argument <arg>array</arg> specifies how
+to bind <obj>*print-array*</obj>; if <arg>array</arg> is omitted, the ambient value of <obj>*print-array*</obj>
+is used.  This function is sometimes cleaner than binding a printing control variable
+explicitly.  The value is <arg>object</arg>.
+</description></definition>
+
+
+<subsection name="NIL" title="Pretty-Printing Output Functions"><index-entry index="concepts" title="formatting lisp code"></index-entry>
+
+<index-entry index="concepts" title="pretty-printing"></index-entry>
+
+<index-entry index="concepts" title="grinding"></index-entry>
+<definition><define key="pprint-fun" name="pprint" type="fun"><args>object <standard>&amp;optional</standard> stream</args>
+</define>
+
+<description><obj>pprint</obj> is like <obj>prin1</obj> except that <obj>*print-pretty*</obj> is bound to <obj>t</obj>
+so that the grinder is used.  <obj>pprint</obj> returns zero values, just as
+the form <obj>(values)</obj> does.
+</description></definition><definition><define key="grindef-fun" name="grindef" type="mac"><args>function-spec...</args>
+</define>
+
+<description>Prints the definitions of one or more functions, with indentation to make the code
+readable.  Certain other ``pretty-printing'' transformations are performed:  The <obj>quote</obj>
+special form is represented with the <obj>'</obj> character.  Displacing macros are
+printed as the original code rather than the result of macro expansion.
+The code resulting from the backquote (<obj>`</obj>) reader macro is represented
+in terms of <obj>`</obj>.
+
+The subforms to <obj>grindef</obj> are the function specs whose
+definitions are to be printed; the usual way <obj>grindef</obj> is used
+is with a form like <obj>(grindef foo)</obj> to print the definition
+of <obj>foo</obj>.  When one of these subforms is a symbol, if
+the symbol has a value its value is prettily printed also.  Definitions are
+printed as <obj>defun</obj> special forms, and values are printed as <obj>setq</obj> special
+forms.
+
+If a function is compiled, <obj>grindef</obj> says so and tries to find its
+previous interpreted definition by looking on an associated property
+list (see <obj>uncompile</obj> (<ref definition-in-file="compil" key="uncompile-fun" title="Function uncompile" type="fun"></ref>).  This works only if the
+function's interpreted definition was once in force; if the definition
+of the function was simply loaded from a QFASL file, <obj>grindef</obj> cannot
+not find the interpreted definition.
+
+With no subforms, <obj>grindef</obj> assumes the same arguments as when it was
+last called.
+</description></definition><definition><define key="grind-top-level-fun" name="grind-top-level" type="fun"><args>obj <standard>&amp;optional</standard> width (stream <obj>*standard-output*</obj>) (untyo-p <obj>nil</obj>) (displaced <obj>'si:displaced</obj>) (terpri-p <obj>t</obj>) notify-fun loc</args>
+</define>
+
+<description>Pretty-prints <arg>obj</arg> on <arg>stream</arg>, putting up to <arg>width</arg> characters
+per line.  This is the primitive interface to the pretty-printer.  Note that it does not
+support variable-width fonts.  If the <arg>width</arg> argument is supplied, it is how many
+characters wide the output is to be.  If <arg>width</arg> is unsupplied or <obj>nil</obj>,
+<obj>grind-top-level</obj> tries to figure out the natural width of the stream,
+by sending a <obj>:size-in-characters</obj> message to the stream and using the first
+returned value.  If the stream doesn't handle that message, a width of <obj>95.</obj>
+characters is used instead.
+
+The remaining optional arguments activate various strange features and usually should not
+be supplied.  These options are for internal use by the system and are documented
+here for only completeness.
+If <arg>untyo-p</arg> is <obj>t</obj>, the <obj>:untyo</obj> and <obj>:untyo-mark</obj> operations are
+be used on <arg>stream</arg>, speeding up the algorithm somewhat.  <arg>displaced</arg> controls the
+checking for displacing macros; it is the symbol which flags a place that has been
+displaced, or <obj>nil</obj> to disable the feature.
+If <arg>terpri-p</arg> is <obj>nil</obj>, <obj>grind-top-level</obj> does
+not advance to a fresh line before printing.
+
+If <arg>notify-fun</arg> is non-<obj>nil</obj>, it should be a function that to be
+called with three arguments for each ``token'' in the pretty-printed
+output.  Tokens are atoms, open and close parentheses, and reader macro
+characters such as <example>'</example>.  The arguments given to <arg>notify-fun</arg> are the
+token, its ``location'' (see next paragraph), and <obj>t</obj> if it is an atom
+or <obj>nil</obj> if it is a character.
+
+<arg>loc</arg> is the ``location'' (typically a cons) whose car is <arg>obj</arg>.  As the
+grinder recursively descends through the structure being printed, it keeps track
+of the location where each thing came from, for the benefit of the <arg>notify-fun</arg>.
+This makes it possible for a program to correlate the printed output
+with the list structure.  The ``location'' of a close parenthesis is <obj>t</obj>, because
+close parentheses have no associated location.
+</description></definition></subsection>
+
+<subsection name="NIL" title="Non-Stream Printing Functions"><definition><define key="write-to-string-fun" name="write-to-string" type="fun"><args>object <standard>&amp;key</standard> escape radix base circle pretty level length case gensym array</args>
+</define><define key="prin1-to-string-fun" name="prin1-to-string" type="fun"><args>object</args>
+</define><define key="princ-to-string-fun" name="princ-to-string" type="fun"><args>object</args>
+</define>
+
+<description>Like <obj>write</obj>, <obj>prin1</obj> and <obj>princ</obj>, respectively, but put the output in a string
+and return the string (see <ref definition-in-file="rdprt" key="write-fun" title="Function write" type="fun"></ref>).
+</description></definition>
+<p>See also the <obj>with-output-to-string</obj> special form (<ref definition-in-file="stream" key="with-output-to-string-fun" title="Macro with-output-to-string" type="mac"></ref>).
+</p>
+
+<p>The following obsolete functions are for Maclisp compatibility only.
+The examples use traditional syntax.
+</p>
+<definition><define key="exploden-fun" name="exploden" type="fun"><args>object</args>
+</define>
+
+<description>Returns a list of characters (represented as fixnums) that
+are the characters that would be typed out by <obj>(princ <arg>object</arg>)</obj>
+(i.e. the unescaped printed representation of <arg>object</arg>).
+
+<lisp><exdent amount="96"><caption>Example: </caption>(exploden '(+ /12 3)) =&gt; #o(50 53 40 61 62 40 63 51)
+</exdent></lisp></description></definition><definition><define key="explodec-fun" name="explodec" type="fun"><args>object</args>
+</define>
+
+<description>Returns a list of characters represented by symbols,
+interned in the current package,
+whose names are the characters that would be typed out by 
+<obj>(princ <arg>object</arg>)</obj> (i.e. the unescaped printed representation of <arg>object</arg>).
+
+<lisp><exdent amount="96"><caption>Example: </caption>(explodec '(+ /12 3)) =&gt; (|(| + | | |1| |2| | | |3| |)|)
+</exdent></lisp>(Note that there are escaped spaces in the above list.)
+</description></definition><definition><define key="explode-fun" name="explode" type="fun"><args>object</args>
+</define>
+
+<description>Like <obj>explodec</obj> but uses the escaped printed representation.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(explode '(+ /12 3)) =&gt; (|(| + | | // |1| |2| | | |3| |)|)
+</exdent></lisp>(Note that there are escaped spaces in the above list.)
+</description></definition><definition><define key="flatsize-fun" name="flatsize" type="fun"><args>object</args>
+</define>
+
+<description>Returns the number of characters in the escaped printed representation
+of <arg>object</arg>.
+</description></definition><definition><define key="flatc-fun" name="flatc" type="fun"><args>object</args>
+</define>
+
+<description>Returns the number of characters in the unescaped printed representation
+of <arg>object</arg>.
+</description></definition></subsection></section><a name="expression-input"></a>
+
+
+<section chapter-number="24" name="expression-input" number="5" title="Expression Input Functions"><index-entry index="concepts" title="reading"></index-entry>
+
+<index-entry index="concepts" title="expression input"></index-entry>
+
+<p>Most expression input functions read characters from an input stream.
+This argument is called <arg>stream</arg>.  If unsupplied it
+defaults to the value of <obj>*standard-input*</obj>.
+</p>
+
+<p>All of these functions echo their input and permit editing if used on an
+interactive stream (one which supports the <obj>:rubout-handler</obj>
+operation; see below.)
+</p>
+
+<p>The functions accept an argument <arg>eof-option</arg> or two arguments
+<arg>eof-error</arg> and <arg>eof-value</arg> to tell them what to do if end of file
+is encountered instead of an object's p.r.  The functions that take
+two <arg>eof-</arg> arguments are the Common Lisp ones.
+</p>
+
+<p>In functions that accept the <arg>eof-option</arg> argument, if no argument
+is supplied, an error is signaled at eof.  If the argument is
+supplied, end of file causes the function to return that argument.  Note
+that an <arg>eof-option</arg> of <obj>nil</obj> means to return <obj>nil</obj> if the end of
+the file is reached; it is <arg>not</arg> equivalent to supplying no
+<arg>eof-option</arg>.
+</p>
+
+<p>In functions that accept two arguments <arg>eof-error</arg> and <arg>eof-value</arg>,
+end of file is an error if <arg>eof-error</arg> is non-<obj>nil</obj> or if it is unsupplied.
+If <arg>eof-error</arg> is <obj>nil</obj>, then the function returns <arg>eof-value</arg>
+at end of file.
+</p>
+
+<p>An error is always signaled if end of file is encountered in the middle
+of an object; for example, if a file does not contain enough right
+parentheses to balance the left parentheses in it.  Mere whitespace does
+not count as starting an object.  If a file contains a symbol or a number
+immediately followed by end-of-file, it can be read normally without
+error; if an attempt is made to read further, end of file is encountered
+immediately and the <arg>eof-</arg> argument(s) obeyed. 
+</p>
+
+<p>These end-of-file conventions are not completely compatible with
+Maclisp.  Maclisp's deviations from this are generally considered to be
+bugs rather than features.
+</p>
+
+<p>For Maclisp compatibility, <obj>nil</obj> as the <arg>stream</arg> argument also means
+to use the value of <obj>*standard-input*</obj>, and <obj>t</obj> as the <arg>stream</arg>
+argument means to use the value of <obj>*terminal-io*</obj>.  This is only
+advertised to work in functions that Maclisp has, and should not be
+written in new programs.  Instead of the variable <obj>*standard-input*</obj>
+Maclisp has several variables and complicated rules.  For detailed
+documentation of streams, refer to <ref chapter="23" definition-in-file="stream" key="streams" section="3" title="I/O Streams" type="section"></ref>.
+</p>
+
+<p>The functions below that take <arg>stream</arg> and <arg>eof-option</arg> arguments
+can also be called with the stream and eof-option in the other order.
+This functionality is only for compatibility with old Maclisp programs,
+and should never be used in new programs.  The functions attempt to
+figure out which way they were called by seeing whether each argument is
+a plausible stream.  Unfortunately, there is an ambiguity with symbols:
+a symbol might be a stream and it might be an eof-option.  If there are
+two arguments, one being a symbol and the other being something that is
+a valid stream, or only one argument, which is a symbol, then these
+functions interpret the symbol as an eof-option instead of as a
+stream.  To force them to interpret a symbol as a stream, give the
+symbol an <obj>si:io-stream-p</obj> property whose value is <obj>t</obj>.
+</p>
+<definition><define key="read-fun" name="read" type="fun"><args><standard>&amp;optional</standard> stream eof-option rubout-handler-options</args>
+</define>
+
+<description>Reads the printed representation of a Lisp object
+from <arg>stream</arg>, builds a corresponding Lisp object, and returns
+the object.  <arg>rubout-handler-options</arg> are used as options
+for the rubout handler, if <arg>stream</arg> supports one; see
+<ref chapter="23" definition-in-file="ios" key="rubout-handler" section="5" title="Rubout Handling" type="section"></ref> for more information on this.
+</description></definition><definition><define key="cli:read-fun" name="cli:read" type="fun"><args><standard>&amp;optional</standard> stream (eof-errorp <obj>t</obj>) eof-value recursive-p</args>
+</define>
+
+<description>The Common Lisp version of <obj>read</obj> differs only in how its arguments
+are passed.
+
+<arg>recursive-p</arg> should be non-<obj>nil</obj> when calling from the reader or
+from the defining function of a read-macro character; that is, when
+reading a subexpression as part of the task of reading a larger
+expression.  This has two effects: the subexpression is allowed to share
+<example>#<arg>n</arg>#</example> labels with the containing expression, and whitespace which
+terminates the subexpression (if it is a symbol or number) is not
+discarded.
+</description></definition><definition><define key="read-or-end-fun" name="read-or-end" type="fun"><args><standard>&amp;optional</standard> stream eof-option rubout-handler-options</args>
+</define>
+
+<description>Like <obj>read</obj>, but on an interactive stream if the input is just
+the character <obj>End</obj> it returns the two values <obj>nil</obj> and <obj>:end</obj>.
+</description></definition><definition>
+<define key="read-preserve-delimiters-var" name="read-preserve-delimiters" type="var"></define>
+
+<description>Certain printed representations given to <obj>read</obj>, notably those of symbols
+and numbers, require a delimiting character after them.  (Lists do not, because
+the matching close-parenthesis serves to mark the end of the list.)
+Normally <obj>read</obj> throws away the delimiting character if it is whitespace,
+but preserves it (using the <obj>:untyi</obj> stream operation) if the character is
+syntactically meaningful, since it may be the start of the next expression.
+
+If <obj>read-preserve-delimiters</obj> is bound to <obj>t</obj> around a call to <obj>read</obj>,
+the delimiting character is never thrown away, even if it is whitespace.
+This may be useful for certain reader macros or special syntaxes.
+</description></definition><definition><define key="read-preserving-whitespace-fun" name="read-preserving-whitespace" type="fun"><args><standard>&amp;optional</standard> stream (eof-errorp <obj>t</obj>) eof-value recursive-p</args>
+</define>
+
+<description>Like <obj>cli:read</obj> but binds <obj>read-preserve-delimiters</obj> to <obj>t</obj>.
+This is the Common Lisp way of requesting the <obj>read-preserve-delimiters</obj> feature.
+</description></definition><definition><define key="read-delimited-list-fun" name="read-delimited-list" type="fun"><args>char <standard>&amp;optional</standard> stream recursive-p</args>
+</define>
+
+<description>Reads expressions from <arg>stream</arg> until the character <arg>char</arg> is seen
+at top level when an expression is expected; then returns a list of
+the objects read.  <arg>char</arg> may be a fixnum or a character object.
+For example, if <arg>char</arg> is <example>#/]</example>, and the text to be read from
+<arg>stream</arg> is <obj>a (b c)]</obj> ...  then the objects <obj>a</obj> and <obj>(b c)</obj>
+are read, the <obj>]</obj> is seen as a terminator and discarded, and the
+value returned is <obj>(a (b c))</obj>.  <arg>recursive-p</arg> is as for
+<obj>cli:read</obj>.  End of file within this function is always an error
+since it is always ``within an object''--the object whose textual
+representation is terminated by <arg>char</arg>.
+
+Note that use of this function does not cause <arg>char</arg> to terminate
+tokens.  Usually you want that to happen, but it is purely under the
+control of the readtable.  So you must modify the readtable to make this
+so.  The usual way is to define <arg>char</arg> as a macro character whose
+defining function just signals an error.  The defining function is not
+called when <arg>char</arg> is encountered in the expected context by
+<obj>read-delimited-list</obj>; if <arg>char</arg> is encountered anywhere else,
+it is an unbalanced bracket and an error is appropriate.
+</description></definition><definition><define key="read-for-top-level-fun" name="read-for-top-level" type="fun"><args><standard>&amp;optional</standard> stream eof-option</args>
+</define>
+
+<description>This is a slightly different version of <obj>read</obj>.  It differs from <obj>read</obj>
+only in that it ignores close-parentheses seen at top level,
+and it returns the symbol <obj>si:eof</obj> if the stream reaches end-of-file
+if you have not supplied an <arg>eof-option</arg> (instead of signalling
+an error as <obj>read</obj> would).  This version of <obj>read</obj> is used in
+the system's ``read-eval-print'' loops.
+</description></definition><definition><define key="read-check-indentation-fun" name="read-check-indentation" type="fun"><args><standard>&amp;optional</standard> stream eof-option</args>
+</define>
+
+<description>This is like <obj>read</obj>, but validates the input based on indentation.
+It assumes that the input data is formatted to follow the usual
+convention for source files, that an open-parenthesis in column zero
+indicates a top-level list (with certain specific exceptions).
+An open-parenthesis in column zero encountered in the middle of a list
+is more likely to result from close-parentheses missing before it than
+from a mistake in indentation.
+
+If <obj>read-check-indentation</obj> finds an open-parenthesis
+following a return character in the middle of a list, it
+invents enough close-parentheses to close off all pending lists, and
+returns.  The offending open-parenthesis is <obj>:untyi</obj>'d so it can begin
+the next list, as it probably should.  End of file in the middle of a
+list is handled likewise.
+
+<obj>read-check-indentation</obj> notifies the caller of the incorrect formatting
+by signaling the condition <obj>sys:missing-closeparen</obj>.  This
+is how the compiler is able to record a warning about the missing
+parentheses.  If a condition handler proceeds, <obj>read</obj> goes ahead
+and invents close-parentheses.
+
+There are a few special forms that are customarily used around function
+definitions--for example, <obj>eval-when</obj>, <obj>local-declare</obj>, and <obj>comment</obj>.
+Since it is desirable to begin the function definitions in
+column zero anyway, <obj>read-check-indentation</obj> allows a list to begin
+in column zero within one of these special forms.  A non-<obj>nil</obj>
+<obj>si:may-surround-defun</obj> property identifies the symbols for which this
+is allowed.
+</description></definition><definition>
+<define key="read-check-indentation-var" name="read-check-indentation" type="var"></define>
+
+<description>This variable is non-<obj>nil</obj> during a read in which indentation is being
+checked.
+</description></definition>
+
+
+<subsection name="NIL" title="Non-Stream Parsing Functions"><p>The following functions do expression input but get the characters
+from a string or a list instead of a stream.
+</p>
+<definition><define key="read-from-string-fun" name="read-from-string" type="fun"><args>string <standard>&amp;optional</standard> eof-option (start <obj>0</obj>) end</args>
+</define>
+
+<description>The characters of <arg>string</arg> are given successively
+to the reader, and the Lisp object built by the reader is returned.
+Macro characters and so on all take effect.  If <arg>string</arg>
+has a fill-pointer it controls how much can be read.
+
+<arg>eof-option</arg> is what to return if the end of the string is reached, as
+in <obj>read</obj>.  <arg>start</arg> is the index in the string of the first
+character to be read.  <arg>end</arg> is the index at which to stop reading;
+that point is treated as end of file.
+
+<obj>read-from-string</obj> returns two values; the first is the object read
+and the second is the index of the first character in the string not read.
+If the entire string was read, this is the length of the string.
+
+
+<lisp><exdent amount="96"><caption>Example: </caption>(read-from-string &quot;(a b c)&quot;) =&gt; (a b c) <standard>and</standard> 7
+</exdent></lisp></description></definition><definition><define key="cli:read-from-string-fun" name="cli:read-from-string" type="fun"><args>string <standard>&amp;optional</standard> (eof-errorp <obj>t</obj>) eof-value <standard>&amp;key</standard> (start <obj>0</obj>) end preserve-whitespace</args>
+</define>
+
+<description>The Common Lisp version of <obj>read-from-string</obj> uses a different calling
+convention.  The arguments mean the same thing but are arranged
+differently.  There are three arguments with no counterparts:
+<arg>eof-errorp</arg> and <arg>eof-value</arg>, which are simply passed on to
+<obj>cli:read</obj>, and <arg>preserve-whitespace</arg>, which if non-<obj>nil</obj> means
+that the reading is done with <obj>read-preserve-delimiters</obj> bound to
+<obj>t</obj>.
+</description></definition>
+<p>See also the <obj>with-input-from-string</obj> special form (<ref definition-in-file="stream" key="with-input-from-string-fun" title="Macro with-input-from-string" type="mac"></ref>).
+</p>
+<definition><define key="parse-integer-fun" name="parse-integer" type="fun"><args>string <standard>&amp;key</standard> (start <obj>0</obj>) end (radix <obj>10.</obj>) junk-allowed</args>
+</define>
+
+<description>Parses the contents of <arg>string</arg> (or the portion from <arg>start</arg> to <arg>end</arg>) as a numeral
+for an integer using the specified radix, and returns the integer.
+Radices larger than ten are allowed, and they use letters as digits beyond 9.
+Leading whitespace is always allowed and ignored.  A leading sign is also allowed
+and considered part of the number.
+
+When <arg>junk-allowed</arg> is <obj>nil</obj>, the entire specified portion of string
+must consist of an integer and leading and trailing whitespace.
+Otherwise, an error happens.
+
+If <arg>junk-allowed</arg> is non-<obj>nil</obj>, parsing just stops when a non-digit
+is encountered.  The number parsed so far is returned as the first
+value, and the index in <arg>string</arg> at which parsing stopped is returned
+as the second value.  This number equals <arg>end</arg> (or the length of
+<arg>string</arg>) if there is nothing but a number.  If non-digits are found
+without finding a number first, the first value is <obj>nil</obj>.  Examples:
+
+<lisp>(parse-integer &quot; 1A &quot; :radix 16.) =&gt; 26.
+(parse-integer &quot; 15X &quot; :end 3) =&gt; 15.
+(parse-integer &quot; -15X &quot; :junk-allowed t) =&gt; -15. 3
+(parse-integer &quot; 15X &quot;) =&gt; error!
+</lisp></description></definition><definition><define key="readlist-fun" name="readlist" type="fun"><args>char-list</args>
+</define>
+
+<description>This function is provided mainly for Maclisp compatibility.
+<arg>char-list</arg> is a list of characters.  The characters may be
+represented by anything that the function <obj>character</obj> accepts:
+character objects, fixnums, strings, or symbols.  The characters are
+given successively to the reader, and the Lisp object built by the
+reader is returned.  Macro characters and so on all take effect.
+
+If there are more characters in <arg>char-list</arg> beyond those needed to
+define an object, the extra characters are ignored.  If there are not
+enough characters, some kind of <obj>sys:read-end-of-file</obj> error is signaled.
+</description></definition></subsection>
+
+<subsection name="NIL" title="Input Error Conditions"><definition><define key="sys:read-error-condition" name="sys:read-error" type="condition"><args>(<obj>sys:parse-error</obj> <obj>error</obj>)</args>
+</define>
+
+<description>This condition name classifies all errors detected by the reader per se.
+Since <obj>sys:parse-error</obj> is implied, all <obj>sys:read-error</obj> errors
+must provide the proceed type <obj>:no-action</obj> so that automatic proceed
+is possible if the error happens during compilation.  See <ref definition-in-file="ios" key="sys:parse-error-condition" title="Condition sys:parse-error" type="condition"></ref>.
+
+Since this condition name implies <obj>sys:parse-error</obj> and <obj>error</obj>, those
+two are not mentioned as implications below when <obj>sys:read-error</obj> is.
+</description></definition><definition><define key="sys:read-end-of-file-condition" name="sys:read-end-of-file" type="condition"><args>(<obj>sys:read-error</obj> <obj>sys:end-of-file</obj>)</args>
+</define>
+
+<description>Whenever the reader signals an error for end of file, the condition object
+possesses this condition name.
+
+Since <obj>sys:end-of-file</obj> is implied, the <obj>:stream</obj> operation on the
+condition instance returns the stream on which end of file was reached.
+</description></definition><definition><define key="sys:read-list-end-of-file-condition" name="sys:read-list-end-of-file" type="condition"><args>(<obj>sys:read-end-of-file</obj> <obj>sys:read-error</obj> <obj>sys:end-of-file</obj>)</args>
+</define>
+
+<description>This condition is signaled when <obj>read</obj> detects end of file in the middle of a list.
+
+In addition to the <obj>:stream</obj> operation provided because
+<obj>sys:end-of-file</obj> is one of the proceed types, the condition instance
+supports the <obj>:list</obj> operation, which returns the list read so far.
+
+Proceed type <obj>:no-action</obj> is provided.  If it is used, the reader
+invents a close-parenthesis to close off the list.
+Within <obj>read-check-indentation</obj>, the reader signals the error only once,
+no matter how many levels of list are unterminated.
+</description></definition><definition><define key="sys:read-string-end-of-file-condition" name="sys:read-string-end-of-file" type="condition"><args>(<obj>sys:read-end-of-file</obj> <obj>sys:read-error</obj> <obj>sys:end-of-file</obj>)</args>
+</define>
+
+<description>This is signaled when <obj>read</obj> detects end of file in the middle of a
+string delimited by double-quotes.
+
+The <obj>:string</obj> operation on the condition instance returns the string
+read so far.
+
+Proceed type <obj>:no-action</obj> terminates the string and returns.
+If the string is within other constructs that are unterminated,
+another end of file error is will be signaled later.
+</description></definition><definition><define key="sys:read-symbol-end-of-file-condition" name="sys:read-symbol-end-of-file" type="condition"><args>(<obj>sys:read-end-of-file</obj> <obj>sys:read-error</obj> <obj>sys:end-of-file</obj>)</args>
+</define>
+
+<description>This is signaled when <obj>read</obj> detects end of file within
+a multiple escape construct.
+
+The <obj>:string</obj> operation on the condition instance returns the print
+name read so far.
+
+Proceed type <obj>:no-action</obj> terminates the symbol and returns.
+If the symbol is within other constructs that are unterminated,
+another end of file error is will be signaled later.
+</description></definition><definition><define key="sys:missing-closeparen-condition" name="sys:missing-closeparen" type="condition"><args>(<obj>condition</obj>)</args>
+</define>
+
+<description>This condition, which is not an error, is signaled when
+<obj>read-check-indentation</obj> finds an open-parenthesis in column zero
+within a list.
+
+Proceed type <obj>:no-action</obj> is provided.  On proceeding, the reader
+invents enough close-parentheses to close off all the lists that are
+pending.
+</description></definition></subsection></section><a name="readtable"></a>
+
+
+<section chapter-number="24" name="readtable" number="6" title="The Readtable"><index-entry index="concepts" title="readtable"></index-entry>
+
+<p>The syntax used by the reader is controlled by a data structure called
+the <arg>readtable</arg>.  (Some aspects of printing are also controlled by the
+readtable.)  There can be many readtables, but the one that is used is
+the one which is the value of <obj>*readtable*</obj>.  A particular syntax can be
+selected for use by setting or binding <obj>*readtable*</obj> to a readtable
+which specifies that syntax before reading or printing.  In particular,
+this is how Common Lisp or traditional syntax is selected.  The
+readtable also controls the symbol substitutions which implement
+the distinction between the traditional and Common Lisp versions of
+functions such as <obj>subst</obj>, <obj>member</obj>and <obj>defstruct</obj>.
+</p>
+
+<p>The functions in this section allow you to modify the syntax of
+individual characters in a readtable in limited ways.  You can
+also copy a readtable; then you can modify one copy and leave
+the other unchanged.
+</p>
+
+<p>A readtables may have one or more names.  Named readtables are
+recorded in a central data base so that you can find a readtable by
+name.  When you copy a readtable, the new one is anonymous and is not
+recorded in the data base.
+</p>
+<definition>
+<define key="readtable-var" name="readtable" type="var"></define>
+<define key="*readtable*-var" name="*readtable*" type="var"></define>
+
+<description>The value of <obj>readtable</obj> or <obj>*readtable*</obj> is the current readtable.
+This starts out as the initial standard readtable.  You can bind this
+variable to change temporarily the readtable being used.
+
+The two names are synonymous.
+</description></definition><definition>
+<define key="si:standard-readtable-var" name="si:standard-readtable" type="const"></define>
+
+<description>This is copied into <obj>*readtable*</obj> every time the machine is booted.
+Therefore, it is normally the same as <obj>*readtable*</obj> unless you make
+<obj>*readtable*</obj> be some other readtable.  If you alter the contents of
+<obj>*readtable*</obj> without setting or binding it to some other readtable,
+this readtable is changed.
+</description></definition><definition>
+<define key="si:initial-readtable-var" name="si:initial-readtable" type="const"></define>
+
+<description>The value of <obj>si:initial-readtable</obj> is a read-only copy of the default
+current readtable.  Its purpose is to preserve a copy of the standard
+read syntax in case you modify the contents of <obj>*readtable*</obj> and regret
+it later.  You could use <obj>si:initial-readtable</obj> as the
+<arg>from-readtable</arg> argument to <obj>copy-readtable</obj> or
+<obj>set-syntax-from-char</obj> to restore all or part of the standard syntax.
+</description></definition><definition>
+<define key="si:common-lisp-readtable-var" name="si:common-lisp-readtable" type="const"></define>
+
+<description>A readtable which initially is set up to define Common Lisp read syntax.
+Reading of Common Lisp programs is done using this readtable.
+</description></definition><definition>
+<define key="si:initial-common-lisp-readtable-var" name="si:initial-common-lisp-readtable" type="const"></define>
+
+<description>A read-only copy of <obj>si:common-lisp-readtable</obj>, whose purpose is to
+preserve a copy of the standard Common Lisp syntax in case you modify
+<obj>si:common-lisp-readtable</obj> (such as, by reading a Common Lisp program
+which modifies the current readtable).
+</description></definition><definition><define key="si:rdtbl-names-fun" name="si:rdtbl-names" type="fun"><args>readtable</args>
+</define>
+
+<description>Returns the list of names of <obj>readtable</obj>.
+You may <obj>setf</obj> this to add or remove names.
+</description></definition><definition><define key="si:find-readtable-named-fun" name="si:find-readtable-named" type="fun"><args>name</args>
+</define>
+
+<description>Returns the readtable named <obj>name</obj>, or <obj>nil</obj> if none is recorded.
+</description></definition><definition><define key="readtablep-fun" name="readtablep" type="fun"><args>object</args>
+</define>
+
+<description><obj>t</obj> if <arg>object</arg> is a readtable.
+</description></definition>
+<p>The user can program the reader by changing the readtable in any of three ways.
+The syntax of a character can be set to one of several predefined possibilities.
+A character can be made into a <arg>macro character</arg>, whose interpretation
+is controlled by a user-supplied function which is called when the character is read.
+The user can create a completely new readtable, using the readtable compiler
+(<obj>SYS: IO; RTC LISP</obj>) to define new kinds of syntax and to assign syntax classes to
+characters.  Use of the readtable compiler is not documented here.
+</p>
+<definition><define key="copy-readtable-fun" name="copy-readtable" type="fun"><args><standard>&amp;optional</standard> from-readtable to-readtable</args>
+</define>
+
+<description><arg>from-readtable</arg>, which defaults to the current readtable, is copied.
+If <arg>from-readtable</arg> is <obj>nil</obj>, the standard Common Lisp syntax is
+copied.  If <arg>to-readtable</arg> is unsupplied or <obj>nil</obj>, a fresh copy is
+made.  Otherwise <arg>to-readtable</arg> is clobbered with the copied syntax.
+
+Use <obj>copy-readtable</obj> to get a private readtable before using the following
+functions to change the syntax of characters in it.  The value of <obj>*readtable*</obj>
+at the start of a Lisp Machine session is the initial standard readtable, which
+usually should not be modified.
+</description></definition><definition><define key="set-syntax-from-char-fun" name="set-syntax-from-char" type="fun"><args>to-char from-char <standard>&amp;optional</standard> to-readtable from-readtable</args>
+</define>
+
+<description>Copies the syntax of <arg>from-char</arg> in <arg>from-readtable</arg> to character
+<arg>to-char</arg> in <arg>to-readtable</arg>.  <arg>to-readtable</arg> defaults to the
+current readtable and <arg>from-readtable</arg> defaults to <obj>si:initial-standard-readtable</obj>
+(standard traditional syntax).
+</description></definition><definition><define key="cli:set-syntax-from-char-fun" name="cli:set-syntax-from-char" type="fun"><args>to-char from-char <standard>&amp;optional</standard> to-readtable from-readtable</args>
+</define>
+
+<description>Is a Common Lisp function which copies the syntax of <arg>from-char</arg> in
+<arg>from-readtable</arg> to character <arg>to-char</arg> in <arg>to-readtable</arg>.
+<arg>to-readtable</arg> defaults to the current readtable and
+<arg>from-readtable</arg> defaults to <obj>si:initial-common-lisp-readtable</obj>
+(standard Common Lisp syntax).
+
+Common Lisp has a peculiar idea of what it means to copy the syntax of a character.
+The only aspect of syntax that the readtable supposedly specifies is the choice among
+
+<table><tbody><tr><td><example>*</example></td><td>token constituent:
+digits, letters, random things like <obj>@</obj>, <obj>!</obj>, <obj>$</obj>, and also colon!
+</td></tr><tr><td><example>*</example></td><td>whitespace:
+spaces, <obj>Tab</obj>, <obj>Return</obj>.
+</td></tr><tr><td><example>*</example></td><td>single escape character:
+<obj>/</obj> traditionally, <obj>\</obj> in Common Lisp.
+</td></tr><tr><td><example>*</example></td><td>multiple escape character:
+vertical-bar.
+</td></tr><tr><td><example>*</example></td><td>macro character:
+standardly <obj>()&quot;,.'`;</obj>
+</td></tr><tr><td><example>*</example></td><td>nonterminating macro character:
+<obj>#</obj> is the only such character standardly defined.
+</td></tr></tbody></table>
+The differences among macro characters are determined entirely by the
+functions that they invoke.  The differences among token constituents
+(including the difference between <obj>A</obj> and colon) are fixed!  You
+can make <obj>A</obj> be a macro character, or whitespace, or a quote
+character, but if you make it a token constituent then it always behaves
+the way it normally does.  You can make colon be a macro character,
+or whitespace, etc., but if it is a token constituent it always
+delimits package names.  If you make open-parenthesis into a token
+constituent, there is only one kind of token constituent it can be (it
+forces the token to be a symbol, like <obj>$</obj> or <obj>@</obj> or <obj>%</obj>).
+
+This is not how Lisp Machine readtables really work, but since
+<obj>cli:set-syntax-from-char</obj> is provided just for Common Lisp, the
+behavior specified by Common Lisp is laboriously provided.  So, if
+<arg>from-char</arg> is some kind of token constituent, this function makes
+<arg>to-char</arg> into a token constituent of the kind that <arg>to-char</arg> is
+supposed to be--not the kind of token constituent that <arg>from-char</arg> is.
+
+By contrast, the non-Common-Lisp <obj>set-syntax-from-char</obj> would make
+<arg>to-char</arg> have exactly the same syntactic properties that
+<arg>from-char</arg> has.
+</description></definition><definition><define key="set-character-translation-fun" name="set-character-translation" type="fun"><args>from-char to-char <standard>&amp;optional</standard> readtable</args>
+</define>
+
+<description>Changes <arg>readtable</arg> so that <arg>from-char</arg> will be translated to <arg>to-char</arg> upon
+read-in, when <arg>readtable</arg> is the current readtable.
+This is normally used only for translating lower case letters to upper case.
+Character translation is inhibited by escape characters and within strings.
+<arg>readtable</arg> defaults to the current readtable.
+</description></definition><need amount="1800"></need><nopara></nopara>
+<p>The following syntax-setting functions are more or less obsolete.
+</p>
+<definition><define key="set-syntax-from-description-fun" name="set-syntax-from-description" type="fun"><args>char description <standard>&amp;optional</standard> readtable</args>
+</define>
+
+<description>Sets the syntax of <arg>char</arg> in <arg>readtable</arg> to be that described by the
+symbol <arg>description</arg>.  <arg>readtable</arg> defaults to the current readtable.
+
+Each readtable has its own set of descriptions which it defines.
+The following descriptions are defined in the standard readtable:
+
+<table><tbody><tr><td><obj>si:alphabetic</obj></td><td>An ordinary character such as `<obj>A</obj>'.
+</td></tr><tr><td><obj>si:break</obj></td><td>A token separator such as `<obj>(</obj>'.  (Obviously left parenthesis has other
+properties besides being a break.
+</td></tr><tr><td><obj>si:whitespace</obj></td><td>A token separator that can be ignored, such as `<obj> </obj>'.
+</td></tr><tr><td><obj>si:single</obj></td>
+<td><index-entry index="concepts" title="single-character symbol"></index-entry>
+A self-delimiting single-character symbol.  The initial readtable does not
+contain any of these.
+</td></tr><tr><td><obj>si:escape</obj></td><td>The character quoter.  In the initial readtable this is `<obj>/</obj>'.
+</td></tr><tr><td><obj>si:multiple-escape</obj></td><td>The symbol print-name quoter.  In the initial readtable this is `<obj>|</obj>'.
+</td></tr><tr><td><obj>si:macro</obj></td><td>A macro character.  Don't use this; use <obj>set-macro-character</obj> (<ref definition-in-file="rdprt" key="set-macro-character-fun" title="Function set-macro-character" type="fun"></ref>).
+</td></tr><tr><td><obj>si:non-terminating-macro</obj></td><td>A macro character recognized only at the start of a token.  In the
+initial readtable, `<example>#</example>' is such a character.  (It is also a dispatching
+macro, but that is another matter.) The correct way to make a character
+be a macro is with <obj>set-macro-character</obj>.
+</td></tr><tr><td><obj>si:character-code-escape</obj></td><td>The octal escape for special characters.  In the initial readtable this is `<obj>⊗</obj>'.
+</td></tr><tr><td><obj>si:digitscale</obj></td><td>a character for shifting an integer by digits.
+In the initial readtable this is `<example>^</example>'.
+</td></tr><tr><td><obj>si:bitscale</obj></td><td>A character for shifting an integer by bits.
+In the initial readtable this is `<example>_</example>' (underscore).
+
+</td></tr><tr><td><obj>si:slash</obj></td><td></td></tr><tr><td><obj>si:circlecross</obj></td><td>Obsolete synonyms for <obj>si:escape</obj> and <obj>si:character-code-escape</obj>.
+</td></tr></tbody></table>
+Unfortunately it is no longer possible to provide <obj>si:doublequote</obj> as
+double-quote is now an ordinary macro character.
+
+These symbols may be moved to the keyword package at some point.
+</description></definition><definition><define key="setsyntax-fun" name="setsyntax" type="fun"><args>character arg2 arg3</args>
+</define>
+
+<description>This exists only for Maclisp compatibility.  The above functions are preferred in new
+programs.  The syntax of <arg>character</arg> is altered in the current readtable, according
+to <arg>arg2</arg> and <arg>arg3</arg>.  <arg>character</arg> can be a fixnum, a symbol, or a string,
+i.e. anything acceptable to the <obj>character</obj> function.
+<arg>arg2</arg> is usually a keyword; it can be in any package since this is a Maclisp
+compatibility function.  The following values are allowed for <arg>arg2</arg>:
+
+<table><tbody><tr><td><obj>:macro</obj></td><td>The character becomes a macro character.  <arg>arg3</arg> is the name of a function to be
+invoked when this character is read.  The function takes no arguments, may <obj>tyi</obj> or
+<obj>read</obj> from <obj>*standard-input*</obj> (i.e. may call <obj>tyi</obj> or <obj>read</obj> without
+specifying a stream),
+and returns an object which is taken as the result of the read.
+
+</td></tr><tr><td><obj>:splicing</obj></td><td>Like <obj>:macro</obj> but the object returned by the macro function is a list
+that is <obj>nconc</obj>ed into the list being read.  If the character is read
+anywhere except inside a list (at top level or after a dotted-pair dot),
+then it may return <obj>()</obj>, which means it is ignored, or <obj>(<arg>obj</arg>)</obj>,
+which means that <arg>obj</arg> is read.
+
+</td></tr><tr><td><obj>:single</obj></td><td>The character becomes a self-delimiting single-character symbol.  If <arg>arg3</arg> is
+a fixnum, the character is translated to that character.
+
+</td></tr><tr><td><obj>nil</obj></td><td>The syntax of the character is not changed, but if <arg>arg3</arg> is
+a fixnum, the character is translated to that character.
+
+</td></tr><tr><td><obj><standard>a symbol</standard></obj></td><td>The syntax of the character is changed to be the same as that of
+the character <arg>arg2</arg> in the standard initial readtable.  <arg>arg2</arg>
+is converted to a character by taking the first character of its print name.
+Also if <arg>arg3</arg> is
+a fixnum, the character is translated to that character.
+</td></tr></tbody></table></description></definition></section><a name="Read-Macro Characters"></a>
+
+
+<section chapter-number="24" name="Read-Macro Characters" number="7" title="Read-Macro Characters"><index-entry index="concepts" title="read macro characters"></index-entry>
+
+<index-entry index="concepts" title="macro characters"></index-entry>
+
+<p>A <arg>read-macro character</arg> (or just <arg>macro character</arg>) is a character
+whose syntax is defined by a function which the reader calls whenever
+that character is seen (unless it is escaped).  This function can
+optionally read additional characters and is then responsible for
+returning the object which they represent.
+</p>
+
+<p>The standard meanings of the characters open-parenthesis, semicolon,
+single-quote, double-quote, <obj>#</obj>, backquote (<obj>`</obj>) and comma are
+implemented by making them macro characters.
+</p>
+
+<p>For example, open-parenthesis is implemented as a macro character
+whose defining function reads expressions until a close-parenthesis is found,
+throws away the close-parenthesis, and returns a list of the expressions read.
+(It actually must be more complicated than this in order to deal properly
+with dotted lists and with indentation checking.)  Semicolon is implemented as
+a macro character whose defining function swallows characters until a <obj>Return</obj>
+and then returns no values.
+</p>
+
+<p>Close-parenthesis and close-horseshoe (<example>⊃</example>) are also macro
+characters so that they will terminate symbols.  Their defining
+functions signal errors if actually called; but when these delimiters
+are encountered in their legitimate contexts they are recognized
+and handled specially before the defining function is called.
+</p>
+
+<p>The user can also define macro characters.
+</p>
+
+<p>When a macro's defining function is called, it receives two arguments:
+the input stream, and the macro character being handled.  The function
+may read characters from the stream, and should return zero or more
+values, which are the objects that the macro construct ``reads as''.  Zero
+values causes the macro construct to be ignored (the semicolon macro
+character does this), and one value causes the macro construct to
+read as a single object (most macro characters do this).  More than one
+value is allowed only within a list.
+</p>
+
+<index-entry index="concepts" title="terminating macro character"></index-entry>
+
+<index-entry index="concepts" title="non-terminating macro character"></index-entry>
+
+<p>Macro characters may be <arg>terminating</arg> or <arg>non-terminating</arg>.
+A non-terminating macro character is only recognized as a macro character
+when it appears at the beginning of a token.  If it appears when a token
+is already in progress, it is treated as a symbol constituent.  Of the standard
+macro characters, all but <obj>#</obj> are terminating.
+</p>
+
+<index-entry index="concepts" title="dispatch macro character"></index-entry>
+
+<p>One kind of macro character is the <arg>dispatch</arg> macro character.
+This kind of character is handled by reading one more character,
+converting it to upper case,
+and looking it up in a table.  Thus, the dispatch macro character
+is the start of a two-character sequence, with which is associated
+a defining function.  <obj>#</obj> is the only standardly defined dispatch
+macro character.
+</p>
+
+<p>When a dispatch macro character is used, it may be followed by a decimal
+integer which serves as a parameter.  The character for the dispatch
+is actually the first non-digit seen.
+</p>
+
+<p>The defining function for a dispatch macro two-character sequence
+is almost like that of an ordinary macro character.  However, it receives
+one more argument.  This is the parameter, the decimal integer that
+followed the dispatch macro character, or <obj>nil</obj> if no parameter was written.
+Also, the second argument is the subdispatch character, the second character
+of the sequence.  The dispatch macro character itself is not available.
+</p>
+<definition><define key="set-macro-character-fun" name="set-macro-character" type="fun"><args>char function <standard>&amp;optional</standard> non-terminating-p in-readtable</args>
+</define>
+
+<description>Sets the syntax of character <arg>char</arg> in readtable <arg>in-readtable</arg> to be that of a
+macro character which is handled by <arg>function</arg>.  When that character is read
+by <obj>read</obj>, <arg>function</arg> is called.
+
+<arg>char</arg> is made a non-terminating macro character
+if <arg>non-terminating-p</arg> is non-<obj>nil</obj>, a terminating one otherwise.
+</description></definition><definition><define key="get-macro-character-fun" name="get-macro-character" type="fun"><args>char in-readtable</args>
+</define>
+
+<description>Returns two values that describe the macro character status of <arg>char</arg>
+in <arg>in-readtable</arg>.  If <arg>char</arg> is not a macro character, both values
+are <obj>nil</obj>.  Otherwise, the first value is the <arg>function</arg> and the
+second value is the <arg>non-terminating-p</arg> for this character.
+
+Those two values, passed to <obj>set-macro-character</obj>, are usually
+sufficient to recreate exactly the syntax <arg>char</arg> has now;
+however, since one of the arguments that the function receives
+is the macro character that invoked it, it may not behave the same
+if installed on a different character or in a different readtable.
+In particular, the definition of a dispatch macro character is
+a standard function that looks the macro character up in the readtable.
+Thus, the definition only records that the macro character <arg>is</arg>
+a dispatch macro character; it does not say what subcharacters
+are allowed or what they mean.
+</description></definition><definition><define key="make-dispatch-macro-character-fun" name="make-dispatch-macro-character" type="fun"><args>char <standard>&amp;optional</standard> non-terminating-p in-readtable</args>
+</define>
+
+<description>Makes <arg>char</arg> be a dispatch macro character in <arg>in-readtable</arg>.  This
+means that when <arg>char</arg> is seen <obj>read</obj> will read one more character
+to decide what to do.  <obj>#</obj> is an example of a dispatch macro
+character.  <arg>non-terminating-p</arg> means the same thing as in
+<obj>set-macro-character</obj>.
+</description></definition><definition><define key="set-dispatch-macro-character-fun" name="set-dispatch-macro-character" type="fun"><args>char subchar function <standard>&amp;optional</standard> in-readtable</args>
+</define>
+
+<description>Sets the syntax of the two-character sequence <arg>char</arg> <arg>subchar</arg>, assuming that
+<arg>char</arg> is already a dispatch macro character.  <arg>function</arg> becomes the
+defining function for this sequence.
+
+If <arg>subchar</arg> is lower case, it is converted to upper case.  Case is never
+significant for the character that follows a dispatch macro character.
+The decimal digits may not be defined as subchars since they are always
+used for infix numeric arguments as in <example>#5r</example>.
+</description></definition><definition><define key="get-dispatch-macro-character-fun" name="get-dispatch-macro-character" type="fun"><args>char subchar <standard>&amp;optional</standard> in-readtable</args>
+</define>
+
+<description>Returns the <arg>function</arg> for <arg>subchar</arg> following dispatch macro character <arg>char</arg>
+in readtable <arg>in-readtable</arg>.  The value is <obj>nil</obj> if <arg>subchar</arg> is not defined
+for following <arg>char</arg>.
+</description></definition><need amount="1800"></need><nopara></nopara>
+<p>These subroutines are for use by the defining functions of macro characters.
+Ordinary <obj>read</obj> should not be used for reading subexpressions, and
+the ordinary <obj>:tyi</obj> operation or functions <obj>read-char</obj> or <obj>tyi</obj>
+should not be used for single-character input.  The functions below
+should be used instead.
+</p>
+<definition><define key="si:read-recursive-fun" name="si:read-recursive" type="fun"><args><standard>&amp;optional</standard> stream</args>
+</define>
+
+<description>Equivalent to <obj>(cli:read <arg>stream</arg> t nil t)</obj>.  See <ref definition-in-file="rdprt" key="cli:read-fun" title="Function cli:read" type="fun"></ref>.
+This is the recommended way for a macro character's defining function
+to read a subexpression.
+</description></definition><definition><define key="si:xr-xrtyi-fun" name="si:xr-xrtyi" type="fun"><args>stream ignore-whitespace no-chars-special no-multiple-escapes</args>
+</define>
+
+<description>Reads the next input character from <arg>stream</arg>, for a macro character's defining
+function.  If <arg>ignore-whitespace</arg> is non-<obj>nil</obj>, any whitespace characters
+seen are discarded and the first non-whitespace character is returned.
+
+The first value is the character as translated; the third value is the
+original character, before translation.  The second value is a syntax
+code which is of no interest to users except to be passed to
+<obj>si:xr-xruntyi</obj> if this character must be unread.
+
+Normally, this function processes all the escape characters, and
+performs translations (such as from lower case letters to upper case
+letters) on characters not escaped.  Font specifiers (epsilons followed
+by digits or <example>*</example>) are ignored if the file is formatted using them.
+
+If <arg>no-multiple-escapes</arg> is non-<obj>nil</obj>, multiple escapes (vertical bar
+characters) are not processed; they are returned to the caller.  This mode
+is used for reading the contents of strings.  If <arg>no-chars-special</arg>
+is non-<obj>nil</obj>, no escape characters are processed.  All characters are
+simply returned to the caller (except that font specifiers are still
+discarded if appropriate).
+</description></definition><definition><define key="si:xr-xruntyi-fun" name="si:xr-xruntyi" type="fun"><args>stream char num</args>
+</define>
+
+<description>Unreads <arg>char</arg>, for a macro character's defining function.
+<arg>char</arg> should be the third value returned by the last call to <obj>si:xr-xrtyi</obj>,
+and <arg>num</arg> should be the second value.
+</description></definition><definition>
+<define key="*read-suppress*-var" name="*read-suppress*" type="var"></define>
+
+<description>If this variable is non-<obj>nil</obj>, all the standard read functions and
+macro characters do their best to avoid any errors, and any side effects
+except for removing characters from the input stream.  For example,
+symbols are not interned to avoid either errors (for nonexistent packages)
+or side effects (adding new symbols to packages).  In fact, <obj>nil</obj> is
+used in place of any symbol that is written.
+
+User macro characters should also notice this variable when appropriate.
+
+The purpose of the variable is to allow expressions to be skipped and
+discarded.  The read-time conditional constructs <example>#+</example> and <example>#-</example> bind
+it to <obj>t</obj> to skip the following expression if it is not wanted.
+</description></definition><need amount="1800"></need><nopara></nopara>
+<p>The following functions for defining macro characters are more or less obsolete.
+</p>
+<definition><define key="set-syntax-macro-char-fun" name="set-syntax-macro-char" type="fun"><args>char function <standard>&amp;optional</standard> readtable</args>
+</define>
+
+<description>Changes <arg>readtable</arg> so that <arg>char</arg> is a macro character.  When
+<arg>char</arg> is read, <arg>function</arg> is called.  <arg>readtable</arg> defaults to the
+current readtable.
+
+<arg>function</arg> is called with two arguments, <arg>list-so-far</arg> and the input stream.
+When a list is being read, <arg>list-so-far</arg> is that list (<obj>nil</obj> if this is the
+first element).  At the top level of <obj>read</obj>, <arg>list-so-far</arg> is the symbol
+<obj>:toplevel</obj>.  After a dotted-pair dot, <arg>list-so-far</arg> is the symbol <obj>:after-dot</obj>.
+<arg>function</arg> may read any number of characters from the input stream and process
+them however it likes.
+
+<arg>function</arg> should return three values, called <arg>thing</arg>, <arg>type</arg>, and <arg>splice-p</arg>.
+<arg>thing</arg> is the object read.  If <arg>splice-p</arg> is <obj>nil</obj>, <arg>thing</arg> is the result.
+If <arg>splice-p</arg> is non-<obj>nil</obj>, then when reading a list <arg>thing</arg> replaces
+the list being read--often it will be <arg>list-so-far</arg> with something else 
+<obj>nconc</obj>'ed onto the end.  At top-level and after a dot, if <arg>splice-p</arg> is non-<obj>nil</obj>
+the <arg>thing</arg> is ignored and the macro-character does not contribute anything to
+the result of <obj>read</obj>.
+<arg>type</arg> is a historical artifact and is not really used; <obj>nil</obj> is a safe value.
+Most macro character functions return just one value and let the other two
+default to <obj>nil</obj>.
+
+Note that the convention for values returned by <arg>function</arg> is different from that
+used for functions specified in <obj>set-macro-character</obj>, above.  <obj>set-syntax-macro-char</obj>
+works by encapsulating <arg>function</arg> in a closure to convert the values to
+the sort that <obj>set-macro-character</obj> wants and then passing the closure to
+<obj>set-macro-character</obj>.
+
+<arg>function</arg> should not have any side-effects other than on the stream and <arg>list-so-far</arg>.
+Because of the way the rubout-handler works, <arg>function</arg> can be called several times
+during the reading of a single expression in which the macro character only appears once.
+
+<arg>char</arg> is given the same syntax that single-quote, backquote, and comma have
+in the initial readtable (it is called <obj>:macro</obj> syntax).
+</description></definition><definition><define key="set-syntax-#-macro-char-fun" name="set-syntax-#-macro-char" type="fun"><args>char function <standard>&amp;optional</standard> readtable</args>
+</define>
+
+<description>Causes <arg>function</arg> to be called when <example>#<arg>char</arg></example> is read.
+<arg>readtable</arg> defaults to the current readtable.
+The function's arguments and return values are the same as for normal macro
+characters, documented above.  When <arg>function</arg> is called, the special variable
+<obj>si:xr-sharp-argument</obj> contains <obj>nil</obj> or a number that is the
+number or special bits between the <obj>#</obj> and <arg>char</arg>.
+</description></definition><definition><define key="setsyntax-sharp-macro-fun" name="setsyntax-sharp-macro" type="fun"><args>character type function <standard>&amp;optional</standard> readtable</args>
+</define>
+
+<description>This exists only for Maclisp compatibility.  <obj>set-dispatch-macro-character</obj>
+should be used instead.
+If <arg>function</arg> is <obj>nil</obj>, <example>#<arg>character</arg></example> is turned off, otherwise it
+becomes a macro that calls <arg>function</arg>.  <arg>type</arg> can be <obj>:macro</obj>, <obj>:peek-macro</obj>,
+<obj>:splicing</obj>, or <obj>:peek-splicing</obj>.  The splicing part controls whether <arg>function</arg> returns
+a single object or a list of objects.  Specifying peek causes <arg>character</arg>
+to remain in the input stream when <arg>function</arg> is called; this is useful if
+<arg>character</arg> is something like a left parenthesis.  <arg>function</arg> gets one
+argument, which is <obj>nil</obj> or the number between the <obj>#</obj> and the <arg>character</arg>.
+</description></definition></section><a name="pathname"></a>
+
+
+<section chapter-number="24" name="pathname" number="8" title="The :read and :print Stream Operations"><p>A stream can specially handle the reading and printing of objects by
+handling the <obj>:read</obj> and <obj>:print</obj> stream operations.  Note that these
+operations are optional and most streams do not support them.
+</p>
+
+<p>If the <obj>read</obj> function is given a stream that has <obj>:read</obj> in its
+which-operations, then instead of reading in the normal way it sends the
+<obj>:read</obj> message to the stream with one argument, <obj>read</obj>'s
+<arg>eof-option</arg> if it had one or a magic internal marker if it didn't.
+Whatever the stream returns is what <obj>read</obj> returns.
+If the stream wants to implement the <obj>:read</obj> operation by internally
+calling <obj>read</obj>, it must use a different stream that does not have
+<obj>:read</obj> in its which-operations.
+</p>
+
+<p>If a stream has <obj>:print</obj> in its which-operations, it may intercept all
+object printing operations, including those due to the <obj>print</obj>, <obj>prin1</obj>,
+and <obj>princ</obj> functions, those due to <obj>format</obj>, and those used internally,
+for instance in printing the elements of a list.  The stream receives the
+<obj>:print</obj> message with three arguments: the object being printed, the
+<arg>depth</arg> (for comparison against the <obj>*print-level*</obj> variable), and
+<arg>escape-p</arg> (which is the value of <obj>*print-escape*</obj>).  If the stream
+returns <obj>nil</obj>, then normal printing takes place as usual.  If the stream
+returns non-<obj>nil</obj>, then <obj>print</obj> does nothing; the stream is assumed to have
+output an appropriate printed representation for the object.
+The two following functions are useful in this connection; however, they are
+in the <obj>system-internals</obj> package and may be changed without much notice.
+</p>
+<definition><define key="si:print-object-fun" name="si:print-object" type="fun"><args>object depth stream <standard>&amp;optional</standard> which-operations</args>
+</define>
+
+<description>Outputs the printed-representation of <arg>object</arg> to <arg>stream</arg>, as modified
+by <arg>depth</arg> and the values of the <obj>*print-...</obj> variables.
+
+This is the internal guts of the Lisp printer.  When a stream's
+<obj>:print</obj> handler calls this function, it should supply the list
+<obj>(:string-out)</obj> for <arg>which-operations</arg>, to prevent itself from being
+called recursively.  Or it can supply <obj>nil</obj> if it does not want to
+receive <obj>:string-out</obj> messages.
+
+If you want to customize the behavior of all printing of Lisp objects,
+advising (see <ref chapter="31" definition-in-file="db-aid" key="advise" section="10" title="Advising a Function" type="section"></ref>) this function is the way to do it.  See
+<ref chapter="24" definition-in-file="rdprt" key="customizing-the-printer" section="1" title="What the Printer Produces" type="section"></ref>.
+</description></definition><definition><define key="si:print-list-fun" name="si:print-list" type="fun"><args>list depth stream which-operations</args>
+</define>
+
+<description>This is the part of the Lisp printer that prints lists.  A stream's
+<obj>:print</obj> handler can call this function, passing along its own arguments
+and its own which-operations, to arrange for a list to be printed the
+normal way and the stream's <obj>:print</obj> hook to get a chance at each of the
+list's elements.
+</description></definition></section></chapter>
+</document-part>

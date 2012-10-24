@@ -1,0 +1,871 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="sequence-chapter"></a>
+<chapter name="sequence-chapter" number="10" title="Generic Sequence Functions"><index-entry index="concepts" title="generic sequence functions"></index-entry>
+
+<p>The type specifier <obj>sequence</obj> is defined to include lists and vectors
+(arrays of rank one).
+Lists and vectors are similar in that both can
+be regarded as sequences of elements: there is a first element, a second
+element, and so on.  Element <arg>n</arg> of a list is <obj>(nth <arg>n</arg>
+<arg>list</arg>)</obj>, and element <arg>n</arg> of a vector is <obj>(aref <arg>vector</arg>
+<arg>n</arg>)</obj>.  Many useful operations which apply in principle to a sequence
+of objects can work equally well on lists and vectors.  These are the
+generic sequence functions.
+</p>
+
+<p>All the generic sequence functions accept <obj>nil</obj> as a sequence of length zero.
+</p>
+<a name="Primitive Sequence Operations"></a>
+
+<section chapter-number="10" name="Primitive Sequence Operations" number="1" title="Primitive Sequence Operations"><definition><define key="make-sequence-fun" name="make-sequence" type="fun"><args>type size <standard>&amp;key</standard> initial-element</args>
+</define>
+
+<description>Creates a sequence of type <arg>type</arg>, <arg>size</arg> elements long.
+<arg>size</arg> must be an integer and <arg>type</arg> must be either <obj>list</obj>
+or some kind of array type.  <arg>type</arg> could be just <obj>array</obj> or <obj>vector</obj> to make
+a general vector, it could be <obj>(vector (byte 8))</obj> to make an <obj>art-8b</obj>
+vector, and so on.
+
+If <arg>initial-element</arg> is specified, each element of the new sequence
+contains <arg>initial-element</arg>.  Otherwise, the new sequence is initialized
+to contain <obj>nil</obj> if that is possible, zero otherwise (for numeric array types).
+
+<lisp>(make-sequence 'list 3)
+  =&gt;  (nil nil nil)
+
+(make-sequence 'array 5 :initial-element t)
+  =&gt;  #(t t t t t)
+
+(make-sequence '(vector bit) 5)
+  =&gt;  #*00000
+</lisp></description></definition><definition><define key="elt-fun" name="elt" type="fun"><args>sequence index</args>
+</define>
+
+<description>Returns the element at index <arg>index</arg> in <arg>sequence</arg>.
+If <arg>sequence</arg> is a list, this is <obj>(nth <arg>index</arg> <arg>sequence</arg>)</obj>.
+If <arg>sequence</arg> is a vector, this is <obj>(aref <arg>index</arg> <arg>sequence</arg>)</obj>.
+Being microcoded, <obj>elt</obj> is as fast as either <obj>nth</obj> or <obj>aref</obj>.
+
+<obj>(setf (elt <arg>sequence</arg> <arg>index</arg>) <arg>value</arg>)</obj> is the way to set
+an element of a sequence.
+</description></definition><definition><define key="length-fun" name="length" type="fun"><args>sequence</args>
+</define>
+
+<description>Returns the length of <arg>sequence</arg>, as an integer.  For a vector with a fill
+pointer, this is the fill pointer value.  For a list, it is the traditional
+Lisp function; note that lists ending with atoms other than <obj>nil</obj> are
+accepted, so that the length of <obj>(a b . c)</obj> is 2.
+</description></definition></section><a name="Simple Sequence Operations"></a>
+
+<section chapter-number="10" name="Simple Sequence Operations" number="2" title="Simple Sequence Operations"><definition><define key="copy-seq-fun" name="copy-seq" type="fun"><args>sequence</args>
+</define>
+
+<description>Returns a new sequence of the same type, length and contents as <arg>sequence</arg>.
+</description></definition><definition><define key="concatenate-fun" name="concatenate" type="fun"><args>result-type <standard>&amp;rest</standard> sequences</args>
+</define>
+
+<description>Returns a new sequence, of type <arg>result-type</arg>, whose contents
+are made from the contents of all the <arg>sequences</arg>.
+<arg>result-type</arg> can be <obj>list</obj> or any array type,
+just as in <obj>make-sequence</obj> above.  Examples:
+
+<lisp>(concatenate 'list '(1 2) '#(A 3))  =&gt;  (1 2 A 3)
+(concatenate 'vector '(1 2) '#(A 3)  =&gt;  #(1 2 A 3)
+</lisp></description></definition><definition><define key="subseq-fun" name="subseq" type="fun"><args>sequence start <standard>&amp;optional</standard> end</args>
+</define>
+
+<description>Returns a new sequence whose elements are a subsequence of <arg>sequence</arg>.
+The new sequence is of the same type as <arg>sequence</arg>.
+
+<arg>start</arg> is the index of the first element of <arg>sequence</arg> to take.
+<arg>end</arg> is the index of where to stop--the first element <arg>not</arg> to take.
+<arg>end</arg> can also be <obj>nil</obj>, meaning take everything from <arg>start</arg> up
+to the end of <arg>sequence</arg>.
+
+Examples:
+
+<lisp>(subseq &quot;Foobar&quot; 3 5)  =&gt;  &quot;ba&quot;
+(subseq '(a b c) 1)  =&gt;  (b c)
+</lisp>
+It is also possible to <obj>setf</obj> a call to <obj>subseq</obj>.  This means
+to store into part of the sequence passed to <obj>subseq</obj>.  Thus,
+
+<lisp>(setf (subseq &quot;Foobar&quot; 3 5) &quot;le&quot;)
+</lisp>modifies the string <obj>&quot;Foobar&quot;</obj> so that it contains <obj>&quot;Fooler&quot;</obj> instead.
+</description></definition><definition><define key="replace-fun" name="replace" type="fun"><args>into-sequence-1 from-sequence-2 <standard>&amp;key</standard> (start1 <obj>0</obj>) end1 (start2 <obj>0</obj>) end2</args>
+</define>
+
+<description>Copies part of <arg>from-sequence-2</arg> into part of <arg>to-sequence-1</arg>.
+<arg>start2</arg> and <arg>end2</arg> are the indices of the part of <arg>from-sequence-2</arg>
+to copy from, and <arg>start1</arg> and <arg>end1</arg> are the indices of the part of
+<arg>to-sequence-1</arg> to copy into.
+
+If the number of elements to copy out of <arg>from-sequence-2</arg> is less
+than the number of elements of <arg>to-sequence-1</arg> to be copied into,
+the extra elements of <arg>to-sequence-1</arg> are not changed.  If the
+number of elements to copy out is more than there is room for, the
+last extra elements are ignored.
+
+If the two sequence arguments are the same sequence, then the elements to be copied
+are copied first into a temporary sequence (if necessary) to make sure that
+no element is overwritten before it is copied.  Example:
+
+<lisp>(setq str &quot;Elbow&quot;)
+(replace str str :start1 2 :end1 5 :start2 1 :end2 4)
+</lisp>modifies <obj>str</obj> to contain <obj>&quot;Ellbo&quot;</obj>.
+
+<arg>into-sequence-1</arg> is returned as the value of <obj>replace</obj>.
+</description></definition><definition><define key="fill-fun" name="fill" type="fun"><args>sequence item <standard>&amp;key</standard> (start <obj>0</obj>) end</args>
+</define>
+
+<description>Modifies the contents of <arg>sequence</arg> by setting all the
+elements to <arg>item</arg>.  <arg>start</arg> and <arg>end</arg> may be specified
+to limit the operation to some contiguous portion of <arg>sequence</arg>;
+then the elements before <arg>start</arg> or after <arg>end</arg> are unchanged.
+If <arg>end</arg> is <obj>nil</obj>, the filling goes to the end of <arg>sequence</arg>.
+
+The value returned by <obj>fill</obj> is <arg>sequence</arg>.  Example:
+
+<lisp>(setq l '(a b c d e))
+(fill l 'lose :start 2)
+
+l =&gt; (a b lose lose lose)
+</lisp></description></definition><definition><define key="reverse-fun" name="reverse" type="fun"><args>sequence</args>
+</define>
+
+<description>Returns a new sequence containing the same elements as <arg>sequence</arg> but
+in reverse order.  The new sequence is of the same type and length as
+<arg>sequence</arg>.
+<obj>reverse</obj> does not modify its argument, unlike <obj>nreverse</obj> which is faster
+but does modify its argument.  The list created by <obj>reverse</obj> is not cdr-coded.
+
+<lisp>(reverse &quot;foo&quot;)  =&gt;  &quot;oof&quot;
+(reverse '(a b (c d) e)) =&gt; (e (c d) b a)
+</lisp></description></definition><definition><define key="nreverse-fun" name="nreverse" type="fun"><args>sequence</args>
+</define>
+
+<description>Modifies <arg>sequence</arg> destructively to have its elements in reverse
+order, and returns <arg>sequence</arg> as modified.  For a vector, this is done
+by copying the elements to different positions.  For a list, this is
+done by modifying cdr pointers.  This has two important consequences: it
+is most efficient when the list is not cdr-coded, and the rearranged
+list starts with the cell that used to be at the end.  Although the
+altered list as a whole contains the same cells as the original, the
+actual value of the altered list is not <obj>eq</obj> to the original list.
+For this reason, one must always store the value of <obj>nreverse</obj> into
+the place where the list will be used.  Do not just use <obj>nreverse</obj> for effect
+on a list.
+
+
+<lisp>(setq a '#(1 2 3 4 5))
+(nreverse a)
+(concatenate 'list a) =&gt; (5 4 3 2 1)
+
+(setq b '(1 2 3 4 5)
+      c b
+      d (last b))
+(setq b (nreverse b))
+
+b =&gt; (5 4 3 2 1)
+c =&gt; (1)
+(eq b d)  =&gt;  t
+</lisp>
+<obj>nreverse</obj> is most frequently used after a loop which computes
+elements for a new list one by one.  These elements can be put on the
+new list with <obj>push</obj>, but this produces a list which has the elements
+in reverse order (first one generated at the end of the list).
+
+<lisp>(let (accumulate)
+  (dolist (x input)
+    (push (car x) accumulate)
+    (push (cdr x) accumulate))
+  (nreverse accumulate))
+</lisp>
+Currently, <obj>nreverse</obj> is inefficient with cdr-coded lists (see
+<ref chapter="5" definition-in-file="fd-con" key="cdr-code" section="4" title="Cdr-Coding" type="section"></ref>), because it just uses <obj>rplacd</obj> in the
+straightforward way.  This may be fixed someday.  In the meantime
+<obj>reverse</obj> might be preferable in some cases.
+</description></definition></section><a name="Mapping On Sequences"></a>
+
+<section chapter-number="10" name="Mapping On Sequences" number="3" title="Mapping On Sequences"><definition><define key="cli:map-fun" name="cli:map" type="fun"><args>result-type function <standard>&amp;rest</standard> sequences</args>
+</define>
+
+<description>The Common Lisp <obj>map</obj> function
+maps <arg>function</arg> over successive elements of each <arg>sequence</arg>,
+constructing and returning a sequence of the results that <arg>function</arg> returns.
+The constructed sequence is of type <arg>result-type</arg> (see <obj>make-sequence</obj>,
+<ref definition-in-file="generic" key="make-sequence-fun" title="Function make-sequence" type="fun"></ref>).
+
+<arg>function</arg> is called first on the first elements of all the sequences,
+then on the second elements of all, and so on until some argument
+sequence is exhausted.
+
+
+<lisp>(map 'list 'list '(1 2 3) '#(A B C D))
+  =&gt;  ((1 A) (2 B) (3 C))
+
+(setq vect (map '(vector (mod 16.)) '+
+                '(3 4 5 6 7) (circular-list 1)))
+(concatenate 'list vect)  =&gt;  (2 3 4 5 6)
+(array-element-type vect)  =&gt;  (mod 16.)
+</lisp>
+<arg>result-type</arg> can also be <obj>nil</obj>.  Then the values returned by <arg>function</arg>
+are thrown away, no sequence is constructed, and <obj>map</obj> returns <obj>nil</obj>.
+
+This function is available under the name <obj>map</obj> in Common Lisp programs.
+In traditional Zetalisp programs, <obj>map</obj> is another function which
+does something related but different; see <ref definition-in-file="fd-flo" key="map-fun" title="Function map" type="fun"></ref>.
+Traditional programs can call this function as <obj>cli:map</obj>.
+</description></definition><definition><define key="cli:some-fun" name="cli:some" type="fun"><args>predicate <standard>&amp;rest</standard> sequences</args>
+</define>
+
+<description>Applies <arg>predicate</arg> to successive elements of each sequence.
+If <arg>predicate</arg> ever returns a non-<obj>nil</obj> value, <obj>cli:some</obj> immediately
+returns the same value.  If one of the argument sequences is exhausted,
+<obj>cli:some</obj> returns <obj>nil</obj>.
+
+Each time <arg>predicate</arg> is called, it receives one argument from each sequence.
+The first time, it gets the first element of each sequence, then the second element
+of each, and so on until a sequence is exhausted.  Examples:
+
+<lisp>(cli:some 'plusp '(-4 0 5 6))  =&gt;  5
+(cli:some '&gt; '(-4 0 5 6) '(0 12 12 12))  =&gt;  nil
+(cli:some '&gt; '(-4 0 5 6) '(3 3 3 3))  =&gt;  5
+(cli:some '&gt; '(-4 0 5 6) '(3 3))  =&gt;  nil
+</lisp>
+This function is available under the name <obj>some</obj> in Common Lisp programs.
+In traditional Zetalisp programs, <obj>some</obj> is another function which
+does something related but different; see <ref definition-in-file="fd-con" key="some-fun" title="Function some" type="fun"></ref>.
+Traditional programs can call this function as <obj>cli:some</obj>.
+</description></definition><definition><define key="cli:every-fun" name="cli:every" type="fun"><args>predicate <standard>&amp;rest</standard> sequences</args>
+</define>
+
+<description>Applies <arg>predicate</arg> to successive elements of each sequence.
+If <arg>predicate</arg> ever returns <obj>nil</obj>, <obj>cli:every</obj> immediately
+returns <obj>nil</obj>.  If one of the argument sequences is exhausted,
+<obj>cli:every</obj> returns <obj>t</obj>.
+
+Each time <arg>predicate</arg> is called, it receives one argument from each sequence.
+The first time, it gets the first element of each sequence, then the second element
+of each, and so on until a sequence is exhausted.  Examples:
+
+<lisp>(cli:every 'plusp '(-4 0 5 6))  =&gt;  nil
+(cli:every 'plusp '(5 6))  =&gt;  t
+</lisp>
+This function is available under the name <obj>every</obj> in Common Lisp programs.
+In traditional Zetalisp programs, <obj>every</obj> is another function which
+does something related but different; see <ref definition-in-file="fd-con" key="every-fun" title="Function every" type="fun"></ref>.
+Traditional programs can call this function as <obj>cli:every</obj>.
+</description></definition><definition><define key="notany-fun" name="notany" type="fun"><args>predicate <standard>&amp;rest</standard> sequences</args>
+</define><define key="notevery-fun" name="notevery" type="fun"><args>predicate <standard>&amp;rest</standard> sequences</args>
+</define>
+
+<description>These are the opposites of <obj>cli:some</obj> and <obj>cli:every</obj>.
+
+<obj>(notany ...)</obj> is equivalent to <obj>(not (cli:some ...))</obj>.
+<br></br><obj>(notevery ...)</obj> is equivalent to <obj>(not (cli:every ...))</obj>.
+</description></definition><definition><define key="reduce-fun" name="reduce" type="fun"><args>function sequence <standard>&amp;key</standard> from-end (start <obj>0</obj>) end initial-value</args>
+</define>
+
+<description>Combines the elements of <arg>sequence</arg> using <arg>function</arg>, a function of two
+args.  <arg>function</arg> is applied to the first two elements; then to that
+result and the third element; then to that result and the fourth
+element; and so on.
+
+<arg>start</arg> and <arg>end</arg> are indices that restrict the action to a part of <arg>sequence</arg>,
+as if the rest of <arg>sequence</arg> were not there.  They default to 0 and <obj>nil</obj>
+(<obj>nil</obj> for <arg>end</arg> means go all the way to the end of <arg>sequence</arg>).
+
+If <arg>from-end</arg> is non-<obj>nil</obj>, processing starts with the last of the
+elements.  <arg>function</arg> is first applied to the last two elements; then
+to the previous element and that result; then to the previous element
+and that result; and so on until element number <arg>start</arg> has been used.
+
+If <arg>initial-value</arg> is specified, it acts like an extra element of
+<arg>sequence</arg>, used in addition to the actual elements of the specified part
+of <arg>sequence</arg>.  It comes, in effect, at the beginning if <arg>from-end</arg> is
+<obj>nil</obj>, but at the end if <arg>from-end</arg> is non-<obj>nil</obj>, so that in any
+case it is the first element to be processed.
+
+If there is only one element to be processed,
+that element is returned and <arg>function</arg> is not called.
+
+If there are no elements (<arg>sequence</arg> is of length zero and no
+<arg>initial-value</arg>), <arg>function</arg> is called with no arguments and its
+value is returned.
+
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(reduce '+ '(1 2 3))  =&gt;  6
+(reduce '- '(1 2 3))  =&gt;  -4
+(reduce '- '(1 2 3) :from-end t)  =&gt;  2  <standard>;; 1 <obj>-</obj> (2 <obj>-</obj> 3)</standard>
+(reduce 'cons '(1 2 3) :from-end t)  =&gt;  (1 2 . 3)
+(reduce 'cons '(1 2 3))  =&gt;  ((1 . 2) . 3)
+</exdent></lisp></description></definition></section><a name="generic-sequence-arguments"></a>
+
+
+<section chapter-number="10" name="generic-sequence-arguments" number="4" title="Operating on Selected Elements"><p>The generic sequence functions for searching, substituting and removing
+elements from sequences take similar arguments whose meanings are
+standard.  This is because they all look at each element of the sequence
+to decide whether it should be processed.
+</p>
+
+<p>Functions which conceptually modify the sequence come in pairs.  One
+function in the pair copies the sequence if necessary and never modifies
+the argument.  The copy is a list if the original sequence is a list;
+otherwise, the copy is an <obj>art-q</obj> array.  If the sequence is a list,
+it may be copied only partially, sharing any unchanged tail with the
+original argument.  If no elements match, the result sequence may be
+<obj>eq</obj> to the argument sequence.
+</p>
+
+<p>The other function in the pair may alter the original sequence and
+return it, or may make a copy and return that.
+</p>
+
+<p>There are two ways the function can decide which elements to operate on.
+The functions whose names end in <obj>-if</obj> or <obj>-if-not</obj> have an
+argument named <arg>predicate</arg> which should be a function of one argument.
+This function is applied to each element and the value determines
+whether the element is processed.
+</p>
+
+<p>The other functions have an argument named <arg>item</arg> or something similar
+which is an object to compare each element with.  The elements that
+match <arg>item</arg> are processed.  By default, the comparison is done with
+<obj>eql</obj>.  You can specify any function of two arguments to be used
+instead, as the <arg>test</arg> keyword argument.  <arg>item</arg> is always the first
+argument, and an element of the sequence is the second argument.  The
+element matches <arg>item</arg> if <arg>test</arg> returns non-<obj>nil</obj>.
+Alternatively, you can specify the <arg>test-not</arg> keyword argument; then
+the element matches if <arg>test-not</arg> returns <obj>nil</obj>.
+</p>
+
+<p>The elements may be tested in any order, and may be tested more than once.
+For predictable results, your <arg>predicate</arg>, <arg>test</arg> and <arg>test-not</arg> functions
+should be side-effect free.
+</p>
+
+<p>The five keyword arguments <arg>start</arg>, <arg>end</arg>, <arg>key</arg>, <arg>count</arg> and
+<arg>from-end</arg> have the same meanings for all of the functions, except
+that <arg>count</arg> is not relevant for some kinds of operations.  Here is
+what they do:
+</p>
+
+<table><tbody><tr><td><arg>start, end</arg></td><td><arg>start</arg> and <arg>end</arg> are indices in the sequence; they restrict the
+processing to the portion between those indices.  Only elements in this
+portion are tested, replaced or removed.  For the search functions,
+only this portion is searched.  For element removal functions, elements
+outside the portion are unchanged.
+
+<arg>start</arg> is the index of the first element to be processed, and <arg>end</arg>
+is the index of the element after the last element to be processed.
+<arg>end</arg> can also be <obj>nil</obj>, meaning that processing should continue to
+the end of the sequence.
+
+<arg>start</arg> always defaults to 0, and <arg>end</arg> always defaults to <obj>nil</obj>.
+
+</td></tr><tr><td><arg><arg>key</arg></arg></td><td><arg>key</arg>, if not <obj>nil</obj>, is a function of one argument which is applied
+to each element of the sequence to get a value which is passed to the
+<arg>test</arg>, <arg>test-not</arg> or <arg>predicate</arg> function in place of the
+element.  For example, if <arg>key</arg> is <obj>car</obj>, the car of each element is
+compared or tested.  The default for <arg>key</arg> is <obj>nil</obj>, which means to
+compare or test the element itself.
+
+</td></tr><tr><td><arg><arg>from-end</arg></arg></td><td>If <arg>from-end</arg> is non-<obj>nil</obj>, elements are (conceptually) processed in
+the reverse of the sequence order, from the later elements to the
+earlier ones.  In some functions this argument makes no difference,
+or matters only when <arg>count</arg> is non-<obj>nil</obj>.
+
+Note: the actual testing of elements may happen in any order.
+
+</td></tr><tr><td><arg><arg>count</arg></arg></td><td><arg>count</arg>, if not <obj>nil</obj>, should be an integer specifying the number of
+matching elements to be processed.  For example, if <arg>count</arg> is 2,
+only the first two elements that match are removed, replaced, etc.
+If <arg>from-end</arg> is non-<obj>nil</obj>, the last two matching elements
+are the ones removed or replaced.
+
+The default for <arg>count</arg> is <obj>nil</obj>, which means all elements are tested
+and all matching ones are processed.
+</td></tr></tbody></table>
+
+
+<subsection name="NIL" title="Removing Elements from Sequences"><p>These functions remove certain elements of a sequence.  The <obj>remove</obj>
+series functions copy the argument; the <obj>delete</obj> series functions
+can modify it destructively (currently they always copy anyway if the
+argument is a vector).
+</p>
+<definition><define key="remove-if-fun" name="remove-if" type="fun"><args>predicate sequence <standard>&amp;key</standard> (start <obj>0</obj>) end count key from-end</args>
+</define><define key="delete-if-fun" name="delete-if" type="fun"><args>predicate sequence <standard>&amp;key</standard> (start <obj>0</obj>) end count key from-end</args>
+</define>
+
+<description>Returns a sequence like <arg>sequence</arg> but missing any elements that
+satisfy <arg>predicate</arg>.  <arg>predicate</arg> is a function of one argument
+which is applied to one element at a time; if <arg>predicate</arg> returns
+non-<obj>nil</obj>, that element is removed.  <obj>remove-if</obj> copies structure as
+necessary to avoid modifying <arg>sequence</arg>, while <obj>delete-if</obj> can
+either modify the original sequence and return it or make a copy and
+return that.  (Currently, a list is always modified, and a vector is
+always copied, but don't depend on this.)
+
+The <arg>start</arg>, <arg>end</arg>, <arg>key</arg> <arg>count</arg> and <arg>from-end</arg> arguments are handled in the
+standard way.
+
+
+<lisp>(remove-if 'plusp '(1 -1 2 -2 3 -3))  =&gt;  (-1 -2 -3)
+(remove-if 'plusp '(1 -1 2 -2 3 -3) :count 2)
+  =&gt;  (-1 -2 3 -3)
+(remove-if 'plusp '(1 -1 2 -2 3 -3) :count 2 :from-end t)
+  =&gt;  (1 -1 -2 -3)
+(remove-if 'plusp '(1 -1 2 -2 3 -3) :start 4)
+  =&gt;  (1 -1 2 -2 -3)
+(remove-if 'zerop '(1 -1 2 -2 3 -3) :key '1-)
+  =&gt;  (-1 2 -2 3 -3)
+</lisp></description></definition><definition><define key="remove-if-not-fun" name="remove-if-not" type="fun"><args>predicate sequence <standard>&amp;key</standard> (start <obj>0</obj>) end count key from-end</args>
+</define><define key="delete-if-not-fun" name="delete-if-not" type="fun"><args>predicate sequence <standard>&amp;key</standard> (start <obj>0</obj>) end count key from-end</args>
+</define>
+
+<description>Like <obj>remove-if</obj> and <obj>delete-if</obj> except that the elements removed
+are those for which <arg>predicate</arg> returns <obj>nil</obj>.
+</description></definition><definition><define key="cli:remove-fun" name="cli:remove" type="fun"><args>item sequence <standard>&amp;key</standard> (test <obj>'eql</obj>) test-not (start <obj>0</obj>) end count key from-end</args>
+</define><define key="cli:delete-fun" name="cli:delete" type="fun"><args>item sequence <standard>&amp;key</standard> (test <obj>'eql</obj>) test-not (start <obj>0</obj>) end count key from-end</args>
+</define>
+
+<description>The Common Lisp functions for eliminating elements from a sequence
+test the elements of <arg>sequence</arg> one by one by comparison with <arg>item</arg>,
+using the <arg>test</arg> or <arg>test-not</arg> function, and eliminate the elements
+that match.  <obj>cli:remove</obj> copies structure as necessary to avoid modifying
+<arg>sequence</arg>, while <obj>cli:delete</obj> can either modify the original sequence
+and return it or make a copy and return that.  (Currently, a list is always
+modified, and a vector is always copied.)
+
+The <arg>start</arg>, <arg>end</arg>, <arg>key</arg> <arg>count</arg> and <arg>from-end</arg> arguments are handled in the
+standard way.
+
+
+<lisp>(cli:remove 'x '(x (a) (x) (a x)))
+  =&gt;  ((a) (x) (a x))
+
+(cli:remove 'x '((a) (x) (a x)) :test 'memq)
+  =&gt;  ((a))
+
+(cli:remove 'x '((a) (x) (a x)) :test-not 'memq)
+  =&gt;  ((x) (a x))
+
+(cli:remove 'x '((a) (x) (a x)) 
+            :test 'memq :count 1)
+  =&gt;  ((a) (a x))
+
+(cli:remove 'x '((a) (x) (a x)) :key 'car)
+  =&gt;  ((a) (a x))
+</lisp>
+These functions are available under the names <obj>remove</obj> and <obj>delete</obj>
+in Common Lisp programs.  Traditional Zetalisp provides functions
+<obj>remove</obj> and <obj>delete</obj> which serve similar functions, on lists only,
+and with different calling sequences; see <ref definition-in-file="fd-con" key="remove-fun" title="Function remove" type="fun"></ref> and
+<ref definition-in-file="fd-con" key="delete-fun" title="Function delete" type="fun"></ref>.  Traditional programs can call these functions as
+<obj>cli:remove</obj> and <obj>cli:delete</obj>.
+</description></definition><definition><define key="remove-duplicates-fun" name="remove-duplicates" type="fun"><args>sequence <standard>&amp;key</standard> (test <obj>'eql</obj>) test-not (start <obj>0</obj>) end key from-end</args>
+</define><define key="delete-duplicates-fun" name="delete-duplicates" type="fun"><args>sequence <standard>&amp;key</standard> (test <obj>'eql</obj>) test-not (start <obj>0</obj>) end key from-end</args>
+</define>
+
+<description><obj>remove-duplicates</obj> returns a new sequence like <arg>sequence</arg> except
+that all but one of any set of matching elements have been removed.
+<obj>delete-duplicates</obj> is the same except that it may destructively modify
+and then return <arg>sequence</arg> itself.
+
+Elements are compared using <arg>test</arg>, a function of two arguments.
+Two elements match if <arg>test</arg> returns non-<obj>nil</obj>.  Each element 
+is compared with all the following elements and slated for removal if
+it matches any of them.
+
+If <arg>test-not</arg> is specified, it is used instead of <arg>test</arg>, but then
+elements match if <arg>test-not</arg> returns <obj>nil</obj>.  If neither <arg>test</arg> nor <arg>test-not</arg>
+is specified, <obj>eql</obj> is used for <arg>test</arg>.
+
+If <arg>key</arg> is non-<obj>nil</obj>, it should be a function of one argument.  <arg>key</arg> is
+applied to each element, and the value <arg>key</arg> returns is passed to <arg>test</arg>
+or <arg>test-not</arg>.
+
+If <arg>from-end</arg> is non-<obj>nil</obj>, then elements are processed
+(conceptually) from the end of <arg>sequence</arg> forward.  Each element is
+compared with all the preceding ones and slated for removal if it
+matches any of them.  For a well-behaved comparison function, the only
+difference <arg>from-end</arg> makes is which elements of a matching set
+are removed.  Normally the last one is kept; with <arg>from-end</arg>, it is
+the first one that is kept.
+
+If <arg>start</arg> or <arg>end</arg> is used to restrict processing to a portion
+of <arg>sequence</arg>, both removal and comparison are restricted.  An element
+is removed only if it is itself within the specified portion, and matches
+another element within the specified portion.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Substitution Functions"><p>The functions in this section substitute a new value for certain of the
+elements in a sequence--those that match a specified object or satisfy a
+predicate.  For example, you could replace every <obj>t</obj> in the sequence with
+<obj>nil</obj>, leaving all elements other than <obj>t</obj> unchanged.  The <obj>substitute</obj>
+series functions make a copy and return it, leaving the original
+sequence unmodified.  The <obj>nsubstitute</obj> series functions always alter
+the original sequence destructively and return it.  They do not use up
+any storage.
+</p>
+
+<p>Note the difference between these functions and the function
+<obj>cli:subst</obj>.  <obj>subst</obj> operates only on lists, and it searches all
+levels of list structure in both car and cdr positions.
+<obj>substitute</obj>, when given a list, considers for replacement only the
+elements of the list.
+</p>
+<definition><define key="substitute-if-fun" name="substitute-if" type="fun"><args>newitem predicate sequence <standard>&amp;key</standard> start end count key from-end</args>
+</define><define key="nsubstitute-if-fun" name="nsubstitute-if" type="fun"><args>newitem predicate sequence <standard>&amp;key</standard> start end count key from-end</args>
+</define>
+
+<description><obj>substitute-if</obj> returns a new sequence like <arg>sequence</arg> but with
+<arg>newitem</arg> substituted for each element of <arg>sequence</arg> that satisfies
+<arg>predicate</arg>.  <arg>sequence</arg> itself is unchanged.  If it is a list, only
+enough of it is copied to avoid changing <arg>sequence</arg>.
+
+<obj>nsubstitute-if</obj> replaces elements in <arg>sequence</arg> itself, modifying it
+destructively, and returns <arg>sequence</arg>.
+
+<arg>start</arg>, <arg>end</arg>, <arg>key</arg>, <arg>count</arg> and <arg>from-end</arg> are handled
+in the standard fashion as described above.
+
+<lisp>(substitute-if 0 'plusp '(1 -1 2 -2 3) :from-end t :count 2)
+  =&gt;  (1 -1 0 -2 0)
+</lisp></description></definition><definition><define key="substitute-if-not-fun" name="substitute-if-not" type="fun"><args>newitem predicate sequence <standard>&amp;key</standard> start end count key from-end</args>
+</define><define key="nsubstitute-if-not-fun" name="nsubstitute-if-not" type="fun"><args>newitem predicate sequence <standard>&amp;key</standard> start end count key from-end</args>
+</define>
+
+<description>Like <obj>substitute-if</obj> and <obj>nsubstitute-if</obj> except that the elements
+replaced are those for which <arg>predicate</arg> returns <obj>nil</obj>.
+</description></definition><definition><define key="substitute-fun" name="substitute" type="fun"><args>newitem olditem sequence <standard>&amp;key</standard> (test <obj>'eql</obj>) test-not start end count key from-end</args>
+</define><define key="nsubstitute-fun" name="nsubstitute" type="fun"><args>newitem olditem sequence <standard>&amp;key</standard> (test <obj>'eql</obj>) test-not start end count key from-end</args>
+</define>
+
+<description>Like <obj>substitute-if</obj> and <obj>nsubstitute-if</obj> except that elements are
+tested by comparison with <arg>olditem</arg>, using <arg>test</arg> or <arg>test-not</arg> as
+a comparison function.
+
+<arg>start</arg>, <arg>end</arg>, <arg>key</arg>, <arg>count</arg> and <arg>from-end</arg> are handled
+in the standard fashion as described above.
+
+<lisp>(substitute 'a 'b '(a b (a b)))
+  =&gt;  (a a (a b))
+</lisp></description></definition></subsection>
+
+
+<subsection name="NIL" title="Searching for Elements"><p>The functions in this section find an element or elements of a sequence
+which satisfy a predicate or match a specified object.  The <obj>position</obj>
+series functions find one element and return the index of the element
+found in the specified sequence.  The <obj>find</obj> series functions return
+the element itself.  The <obj>count</obj> series functions find all the
+elements that match and returns the number of them that were found.
+</p>
+
+<p>All of the functions accept the keyword arguments <arg>start</arg>, <arg>end</arg>,
+<arg>count</arg> and <arg>from-end</arg>, and handle them in the standard way described in
+<ref chapter="10" definition-in-file="generic" key="generic-sequence-arguments" section="4" title="Operating on Selected Elements" type="section"></ref>.
+</p>
+<definition><define key="position-if-fun" name="position-if" type="fun"><args>predicate sequence <standard>&amp;key</standard> (start <obj>0</obj>) end key from-end</args>
+</define><define key="find-if-fun" name="find-if" type="fun"><args>predicate sequence <standard>&amp;key</standard> (start <obj>0</obj>) end key from-end</args>
+</define>
+
+<description>Find the first element of <arg>sequence</arg> (last element, if <arg>from-end</arg> is
+non-<obj>nil</obj>) which satisfies <arg>predicate</arg>.  <obj>position-if</obj> returns the
+index in sequence of the element found; <obj>find-if</obj> returns the element
+itself.  If no element is found, the value is <obj>nil</obj> for either
+function.
+
+See <ref chapter="10" definition-in-file="generic" key="generic-sequence-arguments" section="4" title="Operating on Selected Elements" type="section"></ref> for a description of the
+standard arguments <arg>start</arg>, <arg>end</arg> and <arg>key</arg>.  If <arg>start</arg> or
+<arg>end</arg> is used to restrict operation to a portion of <arg>sequence</arg>,
+elements outside the portion are not tested, but the index returned is
+still the index in the entire sequence.
+
+
+<lisp>(position-if 'plusp '(-3 -2 -1 0 1 2 3))
+  =&gt;  4
+(find-if 'plusp '(-3 -2 -1 0 1 2 3))
+  =&gt;  1
+(position-if 'plusp '(-3 -2 -1 0 1 2 3) :start 5)
+  =&gt;  5
+(position-if 'plusp '(-3 -2 -1 0 1 2 3) :from-end t)
+  =&gt;  6
+(find-if 'plusp '(-3 -2 -1 0 1 2 3) :from-end t)
+  =&gt;  3
+</lisp></description></definition><definition><define key="position-if-not-fun" name="position-if-not" type="fun"><args>predicate sequence <standard>&amp;key</standard> (start <obj>0</obj>) end key from-end</args>
+</define><define key="find-if-not-fun" name="find-if-not" type="fun"><args>predicate sequence <standard>&amp;key</standard> (start <obj>0</obj>) end key from-end</args>
+</define>
+
+<description>Like <obj>position-if</obj> and <obj>find-if</obj> but search for an element for which <arg>predicate</arg>
+returns <obj>nil</obj>.
+</description></definition><definition><define key="position-fun" name="position" type="fun"><args>item sequence sequence <standard>&amp;key</standard> test test-not (start <obj>0</obj>) end key from-end</args>
+</define><define key="find-fun" name="find" type="fun"><args>item sequence sequence <standard>&amp;key</standard> test test-not (start <obj>0</obj>) end key from-end</args>
+</define>
+
+<description>Like <obj>position-if</obj> and <obj>find-if</obj> but search for an element which matches <arg>item</arg>,
+using <arg>test</arg> or <arg>test-not</arg> for comparison.
+
+<lisp>(position #\A &quot;BabA&quot; :test 'char-equal)  =&gt;  1
+(position #≠/A &quot;BabA&quot; :test 'equalp)  =&gt;  1
+(position #\A &quot;BabA&quot; :test 'char=)  =&gt;  3
+(position #≠/A &quot;BabA&quot; :test 'eq)  =&gt;  3
+</lisp><obj>find-position-in-list</obj> is equivalent to <obj>position</obj> with
+<obj>eq</obj> as the value of <arg>test</arg>.
+</description></definition><definition><define key="count-if-fun" name="count-if" type="fun"><args>predicate sequence <standard>&amp;key</standard> start end key</args>
+</define>
+
+<description>Tests each element of <arg>sequence</arg> with <arg>predicate</arg> and counts how many
+times <arg>predicate</arg> returns non-<obj>nil</obj>.  This number is returned.
+
+<arg>start</arg>, <arg>end</arg> and <arg>key</arg> are used in the standard way, as described in
+<ref chapter="10" definition-in-file="generic" key="generic-sequence-arguments" section="4" title="Operating on Selected Elements" type="section"></ref>.  The <arg>from-end</arg> keyword argument is
+accepted without error, but it has no effect.
+
+<lisp>(count-if 'symbolp #(a b &quot;foo&quot; 3))  =&gt;  2
+</lisp></description></definition><definition><define key="count-if-not-fun" name="count-if-not" type="fun"><args>predicate sequence <standard>&amp;key</standard> start end key</args>
+</define>
+
+<description>Like <obj>count-if</obj> but returns the number of elements for which
+<arg>predicate</arg> returns <obj>nil</obj>.
+</description></definition><definition><define key="count-fun" name="count" type="fun"><args>item sequence <standard>&amp;key</standard> test test-not start end key</args>
+</define>
+
+<description>Like <obj>count</obj> but returns the number of elements which match <arg>item</arg>.
+<arg>test</arg> or <arg>test-not</arg> is the function used for the comparison.
+
+<lisp>(count 4 '(1 2 3 4 5) :test '&gt;)  =&gt;  3
+</lisp></description></definition></subsection></section><a name="Comparison Functions"></a>
+
+<section chapter-number="10" name="Comparison Functions" number="5" title="Comparison Functions"><definition><define key="mismatch-fun" name="mismatch" type="fun"><args>sequence1 sequence2 <standard>&amp;key</standard> (test <obj>'eql</obj>) test-not (start1 <obj>0</obj>) end1 (start2 <obj>0</obj>) end2 key from-end</args>
+</define>
+
+<description>Compares successive elements of <arg>sequence1</arg> with successive elements
+of <arg>sequence2</arg>, returning <obj>nil</obj> if they all match, or else the index
+in <arg>sequence1</arg> of the first mismatch.  If the sequences differ in length
+but match as far as they go, the value is the index in <arg>sequence1</arg> of
+the place where one sequence ran out.  If <arg>sequence1</arg> is the one which
+ran out, this value equals the length of <arg>sequence1</arg>, so it isn't the
+index of an actual element, but it still describes the place where
+comparison stopped.
+
+Elements are compared using the function <arg>test</arg>, which should accept two arguments.
+If it returns non-<obj>nil</obj>, the elements are considered to match.
+If you specify <arg>test-not</arg> instead of <arg>test</arg>, it is used similarly as a function, but the elements match if <arg>test-not</arg> returns <obj>nil</obj>.
+
+If <arg>key</arg> is non-<obj>nil</obj>, it should be a function of one argument.  It is applied
+to each element to get an object to pass to <arg>test</arg> or <arg>test-not</arg> in place of
+the element.  Thus, if <obj>car</obj> is supplied as <arg>key</arg>, the cars of the elements
+are compared using <arg>test</arg> or <arg>test-not</arg>.
+
+<arg>start1</arg> and <arg>end1</arg> can be used to specify a portion of
+<arg>sequence1</arg> to use in the comparison, and <arg>start2</arg> and <arg>end2</arg> can
+be used to specify a portion of <arg>sequence2</arg>.  The comparison uses
+the first element of each sequence portion, then the second element of
+each sequence portion, and so on.  If the two specified portions differ
+in length, comparison stops where the first one runs out.  In any case,
+the index returned by <obj>mismatch</obj> is still relative to the
+whole of <arg>sequence1</arg>.
+
+If <arg>from-end</arg> is non-<obj>nil</obj>, the comparison proceeds conceptually
+from the end of each sequence or portion.  The first comparison uses
+the last element of each sequence portion, the second comparison
+uses the next-to-the-last element of each sequence portion, and so on.
+When a mismatch is encountered, the value returned is <arg>one greater
+than</arg> the index of the first mismatch encountered in order of
+processing (closest to the ends of the sequences). 
+
+<lisp>(mismatch &quot;Foo&quot; &quot;Fox&quot;)  =&gt;  2
+(mismatch &quot;Foo&quot; &quot;FOO&quot; :test 'char-equal)  =&gt;  nil
+(mismatch &quot;Foo&quot; &quot;FOO&quot; :key 'char-upcase)  =&gt;  nil
+(mismatch '(a b) #(a b c))  =&gt;  2
+(mismatch &quot;Win&quot; &quot;The Winner&quot; :start2 4 :end2 7)  =&gt;  nil
+(mismatch &quot;Foo&quot; &quot;Boo&quot; :from-end t)  =&gt;  1
+</lisp></description></definition><definition><define key="search-fun" name="search" type="fun"><args>for-sequence-1 in-sequence-2 <standard>&amp;key</standard> from-end test test-not key (start1 <obj>0</obj>) end1 (start2 <obj>0</obj>) end2</args>
+</define>
+
+<description>Searches <arg>in-sequence-2</arg> (or portion of it) for a subsequence that
+matches <arg>for-sequence-1</arg> (or portion of it) element by element, and
+returns the index in <arg>in-sequence-2</arg> of the beginning of the matching subsequence.
+If no matching subsequence is found, the value is <obj>nil</obj>,
+The comparison of each subsequence of <arg>in-sequence-2</arg> is done with
+<obj>mismatch</obj>, and the <arg>test</arg>, <arg>test-not</arg> and <arg>key</arg> arguments
+are used only to pass along to <obj>mismatch</obj>.
+
+Normally, subsequences are considered starting with the beginning of
+the specified portion of <arg>in-sequence-2</arg> and proceeding toward the end.
+The value is therefore the index of the earliest subsequence that matches.
+If <arg>from-end</arg> is non-<obj>nil</obj>, the subsequences are tried in the reverse
+order, and the value identifies the latest subsequence that matches.
+In either case, the value identifies the beginning of the subsequence found.
+
+<lisp>(search '(#\A #\B) &quot;cabbage&quot; :test 'char-equal)  =&gt;  1
+</lisp></description></definition></section><a name="Sorting and Merging"></a>
+
+
+<section chapter-number="10" name="Sorting and Merging" number="6" title="Sorting and Merging"><index-entry index="concepts" title="sorting"></index-entry>
+
+<p>Several functions are provided for sorting vectors and lists.  These
+functions use algorithms which always terminate no matter what sorting
+predicate is used, provided only that the predicate always terminates. 
+The main sorting functions are not <arg>stable</arg>; that is, equal items may
+not stay in their original order.  If you want a stable sort, use the
+stable versions.  But if you don't care about stability, don't use them
+since stable algorithms are significantly slower.
+</p>
+
+<p>After sorting, the argument (be it list or vector) has been rearranged
+internally so as to be completely ordered.  In the case of a vector
+argument, this is accomplished by permuting the elements of the vector,
+while in the list case, the list is reordered by <obj>rplacd</obj>'s in the
+same manner as <obj>nreverse</obj>.  Thus if the argument should not be
+clobbered, the user must sort a copy of the argument, obtainable by
+<obj>fillarray</obj> or <obj>copylist</obj>, as appropriate.  Furthermore, <obj>sort</obj>
+of a list is like <obj>delq</obj> in that it should not be used for effect;
+the result is conceptually the same as the argument but in fact is a
+different Lisp object.
+</p>
+
+<p>Should the comparison predicate cause an error, such as a wrong type
+argument error, the state of the list or vector being sorted is
+undefined.  However, if the error is corrected the sort proceeds
+correctly. 
+</p>
+
+<p>The sorting package is smart about compact lists; it sorts compact
+sublists as if they were vectors.  See <ref chapter="5" definition-in-file="fd-con" key="cdr-code" section="4" title="Cdr-Coding" type="section"></ref> for an explanation
+of compact lists, and MIT A. I. Lab Memo 587 by Guy L. Steele Jr.
+for an explanation of the sorting algorithm.
+</p>
+<definition><define key="sort-fun" name="sort" type="fun"><args>sequence predicate</args>
+</define>
+
+<description>The first argument to <obj>sort</obj> is a vector or a list whose elements are
+to be sorted.  The second is a predicate, which must be applicable to
+all the objects in the sequence.  The predicate should take two
+arguments, and return non-<obj>nil</obj> if and only if the first argument is
+strictly less than the second (in some appropriate sense). 
+
+The <obj>sort</obj> function proceeds to reorder the elements of the sequence
+according to the predicate, and returns a modified sequence.  Note that
+since sorting requires many comparisons, and thus many calls to the
+predicate, sorting is much faster if the predicate is a compiled
+function rather than interpreted. 
+<br></br><nopara></nopara>Example: Sort a list alphabetically by the first symbol found at any level
+in each element.
+
+
+<lisp>(defun mostcar (x)
+    (cond ((symbolp x) x)
+          ((mostcar (car x)))))
+
+(sort 'fooarray
+      #'(lambda (x y)
+          (string-lessp (mostcar x) (mostcar y))))
+</lisp>
+If <obj>fooarray</obj> contained these items before the sort:
+
+<index-entry index="concepts" title="scream"></index-entry>
+
+
+<lisp>(Tokens (The alien lurks tonight))
+(Carpenters (Close to you))
+((Rolling Stones) (Brown sugar))
+((Beach Boys) (I get around))
+(Beatles (I want to hold you up))
+</lisp>
+<nopara></nopara>then after the sort <obj>fooarray</obj> would contain:
+
+
+<lisp>((Beach Boys) (I get around))
+(Beatles (I want to hold you up))
+(Carpenters (Close to you))
+((Rolling Stones) (Brown sugar))
+(Tokens (The alien lurks tonight))
+</lisp>
+When <obj>sort</obj> is given a list, it may change the order of the conses of
+the list (using <obj>rplacd</obj>), and so it cannot be used merely for
+side-effect; only the <arg>returned value</arg> of <obj>sort</obj> is the sorted
+list.  The original list may have some of its elements missing when
+<obj>sort</obj> returns.  If you need both the original list and the sorted
+list, you must copy the original and sort the copy (see <obj>copylist</obj>,
+<ref definition-in-file="fd-con" key="copylist-fun" title="Function copylist" type="fun"></ref>).
+
+Sorting a vector just moves the elements of the vector into different
+places, and so sorting a vector for side-effect only is all right.
+
+If the argument to <obj>sort</obj> is a vector with a fill pointer, note that,
+like most functions, <obj>sort</obj> considers the active length of the vector
+to be the length, and so only the active part of the vector is
+sorted (see <obj>array-active-length</obj>, <ref definition-in-file="fd-arr" key="array-active-length-fun" title="Function array-active-length" type="fun"></ref>).
+</description></definition><definition><define key="sortcar-fun" name="sortcar" type="fun"><args>sequence predicate</args>
+</define>
+
+<description><obj>sortcar</obj> is the same as <obj>sort</obj> except that the predicate is applied
+to the cars of the elements of <arg>sequence</arg>, instead of directly to the
+elements of <arg>sequence</arg>.  Example:
+
+<lisp>(sortcar '((3 . dog) (1 . cat) (2 . bird)) #'&lt;)
+                   =&gt;   ((1 . cat) (2 . bird) (3 . dog))
+</lisp>
+Remember that <obj>sortcar</obj>, when given a list, may change the order of the
+conses of the list (using <obj>rplacd</obj>), and so it cannot be used merely
+for side-effect; only the <arg>returned value</arg> of <obj>sortcar</obj> is the
+sorted list.  The original list is destroyed by sorting.
+</description></definition><definition><define key="stable-sort-fun" name="stable-sort" type="fun"><args>sequence predicate</args>
+</define>
+
+<description><obj>stable-sort</obj> is like <obj>sort</obj>, but if two elements of <arg>sequence</arg> are equal,
+i.e. <arg>predicate</arg> returns <obj>nil</obj> when applied to them in either order,
+then they remain in their original order.
+</description></definition><definition><define key="stable-sortcar-fun" name="stable-sortcar" type="fun"><args>sequence predicate</args>
+</define>
+
+<description><obj>stable-sortcar</obj> is like <obj>sortcar</obj>, but if two elements of <arg>sequence</arg> are equal,
+i.e. <arg>predicate</arg> returns <obj>nil</obj> when applied to their cars in either order,
+then they remain in their original order.
+</description></definition><definition><define key="sort-grouped-array-fun" name="sort-grouped-array" type="fun"><args>array group-size predicate</args>
+</define>
+
+<description><obj>sort-grouped-array</obj> considers its array argument to
+be composed of records of <arg>group-size</arg> elements each.
+These records are considered as units, and are sorted with respect
+to one another.  The <arg>predicate</arg> is applied to the first element
+of each record; so the first elements act as the keys on which
+the records are sorted.
+</description></definition><definition><define key="sort-grouped-array-group-key-fun" name="sort-grouped-array-group-key" type="fun"><args>array group-size predicate</args>
+</define>
+
+<description>This is like <obj>sort-grouped-array</obj> except that the
+<arg>predicate</arg> is applied to four arguments:  an array,
+an index into that array, a second array, and an index into
+the second array.  <arg>predicate</arg> should consider each index
+as the subscript of the first element of a record in the corresponding
+array, and compare the two records.  This is more general
+than <obj>sort-grouped-array</obj> since the function can get at
+all of the elements of the relevant records, instead of only the first element.
+</description></definition><definition><define key="merge-fun" name="merge" type="fun"><args>result-type sequence1 sequence2 predicate <standard>&amp;key</standard> key</args>
+</define>
+
+<description>Returns a single sequence containing the elements of <arg>sequence1</arg> and
+<arg>sequence2</arg> interleaved in order according to <arg>predicate</arg>.  The
+length of the result sequence is the sum of the lengths of <arg>sequence1</arg>
+and <arg>sequence2</arg>.  <arg>result-type</arg> specifies the type of sequence to
+create, as in <obj>make-sequence</obj>.
+
+The interleaving is done by taking the next element of <arg>sequence1</arg> unless
+the next element of <arg>sequence2</arg> is ``less'' than it according to <arg>predicate</arg>.
+Therefore, if each of the argument sequences is sorted, the result of
+<obj>merge</obj> is also sorted.
+
+<arg>key</arg>, if non-<obj>nil</obj>, is applied to each element to get the object to
+pass to <arg>predicate</arg>, rather than the element itself.  Thus, if <arg>key</arg> is
+<obj>car</obj>, the cars of the elements are compared rather than the entire elements.
+
+
+<lisp>(merge 'list '(1 2 5 6) '(3 5.0 5.1) '&lt;)
+  =&gt;  (1 2 3 5 5.0 5.1 6)
+</lisp></description></definition></section></chapter>
+</document-part>

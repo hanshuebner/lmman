@@ -1,0 +1,2328 @@
+<?xml-stylesheet type="text/xsl" href="lmman.xsl"?>
+<document-part><a name="evaluator-chapter"></a>
+<chapter name="evaluator-chapter" number="3" title="Evaluation"><index-entry index="concepts" title="evaluation"></index-entry>
+
+<p indent="1">        The following is a complete description of the actions taken by the
+evaluator, given a <arg>form</arg> to evaluate.
+</p>
+
+<p indent="1">        If <arg>form</arg> is a number, the result is <arg>form</arg>.
+</p>
+
+<p indent="1">        If <arg>form</arg> is a string, the result is <arg>form</arg>.
+</p>
+
+<p indent="1">        If <arg>form</arg> is a self-evaluating symbol (<obj>nil</obj>, <obj>t</obj> or a keyword
+such as <obj>:foo</obj>), then <arg>form</arg> itself is the result.
+</p>
+
+<p indent="1">        If <arg>form</arg> is any other symbol, the result is the value of <arg>form</arg>,
+considered as a variable.  If <arg>form</arg>'s value is void, an error is
+signaled.  The way symbols are bound to values is explained in
+<ref chapter="3" definition-in-file="fd-eva" key="variable-section" section="1" title="Variables" type="section"></ref> below.
+</p>
+
+<p indent="1">        If <arg>form</arg> is not any of the above types, and is not a list,
+<arg>form</arg> itself is the result.
+</p>
+
+<p indent="1">        In all remaining cases, <arg>form</arg> is a list.  The evaluator
+examines the car of the list to figure out what to do next.  There are
+three possibilities: this form may be a <arg>special form</arg>, a <arg>macro
+form</arg>, or a plain old <arg>function form</arg>.  If the car is an explicit
+function such as a list starting with <obj>lambda</obj>, the form is a function
+form.  If it is a symbol, things depend on the symbol's function
+definition, which may be a special form definition (see
+<ref definition-in-file="fd-fun" key="special-function" type="page"></ref>), a macro definition, or an ordinary function.
+</p>
+
+<p indent="1">        If <arg>form</arg> is a special form, then it is handled accordingly;
+each special form works differently.  All of them are documented in this
+manual.  The internal workings of special forms are explained in more
+detail on <ref definition-in-file="fd-fun" key="special-function" type="page"></ref>, but this hardly ever affects you.
+</p>
+
+<p indent="1">        If <arg>form</arg> is a macro form, then the macro is expanded as
+explained in chapter <ref chapter="19" definition-in-file="macros" key="macros-chapter" title="Macros" type="chapter"></ref>.
+</p>
+
+<p indent="1">        If <arg>form</arg> is a function form, it calls for the <arg>application</arg>
+of a function to <arg>arguments</arg>.  The car of <arg>form</arg> is a function or
+the name of a function.  The cdr of <arg>form</arg> is a list of subforms.  The
+subforms are evaluated, sequentially, and each produces one argument for
+the function.  The function is then applied to those arguments.
+Whatever results the function returns are the values of the original
+<arg>form</arg>.
+</p>
+
+<p indent="1">        There is a lot more to be said about evaluation.  The way variables
+work and the ways in which they are manipulated, including the binding of
+arguments, is explained in <ref chapter="3" definition-in-file="fd-eva" key="variable-section" section="1" title="Variables" type="section"></ref>.  A basic explanation of
+functions is in <ref chapter="3" definition-in-file="fd-eva" key="function-section" section="3" title="Functions" type="section"></ref>.  The way functions can return more
+than one value is explained in <ref chapter="3" definition-in-file="fd-eva" key="multiple-value" section="7" title="Multiple Values" type="section"></ref>.  The description of all
+of the kinds of functions, and the means by which they are manipulated, is
+in chapter <ref chapter="12" definition-in-file="fd-fun" key="function-chapter" title="Functions" type="chapter"></ref>.  Macros are explained in chapter
+<ref chapter="19" definition-in-file="macros" key="macros-chapter" title="Macros" type="chapter"></ref>.  The <obj>evalhook</obj> facility, which lets you do something
+arbitrary whenever the evaluator is invoked, is explained in
+<ref chapter="31" definition-in-file="db-aid" key="evalhook-section" section="12" title="Evalhook" type="section"></ref>.  Special forms are described all over the manual; each
+special form is in the section on the facility it is part of.
+</p>
+<a name="variable-section"></a>
+
+
+<section chapter-number="3" name="variable-section" number="1" title="Variables"><p>In Zetalisp, variables are implemented using symbols.  Symbols
+are used for many things in the language, such as naming functions,
+naming special forms, and being keywords; they are also useful to
+programs written in Lisp, as parts of data structures.  But when
+a symbol is evaluated, its value as a variable is taken.
+</p>
+
+
+
+<subsection name="NIL" title="Variables and Bindings"><p>There are two different ways of changing the value of a variable.  One
+is to <arg>set</arg> the variable.  Setting a variable changes its value to a
+new Lisp object, and the previous value of the variable is forgotten.
+Setting of variables is usually done with the <obj>setq</obj> special form.
+</p>
+
+<index-entry index="concepts" title="binding"></index-entry>
+
+<index-entry index="concepts" title="shadowing of bindings"></index-entry>
+
+<p>The other way to change the value of a variable is with <arg>binding</arg>
+(also called <arg>lambda-binding</arg>).  We say that a variable is <arg>bound</arg>
+(past participle of active verb) by the action of binding; we also say
+that the variable is <arg>bound</arg> (state of being) after a binding has been
+made.  When a binding is made, the variable's old binding and value are
+hidden or <arg>shadowed</arg> by a new binding, which holds a new value.
+Setting a variable places a new value into the current binding; it does
+not change which binding is current.  In addition, shadowed bindings' values
+are not affected by setting the variable.  Binding a variable does not affect
+the value in the old current binding but that binding ceases to be
+current so the value no longer applies.
+</p>
+
+<index-entry index="concepts" title="unbinding"></index-entry>
+
+<p>The action of binding is always followed eventually by the action of
+unbinding.  This discards the current binding of the variable, with its
+value.  The previous binding becomes current again, and the value in
+it--unchanged since the newer binding was made, in normal operation--is
+visible again.
+</p>
+
+<index-entry index="concepts" title="scope of binding"></index-entry>
+
+<p>Binding is normally done on entry to a function and by certain special forms
+(<obj>let</obj>, <obj>do</obj>, <obj>prog</obj> and others).  The bindings are unbound
+on exit from the function or the special form, even nonlocal exit such
+as <obj>go</obj>, <obj>return</obj> or <obj>throw</obj>.  The function or special form
+is said to be the <arg>scope</arg> of the bindings made therein.
+</p>
+
+<p>Here is a simple example of making a binding, shadowing it,
+unshadowing it, examining it, and unbinding it.  The inner, shadowing binding
+is made, examined, set, examined and unbound.
+
+<lisp>(let ((a 5))
+  (print a)         <standard>;prints <obj>5</obj></standard>
+  (let ((a &quot;foo&quot;))
+    (print a)       <standard>;prints <obj>&quot;foo&quot;</obj></standard>
+    (setq a &quot;bar&quot;)
+    (print a))      <standard>;prints <obj>&quot;bar&quot;</obj></standard>
+  (print a))        <standard>;prints <obj>5</obj></standard>
+</lisp></p>
+
+<index-entry index="concepts" title="global binding"></index-entry>
+
+<p>Every symbol has one binding which was never made and is never unbound.
+This is the <arg>global</arg> binding.  This binding is current whenever
+no other binding has been established that would shadow it.
+If you type <obj>(setq x 5)</obj> in the Lisp listen loop, you set
+the global binding of <obj>x</obj>.  Programs often set global bindings
+permanently using <obj>defvar</obj> or one of its cousins (<ref definition-in-file="fd-eva" key="defvar-fun" title="Macro defvar" type="mac"></ref>).
+<obj>setq-globally</obj> and related functions can be used to set or
+refer to the global binding even when it is shadowed (<ref definition-in-file="fd-eva" key="setq-globally-fun" title="Macro setq-globally" type="mac"></ref>).
+</p>
+
+<lisp>(defvar a 5)   ;<standard>sets the global binding</standard>
+
+(let ((a t))
+  (print a))   ;<standard>prints <obj>t</obj></standard>
+
+a =&gt; 5         ;<standard>the global binding is visible again</standard>
+</lisp>
+<index-entry index="concepts" title="void binding"></index-entry>
+
+<p>A binding does not need to have an actual value.  It can be <arg>void</arg>
+instead.  The variable is also called void.  Actually, a void binding
+contains a weird internal value, which the system interprets as meaning
+``there is no value here''.  (This is the data type code <obj>dtp-null</obj>,
+<ref definition-in-file="fd-sub" key="dtp-null-var" type="page"></ref>).  Reference to a variable whose current binding is void
+signals an error.  In fact, nearly all variables' global bindings are
+void; only those that you or the system have set are not void.
+<obj>variable-makunbound</obj> makes the current binding of a variable void
+again (<ref definition-in-file="fd-eva" key="variable-makunbound-fun" title="Special Form variable-makunbound" type="spec"></ref>).
+</p>
+
+<index-entry index="concepts" title="unbound variable"></index-entry>
+
+<p>`Void' used to be called `unbound', and most function names, error
+messages and documentation still use the term `unbound'.  The variable
+is also called `unbound'.  The term `void' is being adopted because it is
+less ambiguous.  `Unbound' can mean `void', or `not bound' (no binding
+established), or the past participle of `unbind'.
+</p>
+
+<index-entry index="concepts" title="lexical scope"></index-entry>
+
+<index-entry index="concepts" title="dynamic scope"></index-entry>
+
+<p>All bindings except global binding have a limited scope: one function
+or special form.  This does not fully specify the scope, however:
+it may be <arg>lexical</arg> or <arg>dynamic</arg>.  When a binding has lexical scope,
+it is visible only from code written within the function or special
+form that established it.  Subroutines called from within the scope,
+but which are written elsewhere, never see the lexical binding.
+By contrast, a dynamic binding is visible the whole time it exists
+(except when it is shadowed, of course), which includes time spent
+in subroutines called from within the binding construct.
+The global binding of a symbol can be regarded as a dynamic binding that
+lasts from the beginning of the session to the end of the session.
+</p>
+
+<index-entry index="concepts" title="special variable"></index-entry>
+
+<p>Lexical and dynamic bindings are made by the same kinds of function
+definitions and special forms.  By default, the bindings are lexical.
+You request a dynamic binding instead using a <arg>special-declaration</arg> at
+the beginning of the body of the function definition or special form.
+Also, some symbols are marked <arg>globally special</arg>; every binding of
+such a symbol is dynamic.  This is what <obj>defvar</obj>, etc., do to a
+symbol.  Dynamic bindings are also called <arg>special bindings</arg>, and the
+variable bound is called a <arg>special variable</arg>.  Each use of a symbol
+as a variable (this includes setting as well as examining) is also
+marked as lexical or dynamic by the same declarations.  A dynamic use
+sees only dynamic bindings, and a lexical use sees only lexical
+bindings.
+</p>
+
+<p>In the examples above it makes no difference whether the bindings of
+<obj>a</obj> are lexical or dynamic, because all the code executed between the
+binding and unbinding is also written lexically within the <obj>let</obj>
+which made the binding.  Here is an example where it makes a difference:
+</p>
+
+<lisp>(defun foo ()
+  (print a))
+
+(let ((a 5))
+  (foo))
+
+&gt;&gt;Error: the variable A is used free but not special.
+</lisp>
+<p>If the intention is that 5 be printed, a dynamic binding is required.
+A dynamic binding would remain visible for all the execution from the
+entry to the <obj>let</obj> to the exit from the <obj>let</obj>, including the execution
+of the definition of <obj>foo</obj>.  Actually, the default is to do lexical binding.
+Since the binding of <obj>a</obj> is lexical, it is visible only for the evaluation
+of expressions written inside the <obj>let</obj>, which does not include the body
+of <obj>foo</obj>.  In fact, an error happens when <obj>foo</obj> evaluates <obj>a</obj>,
+since <obj>a</obj> there is supposed to be lexical and no lexical binding is
+visible.  If you compile <obj>foo</obj>, you get a compiler warning about <obj>a</obj>.
+</p>
+
+<index-entry index="concepts" title="free variable"></index-entry>
+
+<p>The use of <obj>a</obj> inside <obj>foo</obj>, not lexically within any binding of <obj>a</obj>,
+is called <arg>free</arg>, and <obj>a</obj> is called a <arg>free variable</arg> of <obj>foo</obj>.
+Free variables are erroneous unless they are special.  Strictly speaking,
+it is erroneous to type <obj>(setq x 5)</obj> at top level in the Lisp listener
+if <obj>x</obj> has not been made globally special, but this is permitted
+as an exception because it is so often useful.
+</p>
+
+<p>One way to make the example work is to make <obj>a</obj> globally special:
+</p>
+
+<lisp>(defvar a)
+
+(defun foo () (print a))
+
+(let ((a 5))
+  (foo))
+</lisp><nopara></nopara>
+<p>prints 5.  The global specialness of <obj>a</obj> tells <obj>let</obj> to make a dynamic
+binding and tells the evaluation of <obj>a</obj> in <obj>foo</obj> to look for one.
+</p>
+
+<p>Another way is with declarations at the point of binding and the point of use:
+</p>
+
+<lisp>(defun foo ()
+  (declare (special a))
+  (print a))
+
+(let ((a 5))
+  (declare (special a))
+  (foo))
+</lisp>
+<p>A declaration at the point of binding affects only that binding, not
+other bindings made within it to shadow it.  Another way of stating this
+is that a binding is affected only by a declaration in the construct
+that makes the binding, not by declarations in surrounding constructs.
+Thus,
+
+<lisp>(let ((a 5))             ;<standard>this binding is dynamic</standard>
+  (declare (special a))
+  (let ((a &quot;foo&quot;))       ;<standard>this binding is lexical</standard>
+    <arg>no declaration here</arg>
+    ... a ...            ;<standard>this reference is lexical since</standard>
+    ...                  ;<standard> the innermost binding is lexical</standard>
+    (let ()
+      (declare (special a))
+      ... a ...          ;<standard>this reference is dynamic, and sees value <obj>5</obj></standard>
+    ...))
+</lisp></p>
+
+<p>[Currently, for historical compatibility, bindings <arg>are</arg> affected
+by surrounding declarations.  However, whenever this makes a difference,
+the compiler prints a warning to inform the programmer that the declaration
+should be moved.]
+</p>
+
+<p>The classical case where dynamic binding is useful is for
+parameter variables like <obj>*read-base*</obj>:
+
+<lisp>(let ((*read-base* 16.))
+  (read))
+</lisp>reads an expression using hexadecimal numbers by default.
+<obj>*read-base*</obj> is globally special, and the subroutine of <obj>read</obj>
+that reads integers uses <obj>*read-base*</obj> free.
+</p>
+
+<p>Here is an example where lexical bindings are desirable:
+</p>
+
+<lisp>(let ((a nil))
+  (mapatoms (function (lambda (symbol) (push symbol a))))
+  a)
+</lisp>
+<p>Because the reference to <obj>a</obj> from within the internal function
+is lexical, the only binding it can see is the one made by this <obj>let</obj>.
+<obj>mapatoms</obj> cannot interfere by binding <obj>a</obj> itself.
+Consider: if <obj>mapatoms</obj> makes a lexical binding of <obj>a</obj>,
+it is not visible here because this code is not written inside
+the definition of <obj>mapatoms</obj>.  If <obj>mapatoms</obj> makes a dynamic binding
+of <obj>a</obj>, it is not visible here because the reference to <obj>a</obj>
+is not declared special and therefore sees only lexical bindings.
+</p>
+
+<index-entry index="concepts" title="lexical closure"></index-entry>
+
+<p>The fact that <obj>function</obj> is used to mark the internal function
+is crucial.  It causes the lexical environment appropriate for
+the function to be combined with the code for the function
+in a <arg>lexical closure</arg>, which is passed to <obj>mapatoms</obj>.
+</p>
+
+<p>The last example shows <arg>downward</arg> use of lexical closures.
+<arg>Upward</arg> use is also possible, in which a function is closed
+inside a lexical environment and then preserved after the
+binding construct has been exited.
+</p>
+
+<lisp>(defun mycons (a d)
+  (function (lambda (x)
+              (cond ((eq x 'car) a)
+                    ((eq x 'cdr) d)))))
+
+(defun mycar (x) (funcall x 'car))
+(defun mycdr (x) (funcall x 'cdr))
+
+(setq mc (mycons 4 t))
+
+(mycar mc)  =&gt;  4
+(mycdr mc)  =&gt;  t
+</lisp>
+<p><obj>mycons</obj> returns an object that can be called as a function
+with one argument.  This object retains a pointer to a lexical
+environment that has a binding for <obj>a</obj> and a binding for <obj>d</obj>.
+The function <obj>mycons</obj> that made those bindings
+has been exited, but this is irrelevant because the bindings were
+not dynamic.  Since the code of the lambda-expression is lexically
+within the body of <obj>mycons</obj>, that function can see the lexical bindings
+made by <obj>mycons</obj> no matter when it is called.
+The function returned by <obj>mycons</obj> records two values and
+can deliver either of them when asked, and is therefore analogous
+to a cons cell.
+</p>
+
+<p>Only lexical bindings are transferred automatically downward and upward,
+but dynamic bindings can be used in the same ways if explicitly requested
+through the use of the function <obj>closure</obj>.  See <ref chapter="13" definition-in-file="fd-clo" key="closure" section="0" title="Closures" type="section"></ref> for more
+information.
+</p>
+
+<index-entry index="concepts" title="value cell"></index-entry>
+
+<index-entry index="concepts" title="special pdl"></index-entry>
+
+<p>Dynamic bindings, including the global binding, are stored (unless
+shadowed) in a particular place: the symbol's <arg>value cell</arg>.
+This is a word at a fixed offset in the symbol itself.  When a new
+dynamic binding is made, the value in the value cell is saved away
+on a stack called the <arg>special pdl</arg>.  The new binding's value
+is placed in the value cell.  When the new binding is unbound, the
+old binding's value is copied off of the special pdl, into the
+value cell again.  The function <obj>symeval</obj> examines the
+value cell of a symbol chosen at run time; therefore, it sees
+the current dynamic binding of the symbol.
+</p>
+
+<p>Lexical bindings are never stored in the symbol's value cell.  The
+compiler stores them in fixed slots in stack frames.  The interpreter
+stores them in alists that live in the stack.  It should be noted that
+if the lexical binding is made by compiled code, then all code that
+ought to see the binding is necessarily also compiled; if the binding is
+made by interpreted code, then all code that ought to see the binding
+is necessarily interpreted.  Therefore, it is safe for the compiler and
+interpreter to use completely different techniques for recording lexical
+bindings.
+</p>
+
+<p>Lexical binding is the default because the compiler can find with certainty
+all the places where a lexical binding is used, and usually can use short cuts
+based on this certainty.  For dynamic bindings slow but general code must always
+be generated.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Setting Variables"><p>Here are the constructs used for setting variables.
+</p>
+<definition><define key="setq-fun" name="setq" type="spec"><args>{variable value}...</args>
+</define>
+
+<description>The <obj>setq</obj> special form is used to set the value of a variable or of
+many variables.  The first <arg>value</arg> is evaluated, and the first
+<arg>variable</arg> is set to the result.  Then the second <arg>value</arg> is
+evaluated, the second <arg>variable</arg> is set to the result, and so on for
+all the variable/value pairs.  <obj>setq</obj> returns the last value, i.e.
+the result of the evaluation of its last subform.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(setq x (+ 3 2 1) y (cons x nil))
+</exdent></lisp><obj>x</obj> is set to <obj>6</obj>, <obj>y</obj> is set to <obj>(6)</obj>, and the <obj>setq</obj> form
+returns <obj>(6)</obj>.  Note that the first variable was set before
+the second value form was evaluated, allowing that form to use the new value of <obj>x</obj>.
+</description></definition><definition><define key="psetq-fun" name="psetq" type="mac"><args>{variable value}...</args>
+</define>
+
+<description>A <obj>psetq</obj> form is just like a <obj>setq</obj> form, except
+that the variables are set ``in parallel''; first all of the <arg>value</arg> forms
+are evaluated, and then the <arg>variables</arg> are set to the resulting
+values.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(setq a 1)
+(setq b 2)
+(psetq a b b a)
+a =&gt; 2
+b =&gt; 1
+</exdent></lisp></description></definition><definition><define key="variable-location-fun" name="variable-location" type="spec"><args>symbol</args>
+</define>
+
+<description>Returns a locative to the cell in which the value of <arg>symbol</arg> is
+stored.  <arg>symbol</arg> is an unevaluated argument, so the name of the
+symbol must appear explicitly in the code.
+
+For a special variable, this is equivalent to
+
+<lisp>(value-cell-location '<arg>symbol</arg>)
+</lisp>For a lexical variable, the place where the value is stored is
+a matter decided by the interpreter or the compiler, but in any case
+<obj>variable-location</obj> nevertheless returns a pointer to it.
+
+In addition, if <arg>symbol</arg> is a special variable that is closed over,
+the value returned is an external value cell, the same as the value of
+<obj>locate-in-closure</obj> applied to the proper closure and <arg>symbol</arg>.
+This cell <arg>always</arg> contains the closure binding's value, which is
+<arg>current</arg> only inside the closure.  See <ref definition-in-file="fd-clo" key="external-value-cell" type="page"></ref>.
+</description></definition><definition><define key="variable-boundp-fun" name="variable-boundp" type="spec"><args>symbol</args>
+</define>
+
+<description><obj>t</obj> if variable <arg>symbol</arg> is not void.
+It is equivalent to 
+
+<lisp>(location-boundp (variable-location <arg>symbol</arg>))
+</lisp><arg>symbol</arg> is not evaluated.
+</description></definition><definition><define key="variable-makunbound-fun" name="variable-makunbound" type="spec"><args>symbol</args>
+</define>
+
+<description>Makes <arg>symbol</arg>'s current binding void.  It is equivalent to
+
+<lisp>(location-makunbound (variable-location <arg>symbol</arg>))
+</lisp><arg>symbol</arg> is not evaluated.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="Variable Binding Constructs"><p>Here are the constructs used for binding variables.
+</p>
+<definition><define key="let-fun" name="let" type="spec"><args>((var value)...) body...</args>
+</define>
+
+<description>Is used to bind some variables to some objects, and evaluate some forms
+(the body) in the context of those bindings.
+A <obj>let</obj> form looks like
+
+<lisp>(let ((<arg>var1</arg> <arg>vform1</arg>)
+      (<arg>var2</arg> <arg>vform2</arg>)
+      ...)
+  <arg>bform1</arg>
+  <arg>bform2</arg>
+  ...)
+</lisp>When this form is evaluated, first the <arg>vforms</arg> (the values) are evaluated.
+Then the <arg>vars</arg> are bound to the values returned by the
+corresponding <arg>vforms</arg>.  Thus the bindings happen in parallel;
+all the <arg>vforms</arg> are evaluated before any of the <arg>vars</arg> are bound.
+Finally, the <arg>bforms</arg> (the body) are evaluated sequentially, the old values
+of the variables are restored, and the result of the last <arg>bform</arg> is returned.
+
+You may omit the <arg>vform</arg> from a <obj>let</obj> clause, in which case it is as
+if the <arg>vform</arg> were <obj>nil</obj>: the variable is bound to <obj>nil</obj>.
+Furthermore, you may replace the entire clause (the list of the variable
+and form) with just the variable, which also means that the variable
+gets bound to <obj>nil</obj>.  Example:
+
+<lisp>(let ((a (+ 3 3))
+      (b 'foo)
+      (c)
+      d)
+  ...)
+</lisp>Within the body, <obj>a</obj> is bound to <obj>6</obj>, <obj>b</obj> is bound to <obj>foo</obj>, <obj>c</obj> is
+bound to <obj>nil</obj>, and <obj>d</obj> is bound to <obj>nil</obj>.
+</description></definition><definition><define key="let*-fun" name="let*" type="spec"><args>((var value)...) body...</args>
+</define>
+
+<description><obj>let*</obj> is the same as <obj>let</obj> except that the binding is sequential.  Each
+<arg>var</arg> is bound to the value of its <arg>vform</arg> before the next <arg>vform</arg>
+is evaluated.  This is useful when the computation of a <arg>vform</arg> depends on
+the value of a variable bound in an earlier <arg>vform</arg>.  Example:
+
+<lisp>(let* ((a (+ 1 2))
+       (b (+ a a)))
+ ...)
+</lisp>Within the body, <obj>a</obj> is bound to <obj>3</obj> and <obj>b</obj> is bound to <obj>6</obj>.
+</description></definition><definition><define key="let-if-fun" name="let-if" type="spec"><args>condition ((var value)...) body...</args>
+</define>
+
+<description><obj>let-if</obj> is a variant of <obj>let</obj> in which the binding of variables is conditional.
+The <obj>let-if</obj> special form, typically written as
+
+<lisp>(let-if <arg>cond</arg>
+        ((<arg>var-1</arg> <arg>val-1</arg>) (<arg>var-2</arg> <arg>val-2</arg>)...)
+  <arg>body</arg>...)
+</lisp>first evaluates the predicate form <arg>cond</arg>.  If the result is non-<obj>nil</obj>, the value forms
+<arg>val-1</arg>, <arg>val-2</arg>, etc. are evaluated and then the variables <arg>var-1</arg>, <arg>var-2</arg>,
+etc. are bound to them.  If the result is <obj>nil</obj>, the
+<arg>vars</arg> and <arg>vals</arg> are ignored.  Finally the body forms are evaluated.
+
+The bindings are always dynamic, and it is the user's responsibility
+to put in appropriate declarations so that the body forms consider
+the variables dynamic.
+</description></definition><definition><define key="let-globally-fun" name="let-globally" type="mac"><args>((var value)...) body...</args>
+</define><define key="let-globally-if-fun" name="let-globally-if" type="mac"><args>condition ((var value)...) body...</args>
+</define>
+
+<description><obj>let-globally</obj> is similar in form to <obj>let</obj> (see <ref definition-in-file="fd-eva" key="let-fun" title="Special Form let" type="spec"></ref>).  The
+difference is that <obj>let-globally</obj> does not <arg>bind</arg> the variables;
+instead, it saves the old values and <arg>sets</arg> the variables, and sets up
+an <obj>unwind-protect</obj> (see <ref definition-in-file="fd-flo" key="unwind-protect-fun" title="Special Form unwind-protect" type="spec"></ref>) to set them back.  The
+important consequence is that, with
+<obj>let-globally</obj>, when the current stack group (see <ref chapter="14" definition-in-file="fd-sg" key="stack-group" section="0" title="Stack Groups" type="section"></ref>)
+co-calls some other stack group, the old values of the variables are
+<arg>not</arg> restored.  Thus <obj>let-globally</obj> makes the new values visible in
+all stack groups and processes that don't bind the variables themselves,
+not just in the current stack group.  Therefore, <obj>let-globally</obj>
+can be used for communication between stack groups and between processes.
+
+<obj>let-globally-if</obj> modifies and restores the variables only if the
+value of <arg>condition</arg> is non-<obj>nil</obj>.  The <arg>body</arg> is executed in any case.
+
+Since <obj>let-globally</obj> is based on <obj>setq</obj>, it makes sense for both
+lexical and dynamic variables.  But its main application exists
+only for dynamic variables.
+
+The <obj>globally</obj> in <obj>let-globally</obj> does not mean the same thing
+as the <obj>globally</obj> in <obj>setq-globally</obj> and related functions.
+</description></definition><definition><define key="progv-fun" name="progv" type="spec"><args>symbol-list value-list body...</args>
+</define>
+
+<description><obj>progv</obj> is a special form to provide the user with extra control
+over binding.  It binds a list of variables dynamically to a list of values,
+and then evaluates some forms.  The lists of variables and values
+are computed quantities; this is what makes <obj>progv</obj> different from
+<obj>let</obj>, <obj>prog</obj>, and <obj>do</obj>.
+
+<obj>progv</obj> first evaluates <arg>symbol-list</arg> and <arg>value-list</arg>, and then binds each
+symbol to the corresponding value.  If too few values are supplied, the
+remaining symbols' bindings are made empty.  If too many values are
+supplied, the excess values are ignored.
+
+After the symbols have been bound to the values, the <arg>body</arg> forms are
+evaluated, and finally the symbols' bindings are undone.
+The result returned is the value of the last form in the body.
+Assuming that the variables <obj>a</obj>, <obj>b</obj>, <obj>foo</obj> and <obj>bar</obj>
+are globally special, we can do:
+
+
+<lisp>(setq a 'foo b 'bar)
+
+(progv (list a b 'b) (list b)
+  (list a b foo bar))
+    =&gt; (foo nil bar nil)
+</lisp>
+<nopara></nopara>During the evaluation of the body of this <obj>progv</obj>, <obj>foo</obj>
+is bound to <obj>bar</obj>, <obj>bar</obj> is bound to <obj>nil</obj>, <obj>b</obj> is
+bound to <obj>nil</obj>, and <obj>a</obj> retains its top-level value <obj>foo</obj>.
+</description></definition><definition><define key="progw-fun" name="progw" type="spec"><args>vars-and-vals-form body...</args>
+</define>
+
+<description><obj>progw</obj> is like <obj>progv</obj> except that it has a different way of
+deciding which variables to bind and what values to give them.  Like
+<obj>progv</obj>, it always makes dynamic bindings.
+
+First, <arg>vars-and-val-forms-form</arg> is evaluated.  Its value should be a list
+that looks like the first subform of a <obj>let</obj>:
+
+<lisp>  ((<arg>var1</arg> <arg>val-form-1</arg>)
+   (<arg>var2</arg> <arg>val-form-2</arg>)
+   ...)
+</lisp>Each element of this list is processed in turn, by evaluating the
+<arg>val-form</arg> and binding the <arg>var</arg> dynamically to the resulting
+value.  Finally, the <arg>body</arg> forms are evaluated sequentially, the
+bindings are undone, and the result of the last form is returned.  Note
+that the bindings are sequential, not parallel.
+
+This is a very unusual special form because of the way the evaluator is
+called on the result of an evaluation.  <obj>progw</obj> is useful mainly for
+implementing special forms and for functions part of whose contract is
+that they call the interpreter.  For an example of the latter, see
+<obj>sys:*break-bindings*</obj> (<ref definition-in-file="fd-hac" key="sys:*break-bindings*-var" title="Variable sys:*break-bindings*" type="var"></ref>); <obj>break</obj>
+implements this by using <obj>progw</obj>.
+</description></definition>
+<p>See also <obj>%bind</obj> (<ref definition-in-file="fd-sub" key="%bind-fun" title="Function %bind" type="fun"></ref>), which is a
+subprimitive that gives you maximal control over binding.
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="Defining Global Variables"><p>Here are the constructs for defining global variables.
+Each makes the variable globally special, provides a value,
+records documentation, and allows the editor to find where
+all this was done.
+</p>
+<definition><define key="defvar-fun" name="defvar" type="mac"><args>variable [initial-value] [documentation]</args>
+</define>
+
+<description><obj>defvar</obj> is the recommended way to declare the use of a global variable in a
+program.  Placed at top level in a file,
+
+<lisp>(defvar <arg>variable</arg> <arg>initial-value</arg> 
+  &quot;<arg>documentation</arg>&quot;)
+</lisp>declares <arg>variable</arg> globally special and records its location in the
+file for the sake of the editor so that you can ask to see where the
+variable is defined.  The documentation string is remembered and
+returned if you do <obj>(documentation '<arg>variable</arg> 'variable)</obj>.
+
+If <arg>variable</arg> is void, it is initialized to the result of evaluating
+the form <arg>initial-value</arg>.  <arg>initial-value</arg> is evaluated only if it
+is to be used.
+
+If you do not wish to give <arg>variable</arg> any initial value, use the
+symbol <obj>:unbound</obj> as the <arg>initial-value</arg> form.  This is treated
+specially; no attempt is made to evaluate <obj>:unbound</obj>.
+
+Using a documentation string is better than using a comment to describe
+the use of the variable, because the documentation string is accessible
+to system programs that can show the documentation to you while you are
+using the machine.  While it is still permissible to omit
+<arg>initial-value</arg> and the documentation string, it is recommended that
+you put a documentation string in every <obj>defvar</obj>.
+
+<obj>defvar</obj> should be used only at top level, never in function
+definitions, and only for global variables (those used by more than one
+function).  <obj>(defvar foo 'bar)</obj> is roughly equivalent to
+
+<lisp>(declare (special foo))
+(if (not (boundp 'foo))
+    (setq foo 'bar))
+</lisp>
+If <obj>defvar</obj> is used in a patch file (see <ref chapter="29" definition-in-file="patch" key="patch-facility" section="8" title="The Patch Facility" type="section"></ref>)
+or is a single form (not a region) evaluated with the editor's
+compile/evaluate from buffer commands,
+if there is an initial-value the variable is always set to it
+regardless of whether it is void.
+</description></definition><definition><define key="defconst-fun" name="defconst" type="mac"><args>variable initial-value [documentation]</args>
+</define><define key="defparameter-fun" name="defparameter" type="mac"><args>variable initial-value [documentation]</args>
+</define>
+
+<description><obj>defconst</obj> is the same as <obj>defvar</obj> except that if an initial value
+is given the variable is always set to it regardless of whether it is
+already bound.  The rationale for this is that <obj>defvar</obj> declares a
+global variable, whose value is initialized to something but will then
+be changed by the functions that use it to maintain some state.  On the
+other hand, <obj>defconst</obj> declares a constant, whose value will be
+changed only by changes <arg>to</arg> the program, never by the operation of
+the program as written.  <obj>defconst</obj> always sets the variable to the
+specified value so that if, while developing or debugging the program,
+you change your mind about what the constant value should be, and then
+you evaluate the <obj>defconst</obj> form again, the variable gets the new
+value.  It is <arg>not</arg> the intent of <obj>defconst</obj> to declare that the
+value of <arg>variable</arg> will never change; for example, <obj>defconst</obj> is
+<arg>not</arg> a license to the compiler to build assumptions about the value of
+<arg>variable</arg> into programs being compiled.
+
+As with <obj>defvar</obj>, you should include a documentation string in every <obj>defconst</obj>.
+</description></definition><definition><define key="defconstant-fun" name="defconstant" type="mac"><args>symbol value [documentation]</args>
+</define>
+
+<description>Defines a true constant.  The compiler is permitted to assume
+it will never change.  Therefore, if a function that refers
+to <arg>symbol</arg>'s value is compiled, the compiled function may
+contain <arg>value</arg> merged into it and may not actually refer
+to <arg>symbol</arg> at run time.
+
+You should not change the value of <arg>symbol</arg> except by
+reexecuting the <obj>defconstant</obj> with a new <arg>value</arg>.  If you do this,
+it is necessary to recompile any compiled functions that refer
+to <arg>symbol</arg> 's value.
+</description></definition></subsection>
+
+
+<subsection name="NIL" title="The Global Binding"><p>This section describes functions which examine or set the global binding of a
+variable even when it is shadowed and cannot be accessed simply by evaluating
+the variable or setting it.
+</p>
+
+<p>The primary use of these functions is for init files to set
+variables which are bound by the <obj>load</obj> function, such as <obj>package</obj>
+or <obj>base</obj>.  <obj>(setq package (find-package 'foo))</obj> executed from a
+file being loaded has no effect beyond the end of loading that file,
+since it sets the binding of <obj>package</obj> made by <obj>load</obj>.  However, if
+you use <obj>setq-globally</obj> instead, the current binding in effect during
+loading is actually not changed, but when the <obj>load</obj> exits and the
+global binding is in effect again, <obj>foo</obj> will become the current package.
+</p>
+<definition><define key="setq-globally-fun" name="setq-globally" type="mac"><args>{symbol value}...</args>
+</define>
+
+<description>Sets each <arg>symbol</arg>'s global binding to the <arg>value</arg> that follows.
+The <arg>value</arg>'s are evaluated but the <arg>symbol</arg>'s are not.
+</description></definition><definition><define key="set-globally-fun" name="set-globally" type="fun"><args>symbol value</args>
+</define>
+
+<description>Sets the global binding of <arg>symbol</arg> to <arg>value</arg>.
+</description></definition><definition><define key="makunbound-globally-fun" name="makunbound-globally" type="fun"><args>symbol</args>
+</define>
+
+<description>Makes the global binding of <arg>symbol</arg> be void.
+</description></definition><definition><define key="boundp-globally-fun" name="boundp-globally" type="fun"><args>symbol</args>
+</define>
+
+<description>Returns <obj>t</obj> if the global binding of <arg>symbol</arg> is not void.
+</description></definition><definition><define key="symeval-globally-fun" name="symeval-globally" type="fun"><args>symbol</args>
+</define><define key="symbol-value-globally-fun" name="symbol-value-globally" type="fun"><args>symbol</args>
+</define>
+
+<description>Return the value of the global binding of <arg>symbol</arg>.
+An error is signaled if the global binding is void.
+</description></definition>
+<p>See also <obj>pkg-goto-globally</obj> (<ref definition-in-file="packd" key="pkg-goto-globally-fun" title="Function pkg-goto-globally" type="fun"></ref>), a ``globally''
+version of <obj>pkg-goto</obj>.  Note that <obj>let-globally</obj> is <arg>not</arg> analogous
+to these functions, as it modifies the current bindings of symbols rather
+than their global bindings.  This is an unfortunate collision of naming
+conventions.
+</p>
+</subsection></section><a name="setf"></a>
+
+
+<section chapter-number="3" name="setf" number="2" title="Generalized Variables"><index-entry index="concepts" title="setf"></index-entry>
+
+<p>In Lisp, a variable is something that can remember one piece of data.
+The primary conceptual operations on a variable are to recover that
+piece of data and to change it.  These might be called <arg>access</arg> and
+<arg>update</arg>.  The concept of variables named by symbols, explained above,
+can be generalized to any storage location that can
+remember one piece of data, no matter how that location is named.
+</p>
+
+<p>For each kind of generalized variable, there are typically three
+functions which implement the conceptual <arg>access</arg>, <arg>update</arg> and
+<arg>locate</arg> operations.  For example, <obj>symeval</obj> accesses a symbol's
+value cell, <obj>set</obj> updates it, and <obj>value-cell-location</obj> returns the
+value cell's location.  <obj>array-leader</obj> accesses the contents of an
+array leader element, <obj>store-array-leader</obj> updates it, and
+<obj>ap-leader</obj> returns the location of the leader element.  <obj>car</obj>
+accesses the car of a cons, <obj>rplaca</obj> updates it, and <obj>car-location</obj>
+returns the location of the car.
+</p>
+
+<p>Rather than thinking of this as two functions, which operate on a storage
+location somehow deduced from their arguments, we can shift our point of
+view and think of the access function as a <arg>name</arg> for the storage
+location.  Thus <obj>(symeval 'foo)</obj> is a name for the value of <obj>foo</obj>, and
+<obj>(aref a 105)</obj> is a name for the 105th element of the array <obj>a</obj>.
+Rather than having to remember the update function associated with each
+access function, we adopt a uniform way of updating storage locations named
+in this way, using the <obj>setf</obj> special form.  This is analogous to the
+way we use the <obj>setq</obj> special form to convert the name of a variable
+(which is also a form which accesses it) into a form that updates it.
+In fact, <obj>setf</obj> is an upward compatible generalization of <obj>setq</obj>.
+Similarly, the location of the generalized variable can be obtained
+using the <obj>locf</obj> construct.
+</p>
+
+
+
+<subsection name="NIL" title="setf"><p><obj>setf</obj> is the construct for storing a new value into a generalized variable
+which is identified by the form which would obtain the current value of the
+variable.  For example,
+
+<lisp>(setf (car x) y)
+</lisp>stores the value of <obj>y</obj> into the car of the value of <obj>x</obj>.
+</p>
+
+<p><obj>setf</obj> is particularly useful in combination with structure-accessing
+macros, such as those created with <obj>defstruct</obj>, because the knowledge of the
+representation of the structure is embedded inside the macro, and the programmer
+shouldn't have to know what it is in order to alter an element of the structure.
+</p>
+
+<p><obj>setf</obj> is actually a macro which expands into the appropriate update
+code.  It has a database, explained in <ref chapter="19" definition-in-file="macros" key="setf-extension" section="10" title="Extending setf and locf" type="section"></ref>, that
+associates from access functions to update functions.
+</p>
+<definition><define key="setf-fun" name="setf" type="mac"><args>{place value}...</args>
+</define>
+
+<description>Takes a form called <arg>place</arg> that <arg>accesses</arg> something and ``inverts'' the form to produce a corresponding form to <arg>update</arg> the thing.
+A <obj>setf</obj> expands into an update form, which stores the result of evaluating
+the form <arg>value</arg> into the place referenced by the <arg>place</arg>.
+If multiple <arg>place</arg>`s and <arg>value</arg>`s are specified,
+each one specifies an update, and each update is done before
+the following updates' arguments are computed.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(setf (array-leader foo 3) 'bar)
+                ==&gt; (store-array-leader 'bar foo 3)
+(setf a 3) ==&gt; (setq a 3)
+(setf (plist 'a) '(foo bar)) ==&gt; (setplist 'a '(foo bar))
+(setf (aref q 2) 56) ==&gt; (sys:set-aref q 2 56)
+(setf (cadr w) x) ==&gt; (sys:setcdr (cdr w) x)
+</exdent></lisp>
+The value of a <obj>setf</obj> form is always the <arg>value</arg> stored by
+the last update it performs.  Thus, <obj>(setf (cadr w) x)</obj>
+is not really the same as <obj>(rplaca (cdr w) x)</obj>, because
+the <obj>setf</obj> returns <obj>x</obj> and the <obj>rplaca</obj> returns
+<obj>w</obj>.  In fact, the expansion of <obj>setf</obj> of <obj>cdr</obj> uses
+an internal function <obj>si:setcdr</obj> which exists specifically
+for this purpose.
+
+If <arg>place</arg> invokes a macro or a substitutable function, then
+<obj>setf</obj> expands the <arg>place</arg> and starts over again.  This lets you
+use <obj>setf</obj> together with <obj>defstruct</obj> accessor macros.
+</description></definition><definition><define key="sys:unknown-setf-reference-condition" name="sys:unknown-setf-reference" type="condition"><args>(<obj>error</obj>)</args>
+</define><define key="sys:unknown-locf-reference-condition" name="sys:unknown-locf-reference" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>These are signaled when <obj>setf</obj> or <obj>locf</obj> does not know how to expand
+the <arg>place</arg>.  The <obj>:form</obj> operation on the condition instance
+returns the <arg>access-form</arg>.
+</description></definition><definition><define key="psetf-fun" name="psetf" type="mac"><args>{place value}...</args>
+</define>
+
+<description>Stores each <arg>value</arg> into the corresponding <arg>place</arg>, with the changes taking
+effect in parallel.  Thus,
+
+<lisp>(psetf (car x) (cdr x) (cdr x) (car x))
+</lisp>interchanges the car and cdr of <obj>x</obj>.
+
+The subforms of the <arg>place</arg>s, and the <arg>values</arg>, are evaluated
+in order; thus, in 
+
+<lisp>(psetf (aref a (tyi)) (tyi)
+       (aref b (tyi)) (aref a (tyi)))
+</lisp>the first input character indexes <obj>a</obj>, the second is stored, the third
+indexes <obj>b</obj>, and the fourth indexes <obj>a</obj>.  The parallel nature of
+<obj>psetf</obj> implies that, should the first and fourth characters be equal,
+the old value of that element of <obj>a</obj> is what is stored into the array
+<obj>b</obj>, rather than the new value which comes from the second character
+read.
+</description></definition><definition><define key="shiftf-fun" name="shiftf" type="mac"><args>place... </args>
+</define>
+
+<description>Sets the first <arg>place</arg> from the second, the second from the third, and
+so on.  The last <arg>place</arg> is not set, so it doesn't really need to be a
+<obj>setf</obj>'able place; it can be any form.  The value of the <obj>shiftf</obj>
+form is the old value of the first <arg>place</arg>.  Thus,
+
+<lisp>(shiftf x (car (foo)) b)
+</lisp>evaluates <obj>(foo)</obj>, copies the car of that value into <obj>x</obj>,
+copies <obj>b</obj> into the car of that value, then returns the
+former value of <obj>x</obj>.
+</description></definition><definition><define key="rotatef-fun" name="rotatef" type="mac"><args>place...</args>
+</define>
+
+<description>Sets the first <arg>place</arg> from the second, the second from the third, and
+so on, and sets the last <arg>place</arg> from the old value of the first
+<arg>place</arg>.  Thus, the values of the <arg>place</arg>'s are permuted among the
+<arg>place</arg>'s in a cyclic fashion.
+
+With only two <standard>place</standard>'s, their values are exchanged:
+
+<lisp>(rotatef (car x) (cdr x))
+</lisp>is equivalent to the <obj>psetf</obj> example above.
+</description></definition><definition><define key="swapf-fun" name="swapf" type="mac"><args>place1 place2</args>
+</define>
+
+<description>Exchanges the contents of <arg>place1</arg> and <arg>place2</arg>.
+This is a special case of <obj>rotatef</obj>.
+</description></definition><definition><define key="incf-fun" name="incf" type="mac"><args>place [amount]</args>
+</define>
+
+<description>Increments the value of a generalized variable.  <obj>(incf <arg>ref</arg>)</obj> increments
+the value of <arg>ref</arg> by 1.  <obj>(incf <arg>ref</arg> <arg>amount</arg>)</obj> adds <arg>amount</arg>
+to <arg>ref</arg> and stores the sum back into <arg>ref</arg>.
+The <obj>incf</obj> form returns the value after incrementation.
+
+<obj>incf</obj> expands into a <obj>setf</obj> form, so <arg>ref</arg> can be anything that
+<obj>setf</obj> understands as its <arg>place</arg>.
+
+<obj>incf</obj> is defined using <obj>define-modify-macro</obj>, <ref definition-in-file="macros" key="define-modify-macro-fun" title="Function define-modify-macro" type="fun"></ref>.
+</description></definition><definition><define key="decf-fun" name="decf" type="mac"><args>place [amount]</args>
+</define>
+
+<description>Decrements the value of a generalized variable.  Just like <obj>incf</obj>
+except that <arg>amount</arg> (or 1) is subtracted rather than added.
+</description></definition>
+<p>See also <obj>push</obj> (<ref definition-in-file="fd-con" key="push-fun" title="Macro push" type="mac"></ref>), <obj>pop</obj> (<ref definition-in-file="fd-con" key="pop-fun" title="Macro pop" type="mac"></ref>), <obj>pushnew</obj>
+(<ref definition-in-file="fd-con" key="pushnew-fun" title="Macro pushnew" type="mac"></ref>), <obj>getf</obj> (<ref definition-in-file="fd-con" key="getf-fun" title="Macro getf" type="mac"></ref>) and <obj>remf</obj> (<ref definition-in-file="fd-con" key="remf-fun" title="Macro remf" type="mac"></ref>).
+</p>
+</subsection>
+
+
+<subsection name="NIL" title="locf"><p>Besides the <arg>access</arg> and <arg>update</arg> conceptual operations on
+generalized variables, there is a third basic operation, which we might call
+<arg>locate</arg>.  Given the name of a storage cell, the <arg>locate</arg> operation
+returns the address of that cell as a locative pointer (see
+<ref chapter="15" definition-in-file="fd-loc" key="locative" section="0" title="Locatives" type="section"></ref>).  This locative pointer is a first-class Lisp data object
+which is a kind of reference to the cell.  It can be passed as an
+argument to a function which operates on any cell,
+regardless of where the cell is found.  It can be used to <arg>bind</arg> the contents
+of the cell, just as special variables are bound,
+using the <obj>%bind</obj> subprimitive (see <ref definition-in-file="fd-sub" key="%bind-fun" title="Function %bind" type="fun"></ref>).
+</p>
+
+<p>Of course, this can work only on generalized variables whose implementation is really to
+store their value in a memory cell.  A generalized variable with an <arg>update</arg>
+operation that encrypts the value and an <arg>access</arg> operation that decrypts
+it could not have the <arg>locate</arg> operation, since the value per se is not
+actually stored anywhere.
+</p>
+<definition><define key="locf-fun" name="locf" type="mac"><args>place</args>
+</define>
+
+<description><obj>locf</obj> takes a form that <arg>accesses</arg> some cell, and produces
+a corresponding form to create a locative pointer to that cell.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(locf (array-leader foo 3)) ==&gt; (ap-leader foo 3)
+(locf a) ==&gt; (value-cell-location 'a)
+(locf (plist 'a)) ==&gt; (property-cell-location 'a)
+(locf (aref q 2)) ==&gt; (aloc q 2)
+</exdent></lisp>
+If <arg>place</arg> invokes a macro or a substitutable function, then
+<obj>locf</obj> expands the <arg>place</arg> and starts over again.  This lets you
+use <obj>locf</obj> together with <obj>defstruct</obj> accessor macros.
+</description></definition></subsection></section><a name="lambda-list-keywords"></a>
+
+
+<section chapter-number="3" name="lambda-list-keywords" number="3" title="Functions"><index-entry index="concepts" title="lambda list"></index-entry>
+
+<p>In the description of evaluation on <ref definition-in-file="fd-eva" key="description-of-evaluation" type="page"></ref>, we
+said that evaluation of a function form works by applying the function
+to the results of evaluating the argument subforms.  What is a function,
+and what does it mean to apply it?  In Zetalisp there are many
+kinds of functions, and applying them may do many different kinds of
+things.  For full details, see <ref chapter="12" definition-in-file="fd-fun" key="function-functions" section="0" title="Functions" type="section"></ref>.  Here we
+explain the most basic kinds of functions and how they work.  In
+particular, this section explains <arg>lambda lists</arg> and all their
+important features.
+</p>
+
+<p>The simplest kind of user-defined function is the <arg>lambda-expression</arg>,
+which is a list that looks like:
+
+<lisp>(lambda <arg>lambda-list</arg> <arg>body1</arg> <arg>body2</arg>...)
+</lisp>The first element of the lambda-expression is the symbol <obj>lambda</obj>; the
+second element is a list called the <arg>lambda list</arg>, and the rest of the
+elements are called the <arg>body</arg>.  The lambda list, in its simplest
+form, is just a list of variables.  Assuming that this simple form
+is being used, here is what happens when a lambda expression is applied
+to some arguments.  First, the number of arguments and the number of
+variables in the lambda list must be the same, or else an error is signaled.
+Each variable is bound to the corresponding argument value.  Then
+the forms of the body are evaluated sequentially.  After this, the
+bindings are all undone, and the value of the last form in the body is
+returned.
+</p>
+
+<p>This may sound something like the description of <obj>let</obj>, above.  The
+most important difference is that the lambda-expression is not a form at
+all; if you try to evaluate a lambda-expression, you get an error because
+<obj>lambda</obj> is not a defined function.  The lambda-expression is a
+<arg>function</arg>, not a form.   A <obj>let</obj> form gets evaluated, and the
+values to which the variables are bound come from the evaluation of some
+subforms inside the <obj>let</obj> form; a lambda-expression gets applied, and
+the values are the arguments to which it is applied.
+</p>
+
+<index-entry index="concepts" title="parameters"></index-entry>
+
+<p>The variables in the lambda list are sometimes called <arg>parameters</arg>,
+by analogy with other languages.  Some other terminologies would refer
+to these as <arg>formal parameters</arg>, and to arguments as <arg>actual parameters</arg>.
+</p>
+
+<p>Lambda lists can have more complex structure than simply being a list of
+variables.  There are additional features accessible by using certain
+keywords (which start with <obj>&amp;</obj>) and/or lists as elements of the
+lambda list.
+</p>
+
+<p>The principal weakness of simple lambda lists is that any
+function written with one must only take a certain, fixed number of
+arguments.  As we know, many very useful functions, such as <obj>list</obj>,
+<obj>append</obj>, <obj>+</obj>, and so on, accept a varying number of arguments.
+Maclisp solved this problem by the use of <arg>lexprs</arg> and <arg>lsubrs</arg>,
+which were somewhat inelegant since the parameters had to be referred to
+by numbers instead of names (e.g. <obj>(arg 3)</obj>).  (For compatibility
+reasons, Zetalisp supports <arg>lexpr</arg>s, but they should not be
+used in new programs.)  Simple lambda lists also require that
+arguments be matched with parameters by their position in the
+sequence.  This makes calls hard to read when there are a great many
+arguments.  Keyword parameters enable the use of other, more readable styles of call.
+</p>
+
+<index-entry index="concepts" title="keyword parameters"></index-entry>
+
+<index-entry index="concepts" title="positional parameters"></index-entry>
+
+<index-entry index="concepts" title="optional parameters"></index-entry>
+
+<index-entry index="concepts" title="required parameters"></index-entry>
+
+<index-entry index="concepts" title="rest parameters"></index-entry>
+
+<p indent="1">        In general, a function in Zetalisp has zero or more
+<arg>positional</arg> parameters, followed if desired by a single <arg>rest</arg>
+parameter, followed by zero or more <arg>keyword</arg> parameters.  The
+positional parameters may be <arg>required</arg> or <arg>optional</arg>,
+but all the optional parameters must follow all the required ones.
+The required/optional distinction does not apply to the rest
+parameter; all keyword parameters are optional.
+</p>
+
+<p>The caller must provide enough arguments so that each of the required
+parameters gets bound, but he may provide extra arguments for some of
+the optional parameters.  Also, if there is a rest parameter, he can
+provide as many extra arguments as he wants, and the rest parameter
+is bound to a list of all these extras.  Optional parameters may
+have a <arg>default-form</arg>, which is a form to be evaluated to produce
+the default value for the parameter if no argument is supplied.
+</p>
+
+<p>Positional parameters are matched with arguments by the position of
+the arguments in the argument list.  Keyword parameters are matched
+with their arguments by matching the keyword name; the arguments need
+not appear in the same order as the parameters.  If an optional
+positional argument is omitted, then no further arguments can be
+present.  Keyword parameters allow the caller to decide independently
+for each one whether to specify it.
+</p>
+
+<p>Here is the exact algorithm used to
+match up the arguments with the parameters:
+
+<table><tbody><tr><td><standard>Required positional parameters:</standard></td><td>The first required positional parameter is bound to the first
+argument.  <obj>apply</obj> continues to bind successive required
+positional parameters
+to the successive arguments.  If, during this process, there are no
+arguments left but there are still some required parameters which have
+not been bound yet, it is an error (``too few arguments'').
+
+</td></tr><tr><td><standard>Optional positional parameters:</standard></td><td>After all required parameters are handled, <obj>apply</obj> continues with the
+optional positional parameters, if any.  It binds each successive
+parameter to the next argument.  If, during this process, there are no
+arguments left, each remaining optional parameter's default-form is
+evaluated, and the parameter is bound to it.  This is done one parameter
+at a time; that is, first one default-form is evaluated, and then the
+parameter is bound to it, then the next default-form is evaluated, and
+so on.  This allows the default for an argument to depend on the
+previous argument.
+
+</td></tr><tr><td><standard>After the positional parameters:</standard></td><td>Now, if there are no remaining parameters (rest or keyword), and there are no
+remaining arguments, we are finished.  If there are no more parameters
+but there are still some arguments remaining, an error is signaled (``too
+many arguments'').  If parameters remain, all the remaining arguments
+are used for <arg>both</arg> the rest parameter, if any, and the keyword
+parameters.
+
+</td></tr><tr><td><standard>Rest parameter:</standard></td><td>If there is a rest parameter, it is bound to a list of all
+the remaining arguments.  If there are no
+remaining arguments, it is bound to <obj>nil</obj>.
+
+</td></tr><tr><td><standard>Keyword parameters:</standard></td><td>If there are keyword parameters, the same remaining arguments are
+used to bind them, as follows.
+        The arguments for the keyword parameters are treated as a list
+of alternating keyword symbols and associated values.  Each symbol is
+matched with <obj>eq</obj> against the allowed parameter keywords, which have
+by default the same names as the parameters but in the <obj>keyword</obj>
+package.  (You can specify the keyword symbol explicitly in the lambda
+list if you must; see below.)  Often the symbol arguments are constants
+in the program, and it is convenient for this usage that keywords all
+evaluate to themselves, but it is permissible for them to be computed by
+expressions.
+        If any keyword parameter has not received a value when all the
+arguments have been processed, the default-form for the parameter is
+evaluated and the parameter is bound to its value.  All keyword
+parameters are optional.
+
+<index-entry index="keywords" title=":allow-other-keys &quot;keyword arguments&quot;"></index-entry>
+        There may be a keyword symbol among the arguments which does not
+match any keyword parameter name.  By default this is an error, but the
+lambda list can specify that there should be no error using
+<obj>&amp;allow-other-keys</obj>.  Also, if one of the keyword symbols among the
+arguments is <obj>:allow-other-keys</obj> and the value that follows it is
+non-<obj>nil</obj> then there is no error.  When there is no error, for either
+reason, the non-matching symbols and their associated values are simply
+ignored.  The function can access these symbols and values through the
+rest parameter, if there is one.  It is common for a function to check
+only for certain keywords, and pass its rest parameter to another
+function using <obj>apply</obj>; that function will check for the keywords that
+concern it.
+</td></tr></tbody></table></p>
+
+<p indent="1">        The way you express which parameters are required, optional, rest and keyword
+is by means of specially recognized symbols, which are called
+<obj>&amp;-<arg>keywords</arg></obj>, in the lambda list.  All such symbols' print names
+begin with the character `<obj>&amp;</obj>'.  A list of all such symbols is the value of
+the symbol <obj>lambda-list-keywords</obj>. 
+</p>
+
+<p indent="1">        The keywords used here are <obj>&amp;key</obj>, <obj>&amp;optional</obj> and <obj>&amp;rest</obj>.
+The way they are used is best explained by means of examples;
+the following are typical lambda lists, followed by descriptions
+of which parameters are positional, rest or keyword; and required or optional.
+
+<table><tbody><tr><td><example>(a b c)</example></td><td><obj>a</obj>, <obj>b</obj>, and <obj>c</obj> are all required and positional.  The function must be
+passed three arguments.
+</td></tr><tr><td><example>(a b &amp;optional c)</example></td><td><obj>a</obj> and <obj>b</obj> are required, <obj>c</obj> is optional.  All three are
+positional.  The function may be passed either two or three arguments.
+</td></tr><tr><td><example>(&amp;optional a b c)</example></td><td><obj>a</obj>, <obj>b</obj>, and <obj>c</obj> are all optional and positional.  The function may
+be passed zero, one, two or three arguments.
+</td></tr><tr><td><example>(&amp;rest a)</example></td><td><obj>a</obj> is a rest parameter.  The function may be passed any number of arguments.
+</td></tr><tr><td><example>(a b &amp;optional c d &amp;rest e)</example></td><td><obj>a</obj> and <obj>b</obj> are required positional, <obj>c</obj> and <obj>d</obj> are optional
+positional, and <obj>e</obj> is rest.  The function may be passed two or more
+arguments.
+</td></tr><tr><td><example>(&amp;key a b)</example></td><td><obj>a</obj> and <obj>b</obj> are both keyword parameters.  A typical
+call would look like
+
+<lisp>(foo :b 69 :a '(some elements))
+<exdent amount="96"><caption>or </caption>(foo :a '(some elements) :b 69)
+</exdent><exdent amount="96"><caption>or </caption>(foo :a '(some elements))
+</exdent></lisp>This illustrates that the parameters can be matched in either order, or omitted.
+If a keyword is specified twice, the first value is used.
+</td></tr><tr><td><example>(x &amp;optional y &amp;rest z &amp;key a b)</example></td><td><obj>x</obj> is required positional, <obj>y</obj> is optional positional,
+<obj>z</obj> is rest, and <obj>a</obj> and <obj>b</obj> are keyword.
+One or more arguments are allowed.  One or two arguments specify only
+the positional parameters.  Arguments beyond the second specify both
+the rest parameter and the keyword parameters, so that
+
+<lisp>(foo 1 2 :b '(a list))
+</lisp>specifies <obj>1</obj> for <obj>x</obj>, <obj>2</obj> for <obj>y</obj>, <obj>(:b (a
+list))</obj> for <obj>z</obj>, and <obj>(a list)</obj> for <obj>b</obj>.  It does not
+specify <obj>a</obj>.
+</td></tr><tr><td><example>(&amp;rest z &amp;key a b c &amp;allow-other-keys)</example></td><td><obj>z</obj> is rest, and <obj>a</obj>, <obj>b</obj> and <obj>c</obj> are keyword
+parameters.  <obj>&amp;allow-other-keys</obj> says that absolutely any keyword
+symbols may appear among the arguments; these symbols and the values
+that follow them have no effect on the keyword parameters, but do
+become part of the value of <obj>z</obj>.
+</td></tr><tr><td><example>(&amp;rest z &amp;key &amp;allow-other-keys)</example></td><td>This is equivalent to <obj>(&amp;rest z)</obj>.  So, for that matter, is the
+previous example, if the function does not use the values of <obj>a</obj>,
+<obj>b</obj> and <obj>c</obj>.
+</td></tr></tbody></table></p>
+
+<p indent="1">        In all of the cases above, the <arg>default-form</arg> for each
+optional parameter is <obj>nil</obj>.  To specify your own default forms,
+instead of putting a symbol as the element of a lambda list, put in a
+list whose first element is the symbol (the parameter itself) and whose
+second element is the default-form.  Only optional parameters may have
+default forms; required parameters are never defaulted, and rest
+parameters always default to <obj>nil</obj>.  For example:
+
+<table><tbody><tr><td><example>(a &amp;optional (b 3))</example></td><td>The default-form for <obj>b</obj> is <obj>3</obj>.  <obj>a</obj> is a required parameter, and
+so it doesn't have a default form.
+</td></tr><tr><td><example>(&amp;optional (a 'foo) &amp;rest d &amp;key b (c (symeval a)))</example></td><td><obj>a</obj>'s default-form is <obj>'foo</obj>, <obj>b</obj>'s is <obj>nil</obj>, and <obj>c</obj>'s is
+<obj>(symeval a)</obj>.  Note that if
+the function were called on no arguments,
+<obj>a</obj> would be bound to the symbol <obj>foo</obj>, and <obj>c</obj> would be bound
+to the value of the symbol <obj>foo</obj>; this illustrates the fact
+that each variable is bound immediately after its default-form is evaluated,
+and so later default-forms may take advantage of earlier parameters
+in the lambda list.  <obj>b</obj> and <obj>d</obj> would be bound to <obj>nil</obj>.
+</td></tr></tbody></table></p>
+
+<index-entry index="concepts" title="supplied-p variable"></index-entry>
+
+<p indent="1">        Occasionally it is important to know whether a certain optional
+parameter was defaulted or not.  Just by looking at the value one cannot
+distinguish between omitting it and passing the default value
+explicitly as an argument.  The way to tell for sure is to put a third
+element into the list: the third element should be a variable (a
+symbol), and that variable is bound to <obj>nil</obj> if the parameter was not
+passed by the caller (and so was defaulted), or <obj>t</obj> if the parameter
+was passed.  The new variable is called a ``supplied-p'' variable; it is
+bound to <obj>t</obj> if the parameter is supplied.  For example:
+
+<table><tbody><tr><td><example>(a &amp;optional (b 3 c))</example></td><td>The default-form for <obj>b</obj> is <obj>3</obj>, and the supplied-p variable for <obj>b</obj>
+is <obj>c</obj>.  If the function is called with one argument, <obj>b</obj> is bound
+to <obj>3</obj> and <obj>c</obj> is bound to <obj>nil</obj>.  If the function is called
+with two arguments, <obj>b</obj> is bound to the value that was passed
+by the caller (which might be <obj>3</obj>), and <obj>c</obj> is bound to <obj>t</obj>.
+</td></tr></tbody></table></p>
+
+<p>It is possible to specify a keyword parameter's symbol independently
+of its parameter name.  To do this, use <arg>two</arg> nested lists to
+specify the parameter.  The outer list is the one which can contain
+the default-form and supplied-p variable, if the parameter is
+optional.  The first element of this list, instead of a symbol, is
+again a list, whose elements are the keyword symbol and the parameter
+variable name.
+For example:
+
+<table><tbody><tr><td><example>(&amp;key ((:a a)) ((:b b) t))</example></td><td>This is equivalent to <obj>(&amp;key a (b t))</obj>.
+</td></tr><tr><td><example>(&amp;key ((:base base-value)))</example></td><td>This defines an argument which callers specify with the keyword
+<obj>:base</obj>, but which within the function is referred to as the
+variable <obj>base-value</obj> so as to avoid binding the value of
+<obj>base</obj>, which is a synonym for <obj>*print-base*</obj> and controls
+how numbers are printed.
+</td></tr></tbody></table></p>
+
+<p indent="1">        It is also possible to include, in the lambda list, some other
+symbols, which are bound to the values of their default-forms upon
+entry to the function.  These are <arg>not</arg> parameters, and they are
+never bound to arguments; they just get bound, as if they appeared
+in a <obj>let*</obj> form.  (Whether you use aux-variables or bind the
+variables with <obj>let*</obj> is a stylistic decision.)
+</p>
+
+<p indent="1">        To include such symbols, put them after any parameters, preceeded
+by the <obj>&amp;</obj>-keyword <obj>&amp;aux</obj>.  Examples:
+
+<table><tbody><tr><td><example>(a &amp;optional b &amp;rest c &amp;aux d (e 5) (f (cons a e)))</example></td><td><obj>d</obj>, <obj>e</obj>, and <obj>f</obj> are bound, when the function is
+called, to <obj>nil</obj>, <obj>5</obj>, and a cons of the first argument and 5.
+
+You could, equivalently, use <obj>(a &amp;optional b &amp;rest c)</obj> as
+the lamda list and write <obj>(let* (d (e 5) (f (cons a e))) ...)</obj>
+around the body of the function.
+</td></tr></tbody></table></p>
+
+<p indent="1">        It is important to realize that the list of arguments to which a
+rest-parameter is bound is set up in whatever way is most efficiently
+implemented, rather than in the way that is most convenient for the
+function receiving the arguments.  It is not guaranteed to be a ``real''
+list.  Sometimes the rest-args list is a stack list (see <ref chapter="5" definition-in-file="fd-con" key="stack-list" section="9" title="Stack Lists" type="section"></ref>)
+stored in the function-calling stack, and loses its validity when the
+function returns.  If a rest-argument is to be returned or made part of
+permanent list-structure, it must first be copied (see <obj>copylist</obj>,
+<ref definition-in-file="fd-con" key="copylist-fun" title="Function copylist" type="fun"></ref>), as you must always assume that it is one of these
+special lists.  The system does not detect the error of omitting to copy
+a rest-argument; you will simply find that you have a value which seems
+to change behind your back.
+</p>
+
+<p>At other times the rest-args list may be an argument that was given to
+<obj>apply</obj>; therefore it is not safe to <obj>rplaca</obj> this list as you may
+modify permanent data structure.  An attempt to <obj>rplacd</obj> a rest-args
+list is unsafe in this case, while in the first case it would cause
+an error, since lists in the stack are impossible to <obj>rplacd</obj>.
+</p>
+<definition>
+<define key="lambda-parameters-limit-var" name="lambda-parameters-limit" type="const"></define>
+
+<description>Has as its value the limit on the number of parameters that a lambda
+list may have.  The implementation limit on the number of parameters
+allowed is at least this many.  There is no promise that this many is
+forbidden, but it is a promise that any number less than this many is
+permitted.
+</description></definition>
+
+
+<subsection name="NIL" title="Lambda-List Keywords"><index-entry index="concepts" title="lambda-list keywords"></index-entry>
+
+<index-entry index="concepts" title="`&amp;' keywords"></index-entry>
+
+<p>This section documents all the keywords that may appear in the
+lambda list or argument list (see <ref chapter="3" definition-in-file="fd-eva" key="lambda-list" section="3" title="Functions" type="section"></ref>) of a function, a
+macro, or a special form.  Some of them are allowed everywhere, while
+others are only allowed in one of these contexts; those are so
+indicated.  You need only know about <obj>&amp;optional</obj>, <obj>&amp;key</obj>, and
+<obj>&amp;rest</obj> in order to understand the documentation of system functions
+in this manual.
+</p>
+<definition>
+<define key="lambda-list-keywords-var" name="lambda-list-keywords" type="const"></define>
+
+<description>The value of this variable is a list of all of the allowed `<obj>&amp;</obj>' keywords.
+A list of them follows.
+</description></definition>
+<table><tbody><tr><td><obj>&amp;optional</obj></td><td>Separates the required arguments of a function from the optional arguments.
+See <ref chapter="3" definition-in-file="fd-eva" key="lambda-list" section="3" title="Functions" type="section"></ref>.
+
+</td></tr><tr><td><obj>&amp;rest</obj></td><td>Separates the required and optional arguments of a function from the rest argument.
+There may be only one rest argument.  See <ref definition-in-file="fd-eva" key="&amp;rest" type="page"></ref> for full information about
+rest arguments.  See <ref chapter="3" definition-in-file="fd-eva" key="lambda-list" section="3" title="Functions" type="section"></ref>.
+
+</td></tr><tr><td><obj>&amp;key</obj></td><td>Separates the positional arguments and rest argument of a function from the keyword
+arguments.  See <ref chapter="3" definition-in-file="fd-eva" key="lambda-list" section="3" title="Functions" type="section"></ref>.
+
+</td></tr><tr><td><obj>&amp;allow-other-keys</obj></td><td>In a function that accepts keyword arguments, says that keywords
+that are not recognized are allowed.  They and the corresponding values are
+ignored, as far as keyword arguments are concerned, but they do become
+part of the rest argument, if there is one.
+
+</td></tr><tr><td><obj>&amp;aux</obj></td><td>Separates the arguments of a function from the auxiliary variables.
+Following <obj>&amp;aux</obj> you can put entries of the form
+
+<lisp>(<arg>variable</arg> <arg>initial-value-form</arg>)
+</lisp>or just <arg>variable</arg> if you want it initialized to <obj>nil</obj> or don't care what the initial
+value is.
+
+</td></tr><tr><td><obj>&amp;special</obj></td><td>Declares the following arguments and/or auxiliary variables to be special within
+the scope of this function.
+
+</td></tr><tr><td><obj>&amp;local</obj></td><td>Turns off a preceding <obj>&amp;special</obj> for the variables that follow.
+
+</td></tr><tr><td><obj>&amp;quote</obj></td><td>Declares that the following arguments are not to be evaluated.  This is how you create
+a special function.  See the caveats about special forms on <ref definition-in-file="fd-fun" key="special-form-caveat" type="page"></ref>.
+
+</td></tr><tr><td><obj>&amp;eval</obj></td><td>Turns off a preceding <obj>&amp;quote</obj> for the arguments which follow.
+
+</td></tr><tr><td><obj>&amp;list-of</obj></td><td>This is for macros defined by <obj>defmacro</obj> only.  Refer to <ref definition-in-file="macros" key="&amp;list-of" type="page"></ref>.
+
+</td></tr><tr><td><obj>&amp;body</obj></td><td>This is for macros defined by <obj>defmacro</obj> only.  It is similar to <obj>&amp;rest</obj>,
+but declares to <obj>grindef</obj> and the code-formatting module of the editor that
+the body forms of a special form follow and should be indented accordingly.
+Refer to <ref definition-in-file="macros" key="&amp;body" type="page"></ref>.
+
+</td></tr><tr><td><obj>&amp;whole</obj></td><td>This is for macros defined by <obj>defmacro</obj> only.  It means that the following
+argument is bound to the entire macro call form being expanded.  Refer to
+<ref definition-in-file="macros" key="&amp;whole" type="page"></ref>.
+
+</td></tr><tr><td><obj>&amp;environment</obj></td><td>This is for macros defined by <obj>defmacro</obj> only.  It means that the following
+argument is bound to an environment structure which records the local
+<obj>macrolet</obj> macro definitions in effect for subforms of the macro call form.
+Refer to <ref definition-in-file="macros" key="&amp;environment" type="page"></ref>.
+</td></tr></tbody></table></subsection>
+
+
+<subsection name="NIL" title="Local Functions"><p>The constructs <obj>flet</obj> and <obj>labels</obj> permit you to define
+a function name in a lexical context only.  If the same name
+has a global function definition, it is shadowed temporarily.
+Function definitions established by <obj>flet</obj> (or <obj>labels</obj>)
+are to global definitions made with <obj>defun</obj> as lexical variable bindings
+made with <obj>let</obj> are to global bindings made with <obj>defvar</obj>.
+They always have lexical scope.
+</p>
+<definition><define key="flet-fun" name="flet" type="spec"><args>local-functions body...</args>
+</define>
+
+<description>Executes <arg>body</arg> with local function definitions in effect
+according to <arg>local-functions</arg>.
+
+<arg>local-functions</arg> should be a list of elements which look like
+
+<lisp>(<arg>name</arg> <arg>lambda-list</arg> <arg>function-body</arg>...)
+</lisp>just like the cdr of a <obj>defun</obj> form.  The meaning of this element
+of <arg>local-functions</arg> is to define <arg>name</arg> locally with the
+indicated definition.
+Within the lexical scope of <arg>body</arg>, using <arg>name</arg> as a function name accesses
+the local definition.
+
+
+<lisp><exdent amount="96"><caption>Example: </caption>(flet ((triple (x) (* x 3)))
+  (print (triple -1))
+  (mapcar (function triple) '(1 2 1.2)))
+</exdent></lisp>prints the number -3 and returns a list <obj>(3 6 3.6)</obj>.
+
+Each local function is closed in the environment outside the <obj>flet</obj>.
+As a result, the local functions cannot call each other.
+
+<lisp>(flet ((foo (x) (bar x t))
+       (bar (y z) (list y z)))
+  (foo t))
+</lisp>calls the local definition of <obj>foo</obj>, which calls the <arg>global</arg> definition
+of <obj>bar</obj>, because the body of <obj>foo</obj> is not within the scope of the
+local definition of <obj>bar</obj>.
+
+Functions defined with <obj>flet</obj> inside of a compiled function
+can be referred to by name in a function spec of the form
+<obj>(:internal <arg>outer-function-name</arg> <arg>flet-name</arg>)</obj>.
+See <ref definition-in-file="fd-fun" key="flet-function-spec" type="page"></ref>.
+</description></definition><definition><define key="labels-fun" name="labels" type="spec"><args>local-functions body...</args>
+</define>
+
+<description>Is like <arg>flet</arg> except that the local functions can call each other.
+They are closed in the environment inside the <obj>labels</obj>, so all
+the local function names are accessible inside the bodies of the
+local functions.  <obj>labels</obj> is one of the most ancient Lisp constructs,
+but was typically not implemented in second generation Lisp systems
+in which no efficient form of closure existed.
+
+
+<lisp>(labels ((walk (x)
+           (typecase x
+             (cons (walk (car x)) (walk (cdr x)))
+             (t (if (eq x 'haha) (print 'found-it))))))
+  (walk foo))
+</lisp>allows <obj>walk</obj> to call itself recursively because <obj>walk</obj>'s body
+is inside the scope of the definition of <obj>walk</obj>.
+</description></definition>
+<p>See also <obj>macrolet</obj>, an analogous construct for defining macros locally
+(<ref definition-in-file="macros" key="macrolet-fun" title="Special Form macrolet" type="spec"></ref>).
+</p>
+</subsection></section><a name="Some Functions and Special Forms"></a>
+
+
+<section chapter-number="3" name="Some Functions and Special Forms" number="4" title="Some Functions and Special Forms"><p>This section describes some functions and special forms.  Some are parts
+of the evaluator, or closely related to it.  Some have to do
+specifically with issues discussed above such as keyword arguments.
+Some are just fundamental Lisp forms that are very important.
+</p>
+<definition><define key="eval-fun" name="eval" type="fun"><args>form <standard>&amp;optional</standard> nohook</args>
+</define>
+
+<description><obj>(eval <arg>form</arg>)</obj> evaluates <arg>form</arg>, and returns the result.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(defvar x 43)
+(defvar foo 'bar)
+(eval (list 'cons x 'foo))
+    =&gt; (43 . bar)
+</exdent></lisp>The dynamic bindings available at the time <obj>eval</obj> is called
+are visible for dynamic variables within the expression <arg>x</arg>.
+No lexical bindings are available for the evaluation of <arg>x</arg>.
+
+It is unusual to call <obj>eval</obj> explicitly, since usually
+evaluation is done implicitly.  If you are writing a simple Lisp program and
+explicitly calling <obj>eval</obj>, you are probably doing something wrong.
+<obj>eval</obj> is primarily useful in programs which deal with Lisp itself,
+rather than programs about knowledge, mathematics or games.
+
+Also, if you are only interested in getting at the dynamic value of a
+symbol (that is, the contents of the symbol's value cell), then you
+should use the primitive function <obj>symeval</obj> (see <ref definition-in-file="fd-sym" key="symeval-fun" title="Function symeval" type="fun"></ref>).
+
+If the argument <arg>nohook</arg> is non-<obj>nil</obj>, execution of the
+evalhook is inhibited for <arg>form</arg>, but not for
+evaluation of the subforms of <arg>form</arg>.  See <obj>evalhook</obj>, <ref definition-in-file="db-aid" key="evalhook-fun" title="Function evalhook" type="fun"></ref>.
+<obj>evalhook</obj> is also the way to evaluate in a specified lexical environment
+if you happen to have got your hands on one.
+
+Note: in Maclisp, the second argument to <obj>eval</obj> is a
+``binding context pointer''.  There is no such thing in Zetalisp;
+closures are used instead (see <ref chapter="13" definition-in-file="fd-clo" key="closure" section="0" title="Closures" type="section"></ref>).
+</description></definition><definition><define key="si:eval1-fun" name="si:eval1" type="fun"><args>form <standard>&amp;optional</standard> nohook</args>
+</define>
+
+<description>Within the definition of a special form, evaluates <arg>form</arg> in the
+<arg>current</arg> lexical environment.
+</description></definition><definition><define key="funcall-fun" name="funcall" type="fun"><args>f <standard>&amp;rest</standard> args</args>
+</define>
+
+<description><obj>(funcall <arg>f</arg> <arg>a1</arg> <arg>a2</arg> ... <arg>an</arg>)</obj> applies the
+function <arg>f</arg> to the arguments <arg>a1</arg>, <arg>a2</arg>, ..., <arg>an</arg>.
+<arg>f</arg> may not
+be a special form nor a macro; this would not be meaningful.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(cons 1 2) =&gt; (1 . 2)
+(setq cons 'plus)
+(funcall cons 1 2) =&gt; 3
+</exdent></lisp>This shows that the use of the symbol <obj>cons</obj> as the name of a function
+and the use of that symbol as the name of a variable do not interact.
+The <obj>cons</obj> form invokes the function named <obj>cons</obj>.
+The <obj>funcall</obj> form evaluates the variable and gets the symbol <obj>plus</obj>,
+which is the name of a different function.
+</description></definition>
+<p>Note:  the Maclisp functions <obj>subrcall</obj>, <obj>lsubrcall</obj>, and <obj>arraycall</obj>
+are not needed on the Lisp Machine; <obj>funcall</obj> is just as efficient.
+<obj>arraycall</obj> is provided for compatibility; it ignores its first
+subform (the Maclisp array type) and is otherwise identical to <obj>aref</obj>.
+<obj>subrcall</obj> and <obj>lsubrcall</obj> are not provided.
+
+<index-entry index="functions" title="subrcall"></index-entry>
+
+<index-entry index="functions" title="lsubrcall"></index-entry>
+</p>
+<definition><define key="apply-fun" name="apply" type="fun"><args>f <standard>&amp;rest</standard> args</args>
+</define><define key="lexpr-funcall-fun" name="lexpr-funcall" type="fun"><args>f <standard>&amp;rest</standard> args</args>
+</define>
+
+<description><obj>apply</obj> is like <obj>funcall</obj> except that the last of <arg>args</arg> is
+really a list of arguments to give to <arg>f</arg> rather than a single argument.
+<obj>lexpr-funcall</obj> is a synonym for <obj>apply</obj>; formerly, <obj>apply</obj> was
+limited to the two argument case.
+
+<obj>(apply <arg>f</arg> <arg>arglist</arg>)</obj> applies the function <arg>f</arg> to the list of
+arguments <arg>arglist</arg>.  <arg>arglist</arg> should be a list; <arg>f</arg> can be any function.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(setq fred '+) (apply fred '(1 2)) =&gt; 3
+(setq fred '-) (apply fred '(1 2)) =&gt; -1
+(apply 'cons '((+ 2 3) 4)) =&gt;
+        ((+ 2 3) . 4)   <arg>not</arg> (5 . 4)
+</exdent></lisp>Of course, <arg>arglist</arg> may be <obj>nil</obj>.
+
+If there is more than one element of <arg>args</arg>, then all but the last
+of them are individual arguments to pass to <arg>f</arg>, while the last one
+is a list of arguments as above.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(apply 'plus 1 1 1 '(1 1 1)) =&gt; 6
+
+(defun report-error (&amp;rest args)
+   (apply 'format *error-output* args))
+</exdent></lisp>
+<obj>apply</obj> can also be used with a single argument.  Then this argument
+is a list of a function and some arguments to pass it.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(apply '(car (a))) =&gt; a
+      <standard>;Not the same as <obj>(eval '(car (a)))</obj></standard>
+</exdent></lisp>
+Note: in Maclisp, <obj>apply</obj> takes two or three arguments, and the third
+argument, when passed, is interpreted as a ``binding context pointer''.
+So the second argument always provides all the args to pass to the function.
+There are no binding context pointers in Zetalisp; true lexical scoping
+exists and is interfaced in other ways.
+</description></definition><definition>
+<define key="call-arguments-limit-var" name="call-arguments-limit" type="const"></define>
+
+<description>Has as its value the limit on the number of arguments that can be dealt with in a
+function call.  There is no promise that this many is forbidden, but it is a promise
+that any smaller number is acceptable.
+
+Note that if <obj>apply</obj> is used with exactly two arguments, the first
+one being a function that takes a rest argument, there is no limit
+except the size of memory on the number of elements in the second
+argument to <obj>apply</obj>.
+</description></definition><definition><define key="call-fun" name="call" type="fun"><args>function <standard>&amp;rest</standard> argument-specifications</args>
+</define>
+
+<description>Offers a very general way of controlling what arguments you
+pass to a function.  You can provide either individual arguments as in
+<obj>funcall</obj> or lists of arguments as in <obj>apply</obj>, in any order.  In
+addition, you can make some of the arguments <arg>optional</arg>.  If the
+function is not prepared to accept all the arguments you specify, no
+error occurs if the excess arguments are optional ones.  Instead, the
+excess arguments are simply not passed to the function.
+
+The <arg>argument-specs</arg> are alternating keywords (or lists of keywords)
+and values.  Each keyword or list of keywords says what to do with the
+value that follows.  If a value happens to require no keywords,
+provide <obj>()</obj> as a list of keywords for it.
+
+Two keywords are presently defined: <obj>:optional</obj> and <obj>:spread</obj>.
+<obj>:spread</obj> says that the following value is a list of arguments.
+Otherwise it is a single argument.  <obj>:optional</obj> says that all the
+following arguments are optional.  It is not necessary to specify
+<obj>:optional</obj> with all the following <arg>argument-specs</arg>, because it is
+sticky.
+
+Example:
+
+<lisp>(call #'foo () x :spread y '(:optional :spread) z () w)
+</lisp>The arguments passed to <obj>foo</obj> are the value of <obj>x</obj>, the
+elements of the value of <obj>y</obj>, the elements of the value of
+<obj>z</obj>, and the value of <obj>w</obj>.  The function <obj>foo</obj> must be
+prepared to accept all the arguments which come from <obj>x</obj> and
+<obj>y</obj>, but if it does not want the rest, they are ignored.
+</description></definition><definition><define key="quote-fun" name="quote" type="spec"><args>object</args>
+</define>
+
+
+<description><index-entry index="concepts" title="quote"></index-entry>
+<obj>(quote <arg>object</arg>)</obj> simply returns <arg>object</arg>.  <obj>quote</obj> is used to
+include constants in a form.  It is useful specifically because
+<arg>object</arg> is not evaluated; the <obj>quote</obj> is how you make a form that
+returns an arbitrary Lisp object.
+
+<lisp><exdent amount="96"><caption>Examples: </caption>(quote x) =&gt; x
+(setq x (quote (some list)))   x =&gt; (some list)
+</exdent></lisp>        Since <obj>quote</obj> is so useful but somewhat cumbersome to type, the reader normally
+converts any form preceded by a single quote (∀<obj>'</obj>∀) character into a <obj>quote</obj> form.
+
+<lisp><exdent amount="96"><caption>For example, </caption>(setq x '(some list))
+</exdent><exdent amount="96"><caption>is converted by <obj>read</obj> into </caption>(setq x (quote (some list)))
+</exdent></lisp></description></definition><definition><define key="function-fun" name="function" type="spec"><args>f</args>
+</define>
+
+<description><obj>function</obj> has two distinct, though related, meanings.
+
+If <arg>f</arg> is a symbol or any other function spec (see <ref chapter="12" definition-in-file="fd-fun" key="function-spec" section="2" title="Function Specs" type="section"></ref>),
+<obj>(function <arg>f</arg>)</obj> refers to the function definition of <arg>f</arg>.
+For example, in <obj>(mapcar (function car) x)</obj>, the function
+definition of <obj>car</obj> is passed as the first argument to <obj>mapcar</obj>.
+<obj>function</obj> used this way is like <obj>fdefinition</obj>
+except that its argument is unevaluated, and so
+
+<lisp>(function fred)  <standard>is like</standard>  (fdefinition 'fred)
+</lisp>
+<arg>f</arg> can also be an explicit function, or lambda-expression, a list such
+as <obj>(lambda (x) (* x x))</obj> such as could be the function definition of a
+symbol.  Then <obj>(function <arg>f</arg>)</obj> represents that function, suitably
+interfaced to execute in the lexical environment where it appears.  To
+explain:
+
+
+<lisp>(let (a)
+  (mapcar (lambda (x) (push x a)) l))
+</lisp>
+<nopara></nopara>attempts to call the function <obj>lambda</obj> and evaluate <obj>(x)</obj>
+for its first argument.  That is no way to refer to the function
+expressed by <obj>(lambda (x) (push x a))</obj>.
+
+
+<lisp>(let (a)
+  (mapcar (quote (lambda (x) (push x a))) l))
+</lisp>
+<nopara></nopara>passes to <obj>mapcar</obj> the list <obj>(lambda (x) (push x a))</obj>.
+This list does not in any way record the lexical environment
+where the <obj>quote</obj> form appeared, so it is impossible to make
+this environment, with its binding of <obj>a</obj>, available
+for the execution of <obj>(push x a)</obj>.  Therefore, the reference
+to <obj>a</obj> does not work properly.
+
+
+<lisp>(let (a)
+  (mapcar (function (lambda (x) (push x a))) l))
+</lisp>
+<nopara></nopara>passes <obj>mapcar</obj> a specially designed closure made from the
+function represented by <obj>(lambda (x) (push x a))</obj>.  When <obj>mapcar</obj>
+calls this closure, the lexical environment of the <obj>function</obj> form
+is put again into effect, and the <obj>a</obj> in <obj>(push x a)</obj> refers
+properly to the binding made by this <obj>let</obj>.
+
+In addition, the compiler knows that the argument to <obj>function</obj>
+should be compiled.  The argument of <obj>quote</obj> cannot be compiled
+since it may be intended for other uses.
+
+To ease typing, the reader converts <obj>#'<arg>thing</arg></obj> into <obj>(function <arg>thing</arg>)</obj>.
+So <obj>#'</obj> is similar to <obj>'</obj> except that it produces a
+<obj>function</obj> form instead of a <obj>quote</obj> form.  The last example
+could be written as 
+
+<lisp>(let (a)
+  (mapcar #'(lambda (x) (push x a)) l))
+</lisp>
+Another way of explaining <obj>function</obj> is that it causes <arg>f</arg> to be
+treated the same way as it would as the car of a form.  Evaluating
+the form <obj>(<arg>f</arg> <arg>arg1</arg> <arg>arg2</arg>...)</obj> uses the function definition
+of <arg>f</arg> if it is a symbol, and otherwise expects <arg>f</arg> to be a list
+which is a lambda-expression.  Note that the car of a form may not be
+a non-symbol function spec, as that would be difficult to make sense of.
+Instead, write
+
+<lisp>(funcall (function <arg>spec</arg>) <arg>args</arg>...)
+</lisp>
+You should be careful about whether you use <obj>#'</obj> or <obj>'</obj>.  Suppose
+you have a program with a variable <obj>x</obj> whose value is assumed to
+contain a function that gets called on some arguments.  If you want that
+variable to be the <obj>test</obj> function, there are two things you could say:
+
+<lisp>(setq x 'test)
+<exdent amount="96"><caption>or </caption>(setq x #'test)
+</exdent></lisp>The former causes the value of <obj>x</obj> to be the symbol <obj>test</obj>, whereas
+the latter causes the value of <obj>x</obj> to be the function object found in
+the function cell of <obj>test</obj>.  When the time comes to call the function
+(the program does <obj>(funcall x ...)</obj>), either expression works
+because calling a symbol as a function uses its function definition instead.
+Using <obj>'test</obj> is insignificantly slower, because the function
+call has to indirect through the symbol, but it allows the function
+to be redefined, traced (see <ref definition-in-file="db-aid" key="trace-fun" title="Special Form trace" type="spec"></ref>), or advised (see <ref definition-in-file="db-aid" key="advise-fun" title="Macro advise" type="mac"></ref>).
+Use of <obj>#'</obj> picks up the function definition out of
+the symbol <obj>test</obj> when the <obj>setq</obj> is done and does not see any later changes to it.
+<obj>#'</obj> should be used only if you wish specifically to prevent redefinition
+of the function from affecting this closure.
+</description></definition><definition>
+<define key="false-fun" name="false" type="fun"></define>
+
+<description>Takes no arguments and returns <obj>nil</obj>.
+</description></definition><definition>
+<define key="true-fun" name="true" type="fun"></define>
+
+<description>Takes no arguments and returns <obj>t</obj>.
+</description></definition><definition><define key="ignore-fun" name="ignore" type="fun"><args><standard>&amp;rest</standard> ignore</args>
+</define>
+
+<description>Takes any number of arguments and returns <obj>nil</obj>.  This is often useful
+as a ``dummy'' function; if you are calling a function that takes a function
+as an argument, and you want to pass one that doesn't do anything and
+won't mind being called with any argument pattern, use this.
+</description></definition><definition>
+<define key="comment-fun" name="comment" type="spec"></define>
+
+<description><obj>comment</obj> ignores its form and returns the symbol <obj>comment</obj>.
+It is most useful for commenting out function definitions
+that are not needed or correct but worth preserving in the source.
+The <obj>#|...|#</obj> syntactic construct is an alternative method.
+For comments within code about the code, it is better to use semicolons.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(comment
+;; This is brain-damaged.  Can someone figure out
+;; how to do this right?
+(defun foo (x)
+  ...)
+) ;End comment
+<standard>;; prevents this definition of <obj>foo</obj> from being used.</standard>
+</exdent></lisp></description></definition></section><a name="Declarations"></a>
+
+
+<section chapter-number="3" name="Declarations" number="5" title="Declarations"><index-entry index="concepts" title="declaration"></index-entry>
+
+<p>Declarations provide auxiliary information on how to execute a function
+or expression properly.  The most important declarations are <obj>special</obj>
+declarations, which control the scope of variable names.  Some
+declarations do not affect execution at all and only provide information
+about a function, for the sake of <obj>arglist</obj>, for example.
+</p>
+
+<p>Declarations may apply to an entire function or to any expression within
+it.  Declarations can be made around any subexpression by writing a
+<obj>local-declare</obj> around the subexpression or by writing a <obj>declare</obj>
+at the front of the body of certain constructs.  Declarations can be
+made on an entire function by writing a <obj>declare</obj> at the front of the
+function's body.
+</p>
+<definition><define key="local-declare-fun" name="local-declare" type="spec"><args>(declaration...) body...</args>
+</define>
+
+<description>A <obj>local-declare</obj> form looks like
+
+
+<lisp>(local-declare (<arg>decl1</arg> <arg>decl2</arg> ...)
+   <arg>form1</arg>
+   <arg>form2</arg>
+   ...)
+</lisp>
+Each <arg>decl</arg> is in effect for the forms in the body of the
+<obj>local-declare</obj> form.
+</description></definition><definition><define key="declare-fun" name="declare" type="spec"><args>declaration...</args>
+</define>
+
+<description>The special form <obj>declare</obj> is used for writing local declarations
+within the construct they apply to.
+
+<need amount="3000"></need>A <arg>declare</arg> inside a function definition, just after the argument
+list, is equivalent to putting a <obj>local-declare</obj> around the function
+definition.  More specifically,
+
+
+<lisp>(defun foo (a b)
+  (declare (special a b))
+  (bar))
+</lisp>
+<nopara></nopara>is equivalent to
+
+
+<lisp>(local-declare ((special a b))
+(defun foo (a b)
+  (bar)))
+</lisp>
+Note that
+
+
+<lisp>(defun foo (a b)
+  (local-declare ((special a b))
+    (bar)))
+</lisp>
+does not do the job, because the declaration is not in effect for
+the binding of the arguments of <obj>foo</obj>.
+
+<obj>declare</obj> is preferable to <obj>local-declare</obj> in this sort of
+situation, because it allows the <obj>defun</obj>s themselves to be the
+top-level lists in the file.  While <obj>local-declare</obj> might appear to
+have an advantage in that one <obj>local-declare</obj> may go around several
+<obj>defun</obj>s, it tends to cause trouble to use <obj>local-declare</obj> in that
+fashion.
+
+<obj>declare</obj> has a similar meaning at the front of the body of a
+<obj>progn</obj>, <obj>prog</obj>, <obj>let</obj>, <obj>prog*</obj>, <obj>let*</obj>, or internal <obj>lambda</obj>.  For
+example,
+
+<lisp>(prog (x)
+      (declare (special x))
+      ...)
+<exdent amount="96"><caption>is equivalent to </caption>(local-declare ((special x))
+  (prog (x)
+        ...))
+</exdent></lisp>
+At top level in the file, <obj>(declare <arg>forms</arg>...)</obj> is equivalent to
+<obj>(eval-when (compile) <arg>forms</arg>...)</obj>.  This use of <obj>declare</obj>
+is nearly obsolete, and should be avoided.  In Common Lisp, <obj>proclaim</obj>
+(below) is used for such purposes, with a different calling convention.
+
+Elsewhere, <obj>declare</obj>'s are ignored.
+</description></definition>
+<p>Here is a list of declarations that have system-defined meanings:
+
+<table><tbody><tr><td><obj>(special <arg>var1 var2 ...</arg>)</obj></td><td>The variables <arg>var1</arg>, <arg>var2</arg>, etc. will be treated as special
+variables in the scope of the declaration.
+
+</td></tr><tr><td><obj>(unspecial <arg>var1 var2 ...</arg>)</obj></td><td>The variables <arg>var1</arg>, <arg>var2</arg>, etc. will be treated as lexical
+variables in the scope of the declaration, even if they are
+globally special.
+
+</td></tr><tr><td><obj>(notinline <arg>fun1</arg> <arg>fun2 ...</arg>)</obj></td><td>The functions <arg>fun1</arg>, <arg>fun2</arg> and so on will not be open coded
+or optimized by the compiler within the scope of the declaration.
+
+</td></tr><tr><td><obj>(inline <arg>fun1</arg> <arg>fun2 ...</arg>)</obj></td><td>The functions <arg>fun1</arg>, <arg>fun2</arg> and so on will be open coded or
+optimized by the compiler (to whatever extent it knows how) within the
+scope of the declaration.  Merely issuing this declaration does not
+tell the compiler how to do any useful optimization or open coding
+of a function.
+
+</td></tr><tr><td><obj>(ignore <arg>var1</arg> <arg>var2 ...</arg>)</obj></td><td>Says that the variables <arg>var1</arg>, <arg>var2</arg>, etc., which are bound
+in the construct in which this declaration is found, are going to
+be ignored.  This is currently significant only in a function being compiled;
+the compiler issues a warning if the variables are used, and refrains
+from its usual warning if the variables are ignored.
+
+</td></tr><tr><td><obj>(declaration <arg>decl1</arg> <arg>decl2 ...</arg>)</obj></td><td>Says that declarations <arg>decl1</arg>, <arg>decl2</arg>, etc. are going to be used,
+and prevents any warning about an unrecognized type of declaration.
+For example:
+
+<lisp>(defun hack ()
+  (declare (declaration lose-method)
+           (lose-method foo bar))
+  <arg>...</arg> (lose foo) <arg>...</arg>)
+</lisp>might be useful if <obj>(lose foo)</obj> is a macro whose expander function
+does <obj>(getdecl 'foo 'lose-method)</obj> to see what to do.
+See <ref definition-in-file="compil" key="getdecl-fun" title="Function getdecl" type="fun"></ref> for more information on <obj>getdecl</obj> and declarations.
+
+<lisp>(proclaim '(declaration lose-method))
+</lisp>might also be advisable if you expect widespread use of <obj>lose-method</obj>
+declarations.
+</td></tr></tbody></table></p>
+
+<p>The next two are used by the compiler and generally should not
+be written by users.
+
+<table><tbody><tr><td><obj>(def <arg>name</arg>  . <arg>definition</arg>)</obj></td><td><arg>name</arg> will be defined for the compiler in the scope of the declaration.
+The compiler uses this automatically to keep track of macros and
+open-codable functions (<obj>defsubst</obj>s) defined in the file being compiled.
+Note that the cddr of this item is a function.
+
+</td></tr><tr><td><obj>(<arg>propname</arg> <arg>symbol</arg> <arg>value</arg>)</obj></td><td><obj>(getdecl <arg>symbol</arg> <arg>propname</arg>)</obj> will return <arg>value</arg>
+in the scope of the declaration.  This is how the compiler keeps track of
+<obj>defdecl</obj>s.
+</td></tr></tbody></table></p>
+
+<p>These declarations are significant only when they apply to an entire <obj>defun</obj>.
+
+<table><tbody><tr><td><obj>(arglist . <arg>arglist</arg>)</obj></td><td>Records <arg>arglist</arg> as the argument list of the function, to be used instead of
+its lambda list if anyone asks what its arguments are.  This is
+purely documentation.
+
+</td></tr><tr><td><obj>(values . <arg>values</arg>) <standard>or</standard> (:return-list . <arg>values</arg>)</obj></td><td>Records <arg>values</arg> as the return values list of the function, to be used if
+anyone asks what values it returns.  This is purely documentation.
+
+</td></tr><tr><td><obj>(sys:function-parent <arg>parent-function-spec</arg>)</obj></td><td>Records <arg>parent-function-spec</arg> as the parent of this function.
+If, in the editor, you ask to see the source of this function,
+and the editor doesn't know where it is, the editor will show you
+the source code for the parent function instead.
+
+For example, the accessor functions generated by <obj>defstruct</obj>
+have no defuns of their own in the text of the source file.
+So <obj>defstruct</obj> generates them with <obj>sys:function-parent</obj>
+declarations giving the <obj>defstruct</obj>'s name as the parent function spec.
+Visiting the accessor function with <obj>Meta-.</obj> sees the declaration
+and therefore visits the text of the <obj>defstruct</obj>.
+
+</td></tr><tr><td><obj>(:self-flavor <arg>flavorname</arg>)</obj></td><td>Instance variables of the flavor <arg>flavorname</arg>, in <obj>self</obj>, will be
+accessible in the function.
+</td></tr></tbody></table></p>
+<definition><define key="locally-fun" name="locally" type="mac"><args><standard>&amp;body</standard> body</args>
+</define>
+
+<description>Executes the <arg>body</arg>, recognizing declarations at the front of it.
+<obj>locally</obj> is synonymous with <obj>progn</obj> except that in Common Lisp
+a <obj>declare</obj> is allowed at the beginning of a <obj>locally</obj> and not
+at the beginning of a <obj>progn</obj>.
+
+<obj>locally</obj> does differ from <obj>progn</obj> in one context: at top level
+in a file being compiled, <obj>progn</obj> causes each of its elements
+(including declarations, therefore) to be treated as if at top level.
+<obj>locally</obj> does not receive this treatment.  The <obj>locally</obj> form
+is simply evaluated when the QFASL file is loaded.
+</description></definition><definition><define key="proclaim-fun" name="proclaim" type="fun"><args><standard>&amp;rest</standard> declarations</args>
+</define>
+
+<description>Each of <arg>declarations</arg> is put into effect globally.  Currently only
+<obj>special</obj> and <obj>unspecial</obj> declarations mean anything in this way.
+<obj>proclaim</obj>'s arguments are evaluated, and the values are expected
+to be declarations such as you could write in a <obj>declare</obj>.
+Thus, you would say <obj>(proclaim '(special x))</obj> to make a special
+declaration globally.
+
+Top-level <obj>special</obj> declarations are not the recommended way to make a
+variable special.  Use <obj>defvar</obj>, <obj>defconstant</obj> or <obj>defparameter</obj>,
+so that you can give the variable documentation.  Proclaiming the
+variable special should be done only when the variable is used in a file
+other than the one which defines it, to enable the file to be compiled
+without having to load the defining file first.
+
+<obj>proclaim</obj> is fairly new.  Until recently, top-level <obj>declare</obj> was
+the preferred way to make global special declarations when <obj>defvar</obj>,
+etc., could not be used.  Such top-level <obj>declare</obj>'s are still
+quite common.  In them, the declaration would not be quoted;
+for example, <obj>(declare (special x))</obj>.
+</description></definition><definition><define key="special-fun" name="special" type="spec"><args>variables...</args>
+</define>
+
+<description>Equivalent to <obj>(proclaim (special <arg>variables</arg>...))</obj>, this
+declares each of the <arg>variables</arg> to be globally special.
+This function is obsolete.
+</description></definition><definition><define key="unspecial-fun" name="unspecial" type="spec"><args>variables...</args>
+</define>
+
+<description>Removes any global special declarations of the <arg>variables</arg>.
+This function is obsolete.
+</description></definition><definition><define key="the-fun" name="the" type="mac"><args>type-specifier value-form</args>
+</define>
+
+<description>Is a Common Lisp construct effectively the same as <arg>value-form</arg>.  It
+declares that the value of <arg>value-form</arg> is an object which of type
+<arg>type-specifier</arg>.  This is to assist compilers in generating better
+code for conventional machine architectures.  The Lisp Machine does not
+make use of type declarations so this is the same as writing just
+<arg>value-form</arg>.  <arg>type-specifier</arg> is not evaluated.
+
+If you want the type of an object to be checked at run time, with an
+error if it is not what it is supposed to be, use <obj>check-type</obj>
+(<ref definition-in-file="errors" key="check-type-fun" title="Macro check-type" type="mac"></ref>).
+</description></definition></section><a name="tail-recursion"></a>
+
+
+<section chapter-number="3" name="tail-recursion" number="6" title="Tail Recursion"><index-entry index="concepts" title="tail recursion"></index-entry>
+
+<p>When one function ends by calling another function (possibly itself), as in
+
+<lisp>(defun last (x)
+  (cond ((atom x) x)
+        ((atom (cdr x)) x)
+        (t (last (cdr x)))))
+</lisp><nopara></nopara>it is called <arg>tail recursion</arg>.  In general, if <arg>X</arg> is a form, and
+<arg>Y</arg> is a sub-form of <arg>X</arg>, then if the value of <arg>Y</arg> is
+unconditionally returned as the value of <arg>X</arg>, with no intervening
+computation, then we say that <arg>X</arg> tail-recursively evaluates <arg>Y</arg>.
+</p>
+
+<p>In a tail recursive situation,
+it is not strictly necessary to remember anything about the first call
+to <obj>last</obj> when the second one is activated.  The stack frame for the
+first call can be discarded completely, allowing <obj>last</obj> to use a
+bounded amount of stack space independent of the length of its argument.
+A system which does this is called <arg>tail recursive</arg>.
+</p>
+
+<p>The Lisp machine system works tail recursively if the variable
+<obj>tail-recursion-flag</obj> is non-<obj>nil</obj>.  This is often faster, because
+it reduces the amount of time spent in refilling the hardware's pdl
+buffer.  However, you forfeit a certain amount of useful debugging
+information: once the outer call to <obj>last</obj> has been removed from the
+stack, you can no longer see its frame in the debugger.
+</p>
+<definition>
+<define key="tail-recursion-flag-var" name="tail-recursion-flag" type="var"></define>
+
+<description>If this variable is non-<obj>nil</obj>, the calling stack frame is
+discarded when a tail-recursive call is made in compiled code.
+</description></definition>
+<p>There are many things which a function can do that can make it dangerous
+to discard its stack frame.  For example, it may have done a <obj>*catch</obj>;
+it may have bound special variables; it may have a <obj>&amp;rest</obj> argument on
+the stack; it may have asked for the location of an argument or local
+variable.  The system detects all of these conditions automatically and
+retains the stack frame to ensure proper execution.  Some of these
+conditions occur in <obj>eval</obj>; as a result, interpreted code is never
+completely tail recursive.
+</p>
+</section><a name="multiple-value"></a>
+
+
+<section chapter-number="3" name="multiple-value" number="7" title="Multiple Values"><index-entry index="concepts" title="multiple values"></index-entry>
+
+<index-entry index="concepts" title="returning multiple values"></index-entry>
+
+<p>The Lisp Machine includes a facility by which the evaluation of a form
+can produce more than one value.  When a function needs to return more
+than one result to its caller, multiple values are a cleaner way of
+doing this than returning a list of the values or <obj>setq</obj>'ing special
+variables to the extra values.  In most Lisp function calls, multiple
+values are not used.  Special syntax is required both to <arg>produce</arg>
+multiple values and to <arg>receive</arg> them.
+</p>
+
+<p>The primitive for producing multiple values is <obj>values</obj>, which takes
+any number of arguments and returns that many values.  If the last form
+in the body of a function is a <obj>values</obj> with three arguments, then
+a call to that function returns three values.  Many system functions
+produce multiple values, but they all do it via <obj>values</obj>.
+</p>
+<definition><define key="values-fun" name="values" type="fun"><args><standard>&amp;rest</standard> args</args>
+</define>
+
+<description>Returns multiple values, its arguments.  This is the primitive
+function for producing multiple values.  It is legal to call <obj>values</obj> with
+no arguments; it returns no values in that case.
+</description></definition><definition><define key="values-list-fun" name="values-list" type="fun"><args>list</args>
+</define>
+
+<description>Returns multiple values, the elements of the <arg>list</arg>.  <obj>(values-list '(a b c))</obj>
+is the same as <obj>(values 'a 'b 'c)</obj>.
+<arg>list</arg> may be <obj>nil</obj>, the empty list, which causes no values to be returned.
+Equivalent to <obj>(apply 'values <arg>list</arg>)</obj>.
+</description></definition>
+<p><obj>return</obj> and its variants can also be used, within a <obj>block</obj>, <obj>do</obj> or
+<obj>prog</obj> special form, to return multiple values.  They are explained on
+<ref definition-in-file="fd-flo" key="return-fun" title="Special Form return" type="spec"></ref>.
+</p>
+
+<p>Here are the special forms for receiving multiple values.
+</p>
+<definition><define key="multiple-value-fun" name="multiple-value" type="spec"><args>(variable...) form</args>
+</define><define key="multiple-value-setq-fun" name="multiple-value-setq" type="spec"><args>(variable...) form</args>
+</define>
+
+<description><obj>multiple-value</obj> is a special
+form used for calling a function which
+is expected to return more than one value.
+<arg>form</arg> is evaluated, and the <arg>variables</arg>
+are <arg>set</arg> (not lambda-bound) to the values returned by <arg>form</arg>.  If more values
+are returned than there are variables, the extra values
+are ignored.  If there are more variables than values returned,
+extra values of <obj>nil</obj> are supplied.  If <obj>nil</obj> appears in the <arg>var-list</arg>,
+then the corresponding value is ignored (setting <obj>nil</obj> is not allowed anyway).
+
+<lisp><exdent amount="96"><caption>Example: </caption>(multiple-value (symbol already-there-p)
+        (intern &quot;goo&quot;))
+</exdent></lisp>In addition to its first value (the symbol), <obj>intern</obj> returns a second
+value, which is non-<obj>nil</obj> if an existing symbol was found,
+or else <obj>nil</obj> if <obj>intern</obj> had to create one.  So if
+the symbol <obj>goo</obj> was already known, the variable <obj>already-there-p</obj>
+is set non-<obj>nil</obj>, otherwise it is set to <obj>nil</obj>.  The third value
+returned by <obj>intern</obj> is ignored by this form of call since there
+is no third variable in the <obj>multiple-value</obj>.
+
+<obj>multiple-value</obj> is usually used for effect rather than for value; however,
+its value is defined to be the first of the values returned by <arg>form</arg>.
+
+<obj>multiple-value-setq</obj> is the Common Lisp name for this construct.
+The two names are equivalent.
+</description></definition><definition><define key="multiple-value-bind-fun" name="multiple-value-bind" type="spec"><args>(variable...) form body...</args>
+</define>
+
+<description>This is similar to <obj>multiple-value</obj>, but locally binds the variables which
+receive the values, rather than setting them, and has a body--a set of forms
+which are evaluated with these local bindings in effect.
+First <arg>form</arg> is evaluated.  Then the <arg>variables</arg> are
+bound to the values returned by <arg>form</arg>.  Then the <arg>body</arg> forms
+are evaluated sequentially, the bindings are undone, and the result
+of the last <arg>body</arg> form is returned.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(multiple-value-bind (sym already-there)
+    (intern string)
+  ;; If an existing symbol was found, deallocate the string.
+  (if already-there
+      (return-storage (prog1 string (setq string nil))))
+  sym)
+</exdent></lisp></description></definition><definition><define key="multiple-value-call-fun" name="multiple-value-call" type="spec"><args>function argforms...</args>
+</define>
+
+<description>Evaluates the argforms, saving all of their values, and then calls
+<arg>function</arg> with all those values as arguments.  This differs from
+
+<lisp>(funcall <arg>function</arg> <arg>argforms</arg>...)
+</lisp>because that would get only one argument for <arg>function</arg> from each
+<arg>argform</arg>, whereas <obj>multiple-value-call</obj> gets as many args from each
+<arg>argform</arg> as the <arg>argform</arg> cares to return.  This works by consing a
+list of all the values returned, and applying <arg>function</arg> to it.  Example:
+
+<lisp>(multiple-value-call 'append
+      (values '(a b) '(c d))
+      '(e f))
+   =&gt;  (a b c d e f)
+</lisp></description></definition><definition><define key="multiple-value-prog1-fun" name="multiple-value-prog1" type="spec"><args>form forms...</args>
+</define>
+
+<description>Evaluates <arg>form</arg>, saves its values, evaluates the <arg>forms</arg>, discards their values,
+then returns whatever values <arg>form</arg> produced.
+This does not cons.  Example:
+
+<lisp>(multiple-value-prog1 (values 1 2)
+      (print 'foo))
+   =&gt;  1 2
+</lisp></description></definition><definition><define key="multiple-value-list-fun" name="multiple-value-list" type="spec"><args>form</args>
+</define>
+
+<description><obj>multiple-value-list</obj> evaluates <arg>form</arg>, and returns a list of
+the values it returned.  This is useful for when you don't know how many values
+to expect.
+
+<lisp><exdent amount="96"><caption>Example: </caption>(setq a (multiple-value-list (intern &quot;goo&quot;)))
+a =&gt; (goo nil #&lt;Package USER 10112147&gt;)
+</exdent></lisp>This is similar to the example of <obj>multiple-value</obj> above; <obj>a</obj> is set
+to a list of three elements, the three values returned by <obj>intern</obj>.
+</description></definition><definition><define key="nth-value-fun" name="nth-value" type="spec"><args>n form</args>
+</define>
+
+<description>Evaluates <arg>form</arg> and returns its value number <arg>n</arg>, <arg>n</arg> = 0 meaning
+the first value.  For example, <obj>(nth-value 1 (foo))</obj> returns
+the second of <obj>foo</obj>'s values.  <obj>nth-value</obj> operates without consing
+in compiled code if the first argument's value is known at compile time.
+</description></definition>
+<p>When one form finished by tail recursively evaluating a subform (see
+<ref chapter="3" definition-in-file="fd-eva" key="tail-recursion" section="6" title="Tail Recursion" type="section"></ref>), all of the subform's multiple values are passed back
+by the outer form.  For example, the value of a <obj>cond</obj> is the value of
+the last form in the selected clause.  If the last form in that clause
+produces multiple values, so does the <obj>cond</obj>.  This <arg>passing-back</arg>
+of multiple values of course has no effect unless eventually one of the
+special forms for receiving multiple values is reached.
+</p>
+
+<p>If the outer form returns a value computed by a subform, but not in a
+tail recursive fashion (for example, if the value of the subform is
+examined first), multiple values or only single values may be returned
+at the discretion of the implementation; users should not depend on
+whatever way it happens to work, as it may change in the future or in
+other implementations.  The reason we don't guarantee non-transmission
+of multiple values is because such a guarantee would not be very useful
+and the efficiency cost of enforcing it would be high.  Even
+<obj>setq</obj>'ing a variable to the result of a form, then returning the
+value of that variable, might pass multiple values if an
+optimizing compiler realized that the <obj>setq</obj>'ing of the variable
+was unnecessary.  Since extra returned values are generally ignored,
+it is not vital to eliminate them.
+</p>
+
+<p>Note that use of a form as an argument to a function never receives
+multiple values from that form.  That is, if the form <obj>(foo (bar))</obj>
+is evaluated and the call to <obj>bar</obj> returns many values, <obj>foo</obj> is
+still called on only one argument (namely, the first value returned),
+rather than being called on all the values returned.  We choose not to
+generate several separate arguments from the several values, because
+this would make the source code obscure; it would not be syntactically
+obvious that a single form does not correspond to a single argument.
+To pass all returned values to another function, use <obj>multiple-value-call</obj>, above.
+</p>
+
+<p>For clarity, descriptions of the interaction of several common special
+forms with multiple values follow.  This can all be deduced from the
+rule given above.  Note well that when it says that multiple values
+are not returned, it really means that they may or may not be returned,
+and you should not write any programs that depend on which way it actually works.
+</p>
+
+<p>The body of a <obj>defun</obj> or a <obj>lambda</obj>, and variations such as the
+body of a function, the body of a <obj>let</obj>, etc., pass back multiple
+values from the last form in the body.
+</p>
+
+<p><obj>eval</obj>, <obj>apply</obj> and <obj>funcall</obj>,
+pass back multiple values from the function called.
+</p>
+
+<p><obj>progn</obj> passes back multiple values from its last form.  <obj>progv</obj> and
+<obj>progw</obj> do so also.  <obj>prog1</obj> and <obj>prog2</obj>, however, do not pass
+back multiple values.
+</p>
+
+<p>Multiple values are passed back only from the last subform of an <obj>and</obj> or an <obj>or</obj> form,
+not from previous subforms since the return is conditional.  Remember
+that multiple values are only passed back when the value of a subform
+is unconditionally returned from the containing form.  For example,
+consider the form <obj>(or (foo) (bar))</obj>.  If <obj>foo</obj> returns a non-<obj>nil</obj>
+first value, then only that value is returned as the value of the
+form.  But if it returns <obj>nil</obj> (as its first value), then <obj>or</obj>
+returns whatever values the call to <obj>bar</obj> returns.
+</p>
+
+<p><obj>cond</obj> passes back multiple values from the last form in the selected
+clause, provided that that last form's value is returned
+unconditionally.  This is true if the clause has two or more forms in
+it, and is always true for the last clause.
+</p>
+
+<p>The variants of <obj>cond</obj> such as <obj>if</obj>, <obj>select</obj>, <obj>selectq</obj>, and
+<obj>dispatch</obj> pass back multiple values from the last form in the
+selected clause.
+</p>
+
+<p>If a <obj>block</obj> form falls through the end, it returns all the values
+returned by the last expression in it.  If <obj>return-from</obj> or <obj>return</obj>
+is used to exit a <obj>block</obj> form, then the values returned by the
+<obj>block</obj> form depend on the kind of <obj>return</obj>.  If <obj>return</obj> is given
+two or more subforms, then <obj>block</obj> returns as many values as the
+<obj>return</obj> has subforms.  However, if the <obj>return</obj> has only one
+subform, then the <obj>block</obj> returns all of the values returned by that
+one subform.
+</p>
+
+<p><obj>prog</obj> behaves like <obj>block</obj> if it is exited with <obj>return</obj> (or
+<obj>return-from</obj>).  If control falls through the end of a <obj>prog</obj>, it
+returns the single value <obj>nil</obj>.  <obj>do</obj> also behaves like <obj>block</obj>
+with respect to <obj>return</obj>, but if it is exited through the exit test,
+all the values of the last <arg>exit-form</arg> are returned.
+</p>
+
+<p><obj>unwind-protect</obj> passes back multiple values from its protected form.
+In a sense, this is an exception to the rule; but it is useful, and it
+makes sense to consider the execution of the unwind forms as a byproduct of
+unwinding the stack and not as part of sequential execution.
+</p>
+
+<p><obj>catch</obj> passes back multiple values from the last form in its
+body, if it exits normally.  If a throw is done, multiple values are
+passed back from the value form in the <obj>throw</obj>.
+</p>
+<definition>
+<define key="multiple-values-limit-var" name="multiple-values-limit" type="const"></define>
+
+<description>The smallest number of values that might possibly fail to work.
+Returning a number of values less than this many cannot possibly
+run into trouble with an implementation limit on number of values returned.
+</description></definition></section><a name="Evaluation and Function Calling Errors"></a>
+
+
+<section chapter-number="3" name="Evaluation and Function Calling Errors" number="8" title="Evaluation and Function Calling Errors"><p>Here is a description of the error conditions that the evaluator can
+signal.  Some can be signaled by calls to compiled functions also.  This
+is for use by those who are writing condition handlers
+(<ref chapter="31" definition-in-file="errors" key="condition-handlers" section="2" title="Handling Conditions" type="section"></ref>).  The novice should skip this section.
+</p>
+<definition><define key="sys:invalid-function-condition" name="sys:invalid-function" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This is signaled when an object that is
+supposed to be applied to arguments is not a valid Lisp function.
+The condition instance supports the
+operation <obj>:function</obj>, which returns the supposed function to be called.
+
+The <obj>:new-function</obj> proceed type is provided; it expects one argument,
+a function to call instead.
+</description></definition><definition><define key="sys:invalid-lambda-list-condition" name="sys:invalid-lambda-list" type="condition"><args>(<obj>sys:invalid-function</obj> <obj>error</obj>)</args>
+</define>
+
+<description>This condition name is present in addition to <obj>sys:invalid-function</obj>
+when the function to be called looks like an interpreted function, and
+the only problem is the syntax of its lambda list.
+</description></definition><definition><define key="sys:too-few-arguments-condition" name="sys:too-few-arguments" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This condition is signaled when a function is applied to too few arguments.
+The condition instance supports the operations <obj>:function</obj> and
+<obj>:arguments</obj> which return the function and the list of the arguments
+provided.
+
+The proceed types <obj>:additional-arguments</obj> and <obj>:new-argument-list</obj>
+are provided.  Both take one argument.  In the first case, the argument
+is a list of arguments to pass in addition to the ones supplied.  In the
+second, it is a list of arguments to replace the ones actually supplied.
+</description></definition><definition><define key="sys:too-many-arguments-condition" name="sys:too-many-arguments" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This is similar to <obj>sys:too-few-arguments</obj>.  Instead of the
+<obj>:additional-arguments</obj> proceed type, <obj>:fewer-arguments</obj> is
+provided.  Its argument is a number, which is how many of the originally
+supplied arguments to use in calling the function again.
+</description></definition><definition><define key="sys:undefined-keyword-argument-condition" name="sys:undefined-keyword-argument" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This is signaled when a function that takes keyword arguments is given a
+keyword that it does not accept, if <obj>&amp;allow-other-keys</obj> was not used
+in the function's definition and <obj>:allow-other-keys</obj> was not specified
+by the caller (see <ref definition-in-file="fd-eva" key="allow-other-keys-kwd" type="page"></ref>).  The <obj>:keyword</obj> operation
+on the condition instance returns the extraneous keyword, and the
+<obj>:value</obj> operation returns the value supplied with it.
+
+The proceed type <obj>:new-keyword</obj> is provided.  It expects one
+argument, which is a keyword to use instead of the one supplied.
+</description></definition><definition><define key="sys:cell-contents-error-condition-flavor" name="sys:cell-contents-error" type="condition-flavor"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This condition name categorizes all the errors signaled because of
+references to void memory locations.  It includes ``unbound'' variables,
+``undefined'' functions, and other things.
+
+
+<table><tbody><tr><td><obj>:address</obj></td><td>A locative pointer to the referenced cell.
+</td></tr><tr><td><obj>:current-address</obj></td><td>A locative pointer to the cell which currently contains the contents
+that were found in the referenced cell when the error happened.  This
+can be different from the original address in the case of dynamic
+variable bindings, which move between special PDLs and symbol value
+cells.
+</td></tr><tr><td><obj>:cell-type</obj></td><td>A keyword saying what type of cell was referred to: <obj>:function</obj>,
+<obj>:value</obj>, <obj>:closure</obj>, or <obj>nil</obj> for a cell that is not one of
+those.
+</td></tr><tr><td><obj>:containing-structure</obj></td><td>The object (list, array, symbol) inside which the referenced memory cell is found.
+</td></tr><tr><td><obj>:data-type</obj></td><td></td></tr><tr><td><obj>:pointer</obj></td><td>The data type and pointer fields of the contents of the memory cell, at
+the time of the error.  Both are fixnums.
+</td></tr></tbody></table>
+The proceed type <obj>:no-action</obj> takes no argument.  If the cell's
+contents are now valid, the program proceeds, using them.  Otherwise
+the error happens again.
+
+The proceed type <obj>:package-dwim</obj> looks for symbols with the same name
+in other packages; but only if the containing structure is a symbol.
+
+Two other proceed types take one argument: <obj>:new-value</obj> and <obj>:store-new-value</obj>.
+The argument is used as the contents of the memory cell.
+<obj>:store-new-value</obj> also permanently stores the argument into the cell.
+</description></definition><definition><define key="sys:unbound-variable-condition" name="sys:unbound-variable" type="condition"><args>(<obj>sys:cell-contents-error</obj> <obj>error</obj>)</args>
+</define>
+
+<description>This condition name categorizes all errors of variables whose values are void.
+</description></definition><definition>
+<define key="sys:unbound-special-variable-condition" name="sys:unbound-special-variable" type="condition"></define>
+<define key="sys:unbound-closure-variable-condition" name="sys:unbound-closure-variable" type="condition"></define>
+<define key="sys:unbound-instance-variable-condition" name="sys:unbound-instance-variable" type="condition"></define>
+
+<description>These condition names appear in addition to <obj>sys:unbound-variable</obj> to subcategorize
+the kind of variable reference that the error happened in.
+</description></definition><definition><define key="sys:undefined-function-condition" name="sys:undefined-function" type="condition"><args>(<obj>sys:cell-contents-error</obj> <obj>error</obj>)</args>
+</define>
+
+<description>This condition name categorizes errors of function specs that are undefined.
+</description></definition><definition><define key="sys:wrong-type-argument-condition" name="sys:wrong-type-argument" type="condition"><args>(<obj>error</obj>)</args>
+</define>
+
+<description>This is signaled when a function checks the type of its argument and
+rejects it; for example, if you do <obj>(car 1)</obj>.
+
+The condition instance supports these extra operations:
+
+<table><tbody><tr><td><obj>:arg-name</obj></td><td>The name of the erroneous argument.  This may be <obj>nil</obj> if there is no
+name, or if the system no longer remembers which argument it was.
+</td></tr><tr><td><obj>:old-value</obj></td><td>The value that was supplied for the argument.
+</td></tr><tr><td><obj>:function</obj></td><td>The function which received and rejected the argument.
+</td></tr><tr><td><obj>:description</obj></td><td>A type specifier which says what sort of object was expected for this argument.
+</td></tr></tbody></table>
+The proceed type <obj>:argument-value</obj> is provided; it expects one argument,
+which is a value to use instead of the erroneous value.
+</description></definition></section></chapter>
+</document-part>
