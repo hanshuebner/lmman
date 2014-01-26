@@ -41,12 +41,12 @@
  </xsl:template>
 
  <xsl:template match="p">
-  <xsl:if test="@indent = '1'">
-   <xsl:attribute name="class">indented</xsl:attribute>
-  </xsl:if>
-  <p>
-   <xsl:apply-templates/>
-  </p>
+   <p>
+     <xsl:if test="@indent = '1'">
+       <xsl:attribute name="class">indented</xsl:attribute>
+     </xsl:if>
+     <xsl:apply-templates/>
+   </p>
  </xsl:template>
 
  <xsl:template match="pre">
