@@ -398,12 +398,12 @@ are read or written.  The details of the mapping are explained in
 005 not-sign (¬)               045 %           105 E           145 e
 006 epsilon (ε)                046 &amp;           106 F           146 f
 007 pi (π)                     047 '           107 G           147 g
-010 lambda (<ref></ref>)                 050 (           110 H           150 h
+010 lambda (λ)                 050 (           110 H           150 h
 011 gamma (γ)                  051 )           111 I           151 i
-012 delta (⊗(ctl-j))                  052 *           112 J           152 j
+012 delta (ẟ)                  052 *           112 J           152 j
 013 uparrow (↑)                053 +           113 K           153 k
 014 plus-minus (±)             054 ,           114 L           154 l
-015 circle-plus (<ref></ref>)            055 -           115 M           155 m
+015 circle-plus (⊕)            055 -           115 M           155 m
 016 infinity (∞)               056 .           116 N           156 n
 017 partial delta (∂)          057 /           117 O           157 o
 020 left horseshoe (⊂)         060 0           120 P           160 p
