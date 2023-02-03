@@ -2200,24 +2200,24 @@ the hash table.
 <subsection name="NIL" title="Hash Table Operations"><p>Hash tables are instances, and support the following operations:
 </p>
 <definition>
-<define key="hash-table-size-method" name="hash-table" type="method"></define>
+<define key="hash-table-size-method" name="hash-table" method-name="size" type="method"></define>
 
 <description>Returns the number of entries in the hash table.
 Note that the hash table is rehashed when only a fraction of this many
 (the rehash threshold) are full.
 </description></definition><definition>
-<define key="hash-table-filled-entries-method" name="hash-table" type="method"></define>
+<define key="hash-table-filled-entries-method" name="hash-table" method-name="filled-entries" type="method"></define>
 
 <description>Returns the number of entries that are currently occupied.
-</description></definition><definition><define key="hash-table-get-hash-method" name="hash-table" type="method"><args>key</args>
-</define><define key="hash-table-put-hash-method" name="hash-table" type="method"><args>key <standard>&amp;rest</standard> values</args>
-</define><define key="hash-table-swap-hash-method" name="hash-table" type="method"><args>key <standard>&amp;rest</standard> values</args>
-</define><define key="hash-table-rem-hash-method" name="hash-table" type="method"><args>key</args>
-</define><define key="hash-table-map-hash-method" name="hash-table" type="method"><args>function <standard>&amp;rest</standard> extra-args</args>
-</define><define key="hash-table-map-hash-return-method" name="hash-table" type="method"><args>function</args>
+</description></definition><definition><define key="hash-table-get-hash-method" name="hash-table" method-name="get-hash" type="method"><args>key</args>
+</define><define key="hash-table-put-hash-method" name="hash-table" method-name="put-hash" type="method"><args>key <standard>&amp;rest</standard> values</args>
+</define><define key="hash-table-swap-hash-method" name="hash-table" method-name="swap-hash" type="method"><args>key <standard>&amp;rest</standard> values</args>
+</define><define key="hash-table-rem-hash-method" name="hash-table" method-name="rem-hash" type="method"><args>key</args>
+</define><define key="hash-table-map-hash-method" name="hash-table" method-name="map-hash" type="method"><args>function <standard>&amp;rest</standard> extra-args</args>
+</define><define key="hash-table-map-hash-return-method" name="hash-table" method-name="map-hash-return" type="method"><args>function</args>
 </define>
-<define key="hash-table-clear-hash-method" name="hash-table" type="method"></define>
-<define key="hash-table-filled-entries-method" name="hash-table" type="method"></define>
+<define key="hash-table-clear-hash-method" name="hash-table" method-name="clear-hash" type="method"></define>
+<define key="hash-table-filled-entries-method" name="hash-table" method-name="filled-entries" type="method"></define>
 
 <description>Are equivalent to the functions <obj>gethash</obj>, <obj>puthash</obj>, <obj>swaphash</obj>,
 <obj>remhash</obj>, <obj>maphash</obj>, <obj>maphash-return</obj>, <obj>clrhash</obj> and
@@ -2225,7 +2225,7 @@ Note that the hash table is rehashed when only a fraction of this many
 an argument because it is the object that receives the message.  Those
 functions (documented in the previous section) actually work by invoking
 these operations.
-</description></definition><definition><define key="hash-table-modify-hash-method" name="hash-table" type="method"><args>key function <standard>&amp;rest</standard> additional-args</args>
+</description></definition><definition><define key="hash-table-modify-hash-method" name="hash-table" method-name="modify-hash" type="method"><args>key function <standard>&amp;rest</standard> additional-args</args>
 </define>
 
 <description>Passes the value associated with <arg>key</arg> in the table to <arg>function</arg>;

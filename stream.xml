@@ -1078,7 +1078,7 @@ It defines <obj>:tyi</obj> as well as all the other standard input operations,
 but you must define the two operations <obj>:next-input-buffer</obj> and
 <obj>:discard-input-buffer</obj>, which the buffer management routines use.
 </description></definition><definition>
-<define key="si:buffered-input-stream-next-input-buffer-method" name="si:buffered-input-stream" type="method"></define>
+<define key="si:buffered-input-stream-next-input-buffer-method" name="si:buffered-input-stream" method-name="next-input-buffer" type="method"></define>
 
 <description>In a buffered input stream, this operation is used as a subroutine of
 the standard input operations, such as <obj>:tyi</obj>, to get the next
@@ -1087,7 +1087,7 @@ containing the data, a starting index in the array, and an ending index.
 For example, in a Chaosnet stream, this operation would get the next
 packet of input data and return pointers delimiting the actual data in
 the packet.
-</description></definition><definition><define key="si:buffered-input-stream-discard-input-buffer-method" name="si:buffered-input-stream" type="method"><args>buffer-array</args>
+</description></definition><definition><define key="si:buffered-input-stream-discard-input-buffer-method" name="si:buffered-input-stream" method-name="discard-input-buffer" type="method"><args>buffer-array</args>
 </define>
 
 <description>In a buffered input stream, this operation is used as a subroutine of
@@ -1106,7 +1106,7 @@ you must define the operations <obj>:new-output-buffer</obj>,
 <obj>:send-output-buffer</obj> and <obj>:discard-output-buffer</obj>, which the buffer
 management routines use.
 </description></definition><definition>
-<define key="si:buffered-output-stream-new-output-buffer-method" name="si:buffered-output-stream" type="method"></define>
+<define key="si:buffered-output-stream-new-output-buffer-method" name="si:buffered-output-stream" method-name="new-output-buffer" type="method"></define>
 
 <description>In a buffered output stream, this operation is used as a subroutine of
 the
@@ -1119,7 +1119,7 @@ delimit the part of the array that is to be used as a buffer.
 For example, a Chaosnet stream would get a packet from the free pool
 and return indices delimiting the part of the packet array which can
 hold data bytes.
-</description></definition><definition><define key="si:buffered-output-stream-send-output-buffer-method" name="si:buffered-output-stream" type="method"><args>buffer-array ending-index</args>
+</description></definition><definition><define key="si:buffered-output-stream-send-output-buffer-method" name="si:buffered-output-stream" method-name="send-output-buffer" type="method"><args>buffer-array ending-index</args>
 </define>
 
 <description>In a buffered output stream, this operation is used as a subroutine of
@@ -1134,7 +1134,7 @@ indicates how much of the buffer is currently full.
 
 The method for this operation should process the buffer's data and, if
 necessary, return the buffer to a free pool.
-</description></definition><definition><define key="si:buffered-output-stream-discard-output-buffer-method" name="si:buffered-output-stream" type="method"><args>buffer-array</args>
+</description></definition><definition><define key="si:buffered-output-stream-discard-output-buffer-method" name="si:buffered-output-stream" method-name="discard-output-buffer" type="method"><args>buffer-array</args>
 </define>
 
 <description>In a buffered output stream, this operation is used as a subroutine
@@ -1212,7 +1212,7 @@ support random access.  This flavor defines the <obj>:read-pointer</obj> and
 <obj>:set-pointer</obj> operations.  If you wish <obj>:set-pointer</obj> to work, you
 must provide a definition for the <obj>:set-buffer-pointer</obj> operation.
 You need not do so if you wish to support only <obj>:read-pointer</obj>.
-</description></definition><definition><define key="si:input-pointer-remembering-mixin-set-buffer-pointer-method" name="si:input-pointer-remembering-mixin" type="method"><args>new-pointer</args>
+</description></definition><definition><define key="si:input-pointer-remembering-mixin-set-buffer-pointer-method" name="si:input-pointer-remembering-mixin" method-name="set-buffer-pointer" type="method"><args>new-pointer</args>
 </define>
 
 <description>You must define this operation if you use
@@ -1234,11 +1234,11 @@ support random access.  This mixin defines the <obj>:read-pointer</obj> and
 must provide definitions for the <obj>:set-buffer-pointer</obj> and
 <obj>:get-old-data</obj> operations.  You need not do so if you wish to support
 only <obj>:read-pointer</obj>.
-</description></definition><definition><define key="si:output-pointer-remembering-mixin-set-buffer-pointer-method" name="si:output-pointer-remembering-mixin" type="method"><args>new-pointer</args>
+</description></definition><definition><define key="si:output-pointer-remembering-mixin-set-buffer-pointer-method" name="si:output-pointer-remembering-mixin" method-name="set-buffer-pointer" type="method"><args>new-pointer</args>
 </define>
 
 <description>This is the same as in <obj>si:input-pointer-remembering-mixin</obj>.
-</description></definition><definition><define key="si:output-pointer-remembering-mixin-get-old-data-method" name="si:output-pointer-remembering-mixin" type="method"><args>buffer-array lower-output-limit</args>
+</description></definition><definition><define key="si:output-pointer-remembering-mixin-get-old-data-method" name="si:output-pointer-remembering-mixin" method-name="get-old-data" type="method"><args>buffer-array lower-output-limit</args>
 </define>
 
 <description>The buffer management routines perform this operation when you do a

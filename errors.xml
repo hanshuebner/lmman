@@ -163,7 +163,7 @@ This is normally equivalent to <obj>(typep <arg>object</arg> 'error)</obj>.  Som
 <obj>open</obj> optionally return the condition instance rather than signaling it, if an error
 occurs.  <obj>errorp</obj> is useful in testing the value returned.
 </description></definition><definition>
-<define key="condition-condition-names-method" name="condition" type="method"></define>
+<define key="condition-condition-names-method" name="condition" method-name="condition-names" type="method"></define>
 
 <description>Returns a list of all the condition names possesses by this condition instance.
 </description></definition></section><a name="condition-handlers"></a>
@@ -528,7 +528,7 @@ implements the printing of an error message.  When a condition instance is
 printed with escaping, it uses the <obj>#⊂</obj> syntax so that it can be read back in.
 This is done using <obj>si:print-readably-mixin</obj>, <ref definition-in-file="flavor" key="si:print-readably-mixin-flavor" title="Flavor si:print-readably-mixin" type="flavor"></ref>.
 </p>
-<definition><define key="condition-report-method" name="condition" type="method"><args>stream</args>
+<definition><define key="condition-report-method" name="condition" method-name="report" type="method"><args>stream</args>
 </define>
 
 <description>Prints on <arg>stream</arg> the condition's error message, a description of the circumstances
@@ -539,7 +539,7 @@ If you are defining a new flavor of condition and wish to change the way the
 error message is printed, this is the operation to redefine.  All others use this
 one.
 </description></definition><definition>
-<define key="condition-report-string-method" name="condition" type="method"></define>
+<define key="condition-report-string-method" name="condition" method-name="report-string" type="method"></define>
 
 <description>Returns a string containing the text that the <obj>:report</obj> operation would
 print.
@@ -547,14 +547,14 @@ print.
 <p>Operations provided specifically for condition handlers to use:
 </p>
 <definition>
-<define key="condition-dangerous-condition-p-method" name="condition" type="method"></define>
+<define key="condition-dangerous-condition-p-method" name="condition" method-name="dangerous-condition-p" type="method"></define>
 
 <description>Returns <obj>t</obj> if the condition instance is one of those that indicate events
 that are considered extremely dangerous, such as running out of memory.
 Handlers that normally handle all conditions might want to
 make an exception for these.
 </description></definition><definition>
-<define key="condition-debugging-condition-p-method" name="condition" type="method"></define>
+<define key="condition-debugging-condition-p-method" name="condition" method-name="debugging-condition-p" type="method"></define>
 
 <description>Returns <obj>t</obj> if the condition instance is one of those that are signaled as
 part of debugging, such as <obj>break</obj>, which is signaled when you type
@@ -574,7 +574,7 @@ with proceeding (<ref definition-in-file="errors" key="proceeding" type="page"><
 because some flavors of condition redefine them so as to cause the debugger to
 behave differently.  This section is of interest only to advanced users.
 </p>
-<definition><define key="condition-print-error-message-method" name="condition" type="method"><args>stack-group brief-flag stream</args>
+<definition><define key="condition-print-error-message-method" name="condition" method-name="print-error-message" type="method"><args>stack-group brief-flag stream</args>
 </define>
 
 <description>This operation is used by the debugger to print a complete error message.  This
@@ -592,25 +592,25 @@ that is meaningful only in compiled code; if that is what happened, it searches
 the stack to look for the name of the function in which the call appears.  This is
 information that is not considered crucial to the error itself, and is therefore
 not recorded in the condition instance.
-</description></definition><definition><define key="condition-maybe-clear-input-method" name="condition" type="method"><args>stream</args>
+</description></definition><definition><define key="condition-maybe-clear-input-method" name="condition" method-name="maybe-clear-input" type="method"><args>stream</args>
 </define>
 
 <description>This operation is used on entry to the debugger to discard input.
 Certain condition flavors, used by stepping redefine this operation to do nothing,
 so that input is not discarded.
 </description></definition><definition>
-<define key="condition-bug-report-recipient-system-method" name="condition" type="method"></define>
+<define key="condition-bug-report-recipient-system-method" name="condition" method-name="bug-report-recipient-system" type="method"></define>
 
 <description>The value returned by this operation is used to determine what address to mail
 bug reports to, when the debugger <obj>Control-M</obj> command is used.
 By default, it returns <obj>&quot;LISPM&quot;</obj>.  The value is passed to the function <obj>bug</obj>.
-</description></definition><definition><define key="condition-bug-report-description-method" name="condition" type="method"><args>stream <standard>&amp;optional</standard> numeric-arg</args>
+</description></definition><definition><define key="condition-bug-report-description-method" name="condition" method-name="bug-report-description" type="method"><args>stream <standard>&amp;optional</standard> numeric-arg</args>
 </define>
 
 <description>This operation is used by the <obj>Control-M</obj> command to print on <arg>stream</arg> the
 information that should go in the bug report.  <arg>numeric-arg</arg> is the numeric
 argument, if any, that the user gave to the <obj>Control-M</obj> command.
-</description></definition><definition><define key="condition-find-current-frame-method" name="condition" type="method"><args>stack-group</args>
+</description></definition><definition><define key="condition-find-current-frame-method" name="condition" method-name="find-current-frame" type="method"><args>stack-group</args>
 </define>
 
 <description>Returns the stack indices of the stack frames that the debugger should operate
@@ -632,7 +632,7 @@ to be ``interesting''.  Normally, frames that are part of the interpreter (calls
 <obj>si:eval1</obj>, <obj>si:apply-lambda</obj>, <obj>prog</obj>, <obj>cond</obj>, etc.) are considered uninteresting.
 
 This is a flavor operation so that certain flavors of condition can redefine it.
-</description></definition><definition><define key="condition-debugger-command-loop-method" name="condition" type="method"><args>stack-group <standard>&amp;optional</standard> error-object</args>
+</description></definition><definition><define key="condition-debugger-command-loop-method" name="condition" method-name="debugger-command-loop" type="method"><args>stack-group <standard>&amp;optional</standard> error-object</args>
 </define>
 
 <description>Enters the debugger command loop.  The initial error message and backtrace have
@@ -1213,13 +1213,13 @@ instances returns a keyword describing the data type that was desired.
 </lisp><nopara></nopara>Here the argument to the <obj>:argument-value</obj> proceed type is <obj>nil</obj>.
 </p>
 <definition>
-<define key="condition-proceed-types-method" name="condition" type="method"></define>
+<define key="condition-proceed-types-method" name="condition" method-name="proceed-types" type="method"></define>
 
 <description>Returns a list of the proceed types available for this condition instance.
 This operation should be used only within the signaling of the condition
 instance, as it refers to the special variable in which <obj>signal-condition</obj>
 stores its second argument.
-</description></definition><definition><define key="condition-proceed-type-p-method" name="condition" type="method"><args>proceed-type</args>
+</description></definition><definition><define key="condition-proceed-type-p-method" name="condition" method-name="proceed-type-p" type="method"><args>proceed-type</args>
 </define>
 
 <description><obj>t</obj> if <arg>proceed-type</arg> is one of the proceed types available for this condition instance.
@@ -1261,7 +1261,7 @@ a condition instance describing an unbound variable error, if the
 proceed type specified is <obj>:new-value</obj>, the text printed is something
 like ``Proceed, reading a value to use instead.''
 </p>
-<definition><define key="condition-document-proceed-type-method" name="condition" type="method"><args>proceed-type stream</args>
+<definition><define key="condition-document-proceed-type-method" name="condition" method-name="document-proceed-type" type="method"><args>proceed-type stream</args>
 </define>
 
 <description>Prints on <arg>stream</arg> a description of the purpose of proceed type <arg>proceed-type</arg>.  This
@@ -1296,7 +1296,7 @@ arguments to pass with the proceed type.  Sending <obj>:proceed-asking-user</obj
 to an instance of <obj>sys:unbound-variable</obj> with argument <obj>:new-value</obj> would
 read and evaluate one expression, prompting appropriately.
 </p>
-<definition><define key="condition-proceed-asking-user-method" name="condition" type="method"><args>proceed-type continuation read-object-fn</args>
+<definition><define key="condition-proceed-asking-user-method" name="condition" method-name="proceed-asking-user" type="method"><args>proceed-type continuation read-object-fn</args>
 </define>
 
 <description>The method for <obj>:proceed-asking-user</obj> embodies the knowledge of how to
@@ -1367,7 +1367,7 @@ For handlers, there would be only one proceed type.
 which do not actually proceed; these should be inserted into the list
 by the <obj>:user-proceed-types</obj> method.
 </p>
-<definition><define key="condition-user-proceed-types-method" name="condition" type="method"><args>proceed-types</args>
+<definition><define key="condition-user-proceed-types-method" name="condition" method-name="user-proceed-types" type="method"><args>proceed-types</args>
 </define>
 
 <description>Assuming that <arg>proceed-types</arg> is the list of proceed types available for

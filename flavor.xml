@@ -2712,13 +2712,13 @@ sending the instance the corresponding message.
 <define key="si:property-list-mixin-flavor" name="si:property-list-mixin" type="flavor"></define>
 
 <description>This mixin flavor provides the basic operations on property lists.
-</description></definition><definition><define key="si:property-list-mixin-get-method" name="si:property-list-mixin" type="method"><args>property-name <standard>&amp;optional</standard> default</args>
+</description></definition><definition><define key="si:property-list-mixin-get-method" name="si:property-list-mixin" method-name="get" type="method"><args>property-name <standard>&amp;optional</standard> default</args>
 </define>
 
 <description>Looks up the object's <arg>property-name</arg> property.
 If it finds such a property, it returns the value; otherwise it
 returns <arg>default</arg>.
-</description></definition><definition><define key="si:property-list-mixin-getl-method" name="si:property-list-mixin" type="method"><args>property-name-list</args>
+</description></definition><definition><define key="si:property-list-mixin-getl-method" name="si:property-list-mixin" method-name="getl" type="method"><args>property-name-list</args>
 </define>
 
 <description>Like the <obj>:get</obj> operation, except that the
@@ -2727,22 +2727,22 @@ down the property list until it finds a property whose property name is
 one of the elements of <arg>property-name-list</arg>.  It returns the portion
 of the property list begining with the first such property that it
 found.  If it doesn't find any, it returns <obj>nil</obj>.
-</description></definition><definition><define key="si:property-list-mixin-putprop-method" name="si:property-list-mixin" type="method"><args>value property-name</args>
+</description></definition><definition><define key="si:property-list-mixin-putprop-method" name="si:property-list-mixin" method-name="putprop" type="method"><args>value property-name</args>
 </define>
 
 <description>Gives the object an <arg>property-name</arg> property of <arg>value</arg>.
 
 <lisp>(send <arg>object</arg> :set :get <arg>property-name</arg> <arg>value</arg>)
 </lisp>also has this effect.
-</description></definition><definition><define key="si:property-list-mixin-remprop-method" name="si:property-list-mixin" type="method"><args>property-name</args>
+</description></definition><definition><define key="si:property-list-mixin-remprop-method" name="si:property-list-mixin" method-name="remprop" type="method"><args>property-name</args>
 </define>
 
 <description>Removes the object's <arg>property-name</arg> property, by splicing it out
 of the property list.  It returns one of the cells spliced out, whose car
 is the former value of the property that was just removed.  If there was
 no such property to begin with, the value is <obj>nil</obj>.
-</description></definition><definition><define key="si:property-list-mixin-get-location-or-nil-method" name="si:property-list-mixin" type="method"><args>property-name</args>
-</define><define key="si:property-list-mixin-get-location-method" name="si:property-list-mixin" type="method"><args>property-name</args>
+</description></definition><definition><define key="si:property-list-mixin-get-location-or-nil-method" name="si:property-list-mixin" method-name="get-location-or-nil" type="method"><args>property-name</args>
+</define><define key="si:property-list-mixin-get-location-method" name="si:property-list-mixin" method-name="get-location" type="method"><args>property-name</args>
 </define>
 
 <description>Both return a locative pointer to the cell in which this object's
@@ -2750,7 +2750,7 @@ no such property to begin with, the value is <obj>nil</obj>.
 <obj>:get-location-or-nil</obj> returns <obj>nil</obj>, but <obj>:get-location</obj>
 adds a cell to the property list and initialized to <obj>nil</obj>, and a
 pointer to that cell is returned.
-</description></definition><definition><define key="si:property-list-mixin-push-property-method" name="si:property-list-mixin" type="method"><args>value property-name</args>
+</description></definition><definition><define key="si:property-list-mixin-push-property-method" name="si:property-list-mixin" method-name="push-property" type="method"><args>value property-name</args>
 </define>
 
 <description>The <arg>property-name</arg> property of the object should be a list (note that
@@ -2762,16 +2762,16 @@ list.  This is analogous to doing
 <lisp>(push <arg>value</arg> (get <arg>object</arg> <arg>property-name</arg>))
 </lisp>See the <obj>push</obj> special form (<ref definition-in-file="fd-con" key="push-fun" title="Macro push" type="mac"></ref>).
 </description></definition><definition>
-<define key="si:property-list-mixin-property-list-method" name="si:property-list-mixin" type="method"></define>
+<define key="si:property-list-mixin-property-list-method" name="si:property-list-mixin" method-name="property-list" type="method"></define>
 
 <description>Returns the list of alternating property names and values that implements
 the property list.
 </description></definition><definition>
-<define key="si:property-list-mixin-property-list-location-method" name="si:property-list-mixin" type="method"></define>
+<define key="si:property-list-mixin-property-list-location-method" name="si:property-list-mixin" method-name="property-list-location" type="method"></define>
 
 <description>Returns a locative pointer to the cell in the instance which holds
 the property list data.
-</description></definition><definition><define key="si:property-list-mixin-set-property-list-method" name="si:property-list-mixin" type="method"><args>list</args>
+</description></definition><definition><define key="si:property-list-mixin-set-property-list-method" name="si:property-list-mixin" method-name="set-property-list" type="method"><args>list</args>
 </define>
 
 <description>Sets the list of alternating property names and values that implements
@@ -2803,7 +2803,7 @@ method that can parse the <arg>additional-data</arg> and return an instance
 <description>Provides for flavor instances to print out using the <obj>#⊂</obj>
 syntax, and also for reading things that were printed in that way.
 </description></definition><definition>
-<define key="si:print-readably-mixin-reconstruction-init-plist-method" name="si:print-readably-mixin" type="method"></define>
+<define key="si:print-readably-mixin-reconstruction-init-plist-method" name="si:print-readably-mixin" method-name="reconstruction-init-plist" type="method"></define>
 
 <description>When you use <obj>si:print-readably-mixin</obj>, you must define the operation
 <obj>:reconstruction-init-plist</obj>.  This should return an alternating list

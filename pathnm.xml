@@ -375,29 +375,29 @@ version component does not need them either, because it is never a string.
 </subsection>
 
 <subsection name="NIL" title="Pathname Component Operations"><definition>
-<define key="pathname-host-method" name="pathname" type="method"></define>
-<define key="pathname-device-method" name="pathname" type="method"></define>
-<define key="pathname-directory-method" name="pathname" type="method"></define>
-<define key="pathname-name-method" name="pathname" type="method"></define>
-<define key="pathname-type-method" name="pathname" type="method"></define>
-<define key="pathname-version-method" name="pathname" type="method"></define>
+<define key="pathname-host-method" name="pathname" method-name="host" type="method"></define>
+<define key="pathname-device-method" name="pathname" method-name="device" type="method"></define>
+<define key="pathname-directory-method" name="pathname" method-name="directory" type="method"></define>
+<define key="pathname-name-method" name="pathname" method-name="name" type="method"></define>
+<define key="pathname-type-method" name="pathname" method-name="type" type="method"></define>
+<define key="pathname-version-method" name="pathname" method-name="version" type="method"></define>
 
 <description>These return the components of the pathname, in interchange form.  The
 returned values can be strings, special symbols, or lists of strings in
 the case of structured components.  The type is always a string or
 a symbol.  The version is always a number or a symbol.
 </description></definition><definition>
-<define key="pathname-raw-device-method" name="pathname" type="method"></define>
-<define key="pathname-raw-directory-method" name="pathname" type="method"></define>
-<define key="pathname-raw-name-method" name="pathname" type="method"></define>
-<define key="pathname-raw-type-method" name="pathname" type="method"></define>
+<define key="pathname-raw-device-method" name="pathname" method-name="raw-device" type="method"></define>
+<define key="pathname-raw-directory-method" name="pathname" method-name="raw-directory" type="method"></define>
+<define key="pathname-raw-name-method" name="pathname" method-name="raw-name" type="method"></define>
+<define key="pathname-raw-type-method" name="pathname" method-name="raw-type" type="method"></define>
 
 <description>These return the components of the pathname, in raw form.
-</description></definition><definition><define key="pathname-new-device-method" name="pathname" type="method"><args>dev</args>
-</define><define key="pathname-new-directory-method" name="pathname" type="method"><args>dir</args>
-</define><define key="pathname-new-name-method" name="pathname" type="method"><args>name</args>
-</define><define key="pathname-new-type-method" name="pathname" type="method"><args>type</args>
-</define><define key="pathname-new-version-method" name="pathname" type="method"><args>version</args>
+</description></definition><definition><define key="pathname-new-device-method" name="pathname" method-name="new-device" type="method"><args>dev</args>
+</define><define key="pathname-new-directory-method" name="pathname" method-name="new-directory" type="method"><args>dir</args>
+</define><define key="pathname-new-name-method" name="pathname" method-name="new-name" type="method"><args>name</args>
+</define><define key="pathname-new-type-method" name="pathname" method-name="new-type" type="method"><args>type</args>
+</define><define key="pathname-new-version-method" name="pathname" method-name="new-version" type="method"><args>version</args>
 </define>
 
 <description>These return a new pathname that is the same as the pathname they are
@@ -408,17 +408,17 @@ form, which means its case may be converted.  The <obj>:new-device</obj>,
 special symbol) or a list that is a structured name.  If the host does
 not define structured components, and you specify a list, its first
 element is used.
-</description></definition><definition><define key="pathname-new-raw-device-method" name="pathname" type="method"><args>dev</args>
-</define><define key="pathname-new-raw-directory-method" name="pathname" type="method"><args>dir</args>
-</define><define key="pathname-new-raw-name-method" name="pathname" type="method"><args>name</args>
-</define><define key="pathname-new-raw-type-method" name="pathname" type="method"><args>type</args>
+</description></definition><definition><define key="pathname-new-raw-device-method" name="pathname" method-name="new-raw-device" type="method"><args>dev</args>
+</define><define key="pathname-new-raw-directory-method" name="pathname" method-name="new-raw-directory" type="method"><args>dir</args>
+</define><define key="pathname-new-raw-name-method" name="pathname" method-name="new-raw-name" type="method"><args>name</args>
+</define><define key="pathname-new-raw-type-method" name="pathname" method-name="new-raw-type" type="method"><args>type</args>
 </define>
 
 <description>These return a new pathname that is the same as the pathname they are
 sent to except that the value of one of the components has been changed.
 The specified component value is interpreted as raw.
-</description></definition><definition><define key="pathname-new-suggested-name-method" name="pathname" type="method"><args>name</args>
-</define><define key="pathname-new-suggested-directory-method" name="pathname" type="method"><args>dir</args>
+</description></definition><definition><define key="pathname-new-suggested-name-method" name="pathname" method-name="new-suggested-name" type="method"><args>name</args>
+</define><define key="pathname-new-suggested-directory-method" name="pathname" method-name="new-suggested-directory" type="method"><args>dir</args>
 </define>
 
 <description>These differ from the <obj>:new-name</obj> and <obj>:new-directory</obj> operations in
@@ -431,7 +431,7 @@ For example, on a TOPS-20 system, these operations would convert
 <arg>name</arg> or <arg>dir</arg> to upper case, because while lower-case letters
 <arg>may</arg> appear in TOPS-20 pathnames, it is not customary to generate
 such pathnames by default.
-</description></definition><definition><define key="pathname-new-pathname-method" name="pathname" type="method"><args><standard>&amp;rest</standard> options</args>
+</description></definition><definition><define key="pathname-new-pathname-method" name="pathname" method-name="new-pathname" type="method"><args><standard>&amp;rest</standard> options</args>
 </define>
 
 <description>This returns a new pathname that is the same as the pathname it is sent
@@ -527,7 +527,7 @@ pname.
 <p>To match a pathname against a canonical type, use the <obj>:canonical-type</obj> operation.
 </p>
 <definition>
-<define key="pathname-canonical-type-method" name="pathname" type="method"></define>
+<define key="pathname-canonical-type-method" name="pathname" method-name="canonical-type" type="method"></define>
 
 <description>Returns two values which describe whether and how this pathname's type
 component matches any canonical type.
@@ -550,7 +550,7 @@ described below.
 </description></definition>
 <p>A new pathname may also be constructed by specifying a canonical type.
 </p>
-<definition><define key="pathname-new-canonical-type-method" name="pathname" type="method"><args>canonical-type <standard>&amp;optional</standard> original-type</args>
+<definition><define key="pathname-new-canonical-type-method" name="pathname" method-name="new-canonical-type" type="method"><args>canonical-type <standard>&amp;optional</standard> original-type</args>
 </define>
 
 <description>Returns a pathname different from this one in having a type component
@@ -607,7 +607,7 @@ pathname, would look only for the preferred mapping of the canonical
 type.  <obj>compile-file</obj> actually tries to open <arg>each</arg> possible mapping,
 trying the preferred mapping first.  Here is how it does so:
 </p>
-<definition><define key="pathname-open-canonical-default-type-method" name="pathname" type="method"><args>canonical-type <standard>&amp;rest</standard> options</args>
+<definition><define key="pathname-open-canonical-default-type-method" name="pathname" method-name="open-canonical-default-type" type="method"><args>canonical-type <standard>&amp;rest</standard> options</args>
 </define>
 
 <description>If this pathname's type component is non-<obj>nil</obj>, the pathname is simply
@@ -1167,12 +1167,12 @@ operations.  These are documented in <ref chapter="25" definition-in-file="pathn
 section on the specific host type.
 </p>
 <definition>
-<define key="pathname-generic-pathname-method" name="pathname" type="method"></define>
+<define key="pathname-generic-pathname-method" name="pathname" method-name="generic-pathname" type="method"></define>
 
 <description>Returns the generic pathname for the family of files of which this pathname is a member.
 See <ref chapter="25" definition-in-file="pathnm" key="generic-pathname" section="5" title="Generic Pathnames" type="section"></ref> for documentation on generic pathnames.
 </description></definition><definition>
-<define key="pathname-source-pathname-method" name="pathname" type="method"></define>
+<define key="pathname-source-pathname-method" name="pathname" method-name="source-pathname" type="method"></define>
 
 <description>Returns the pathname for the source file in the family of files to which
 this pathname belongs.  The returned pathname has <obj>:newest</obj>
@@ -1181,7 +1181,7 @@ Lisp environment, then the pathname type is that which the user actually
 used.  Otherwise, the conventional file type for source files is determined
 from the generic pathname.
 </description></definition><definition>
-<define key="pathname-primary-device-method" name="pathname" type="method"></define>
+<define key="pathname-primary-device-method" name="pathname" method-name="primary-device" type="method"></define>
 
 <description>Returns the default device name for the pathname's host.  This is used
 in generating the initial default pathname for a host.
@@ -1218,7 +1218,7 @@ an entire directory's contents are obtained by specifying a
 pathname whose name, type and version components are <obj>:wild</obj>.
 </p>
 <definition>
-<define key="pathname-wild-p-method" name="pathname" type="method"></define>
+<define key="pathname-wild-p-method" name="pathname" method-name="wild-p" type="method"></define>
 
 <description>Returns non-<obj>nil</obj> if this pathname contains any sort of wildcards.
 If the value is not <obj>nil</obj>, it is a keyword, one of
@@ -1226,18 +1226,18 @@ If the value is not <obj>nil</obj>, it is a keyword, one of
 <obj>:version</obj>, and it identifies the `first' component
 which is wild.
 </description></definition><definition>
-<define key="pathname-device-wild-p-method" name="pathname" type="method"></define>
+<define key="pathname-device-wild-p-method" name="pathname" method-name="device-wild-p" type="method"></define>
 
 <description><obj>t</obj> if this pathname's device contains any sort of wildcards.
 </description></definition><definition>
-<define key="pathname-directory-wild-p-method" name="pathname" type="method"></define>
-<define key="pathname-name-wild-p-method" name="pathname" type="method"></define>
-<define key="pathname-type-wild-p-method" name="pathname" type="method"></define>
-<define key="pathname-version-wild-p-method" name="pathname" type="method"></define>
+<define key="pathname-directory-wild-p-method" name="pathname" method-name="directory-wild-p" type="method"></define>
+<define key="pathname-name-wild-p-method" name="pathname" method-name="name-wild-p" type="method"></define>
+<define key="pathname-type-wild-p-method" name="pathname" method-name="type-wild-p" type="method"></define>
+<define key="pathname-version-wild-p-method" name="pathname" method-name="version-wild-p" type="method"></define>
 
 <description>Similar, for the other components that can be wild.  (The host cannot
 ever be wild.)
-</description></definition><definition><define key="pathname-pathname-match-method" name="pathname" type="method"><args>candidate-pathname <standard>&amp;optional</standard> (match-host-p <obj>t</obj>)</args>
+</description></definition><definition><define key="pathname-pathname-match-method" name="pathname" method-name="pathname-match" type="method"><args>candidate-pathname <standard>&amp;optional</standard> (match-host-p <obj>t</obj>)</args>
 </define>
 
 <description>Returns <obj>t</obj> if <obj>candidate-pathname</obj> matches the pathname
@@ -1285,7 +1285,7 @@ Examples:
 If <arg>match-host-p</arg> is <obj>nil</obj>, then the host components of
 the two pathnames are not tested.  The result then depends only
 on the other components.
-</description></definition><definition><define key="pathname-translate-wild-pathname-method" name="pathname" type="method"><args>target-pattern starting-data <standard>&amp;optional</standard> reversible</args>
+</description></definition><definition><define key="pathname-translate-wild-pathname-method" name="pathname" method-name="translate-wild-pathname" type="method"><args>target-pattern starting-data <standard>&amp;optional</standard> reversible</args>
 </define>
 
 <description>Returns a pathname corresponding to <arg>starting-data</arg> under the mapping
@@ -1356,11 +1356,11 @@ but with reversible translation the result is <obj>GER</obj>.
 <p>Operations to get a path name string out of a pathname object:
 </p>
 <definition>
-<define key="pathname-string-for-printing-method" name="pathname" type="method"></define>
+<define key="pathname-string-for-printing-method" name="pathname" method-name="string-for-printing" type="method"></define>
 
 <description>Returns a string that is the printed representation of the path name.  This is
 the same as what you get if you <obj>princ</obj> the pathname or take <obj>string</obj> of it.
-</description></definition><definition><define key="pathname-string-for-wholine-method" name="pathname" type="method"><args>length</args>
+</description></definition><definition><define key="pathname-string-for-wholine-method" name="pathname" method-name="string-for-wholine" type="method"><args>length</args>
 </define>
 
 <description>Returns a string like the <obj>:string-for-printing</obj>, but designed to fit
@@ -1368,29 +1368,29 @@ in <arg>length</arg> characters.  <arg>length</arg> is a suggestion; the actual
 returned string may be shorter or longer than that.  However, the
 who-line updater truncates the value to that length if it is longer.
 </description></definition><definition>
-<define key="pathname-string-for-editor-method" name="pathname" type="method"></define>
+<define key="pathname-string-for-editor-method" name="pathname" method-name="string-for-editor" type="method"></define>
 
 <description>Returns a string that is the pathname with its components rearranged so
 that the name is first.  The editor uses this form to name its buffers.
 </description></definition><definition>
-<define key="pathname-string-for-dired-method" name="pathname" type="method"></define>
+<define key="pathname-string-for-dired-method" name="pathname" method-name="string-for-dired" type="method"></define>
 
 <description>Returns a string to be used by the directory editor.  The string contains only
 the name, type, and version.
 </description></definition><definition>
-<define key="pathname-string-for-directory-method" name="pathname" type="method"></define>
+<define key="pathname-string-for-directory-method" name="pathname" method-name="string-for-directory" type="method"></define>
 
 <description>Returns a string that contains only the device and directory of
 the pathname.  It identifies one directory among all directories on the host.
 </description></definition><definition>
-<define key="pathname-string-for-host-method" name="pathname" type="method"></define>
+<define key="pathname-string-for-host-method" name="pathname" method-name="string-for-host" type="method"></define>
 
 <description>Returns a string that is the pathname the way the host file system likes to see it.
 </description></definition><need amount="1500"></need><nopara></nopara>
 <p>Operations to move around through a hierarchy of directories:
 </p>
 <definition>
-<define key="pathname-pathname-as-directory-method" name="pathname" type="method"></define>
+<define key="pathname-pathname-as-directory-method" name="pathname" method-name="pathname-as-directory" type="method"></define>
 
 <description>Assuming that the file described by the pathname is a directory,
 return another pathname specifying that <arg>as</arg> a directory.
@@ -1398,7 +1398,7 @@ Thus, if sent to a pathname <obj>OZ:&lt;RMS&gt;FOO.DIRECTORY</obj>, it would ret
 pathname <obj>OZ:&lt;RMS.FOO&gt;</obj>.  The name, type and version of the returned
 pathname are <obj>:unspecific</obj>.
 </description></definition><definition>
-<define key="pathname-directory-pathname-as-file-method" name="pathname" type="method"></define>
+<define key="pathname-directory-pathname-as-file-method" name="pathname" method-name="directory-pathname-as-file" type="method"></define>
 
 <description>This is the inverse of the preceding operation.  It returns a pathname
 specifying as a file the directory of the original pathname.  The name,
@@ -1410,12 +1410,12 @@ pathname on file systems that have a root directory.
 <need amount="1500"></need><nopara></nopara>
 <p>Operations to manipulate the property list of a pathname:
 </p>
-<definition><define key="pathname-get-method" name="pathname" type="method"><args>property-name <standard>&amp;optional</standard> default-value</args>
-</define><define key="pathname-getl-method" name="pathname" type="method"><args>list-of-property-names</args>
-</define><define key="pathname-putprop-method" name="pathname" type="method"><args>value property-name</args>
-</define><define key="pathname-remprop-method" name="pathname" type="method"><args>property-name</args>
+<definition><define key="pathname-get-method" name="pathname" method-name="get" type="method"><args>property-name <standard>&amp;optional</standard> default-value</args>
+</define><define key="pathname-getl-method" name="pathname" method-name="getl" type="method"><args>list-of-property-names</args>
+</define><define key="pathname-putprop-method" name="pathname" method-name="putprop" type="method"><args>value property-name</args>
+</define><define key="pathname-remprop-method" name="pathname" method-name="remprop" type="method"><args>property-name</args>
 </define>
-<define key="pathname-plist-method" name="pathname" type="method"></define>
+<define key="pathname-plist-method" name="pathname" method-name="plist" type="method"></define>
 
 <description>These manipulate the pathname's property list, and are used if you call
 the property list functions of the same names (see <ref definition-in-file="fd-con" key="get-fun" title="Function get" type="fun"></ref>) giving
@@ -1497,13 +1497,14 @@ number.  The initial list is
 <lisp>(&quot;LISP&quot; &quot;TEXT&quot; nil :unspecific)
 </lisp>Some users may need to add to this list.
 </description></definition><definition>
-<define key="its-pathname-fn1-method" name="its-pathname" type="method"></define>
-<define key="its-pathname-fn2-method" name="its-pathname" type="method"></define>
+<define key="its-pathname-fn1-method" name="its-pathname" method-name="fn1" type="method"></define>
+<define key="its-pathname-fn2-method" name="its-pathname" method-name="fn2" type="method"></define>
 
 <description>These two operations return a string that is the FN1 or FN2 host-dependent
 component of the pathname.
 </description></definition><definition>
-<define key="pathname-type-and-version-method" name="pathname" type="method"></define><define key="pathname-new-type-and-version-method" name="pathname" type="method"><args>new-type new-version</args>
+<define key="pathname-type-and-version-method" name="pathname" method-name="type-and-version" type="method"></define>
+<define key="pathname-new-type-and-version-method" name="pathname" method-name="new-type-and-version" type="method"><args>new-type new-version</args>
 </define>
 
 <description>These two operations provide a way of pretending that ITS pathnames can
@@ -1890,7 +1891,7 @@ The same file is automatically reloaded, if it has been changed,
 at appropriate times: by <obj>load-patches</obj>, and whenever
 site information is updated.
 </description></definition><definition>
-<define key="fs:logical-pathname-translated-pathname-method" name="fs:logical-pathname" type="method"></define>
+<define key="fs:logical-pathname-translated-pathname-method" name="fs:logical-pathname" method-name="translated-pathname" type="method"></define>
 
 <description>Converts a logical pathname to a physical pathname.  It returns the
 translated pathname of this instance, a pathname whose host
@@ -1899,7 +1900,7 @@ logical host.
 
 If this operation is applied to a physical pathname, it simply returns
 that pathname unchanged.
-</description></definition><definition><define key="fs:logical-pathname-back-translated-pathname-method" name="fs:logical-pathname" type="method"><args>pathname</args>
+</description></definition><definition><define key="fs:logical-pathname-back-translated-pathname-method" name="fs:logical-pathname" method-name="back-translated-pathname" type="method"><args>pathname</args>
 </define>
 
 <description>Converts a physical pathname to a logical pathname.

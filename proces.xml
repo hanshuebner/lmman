@@ -606,14 +606,14 @@ operations are listed here, only those of interest to the user.
 
 
 <subsection name="NIL" title="Process Attributes"><definition>
-<define key="si:process-name-method" name="si:process" type="method"></define>
+<define key="si:process-name-method" name="si:process" method-name="name" type="method"></define>
 
 <description>Returns the name of the process, which was the first argument to <obj>make-process</obj>
 or <obj>process-run-function</obj> when the process was created.  The name is
 a string that appears in the printed-representation of the process, stands for
 the process in the who-line and the <obj>peek</obj> display, etc.
 </description></definition><definition>
-<define key="si:process-stack-group-method" name="si:process" type="method"></define>
+<define key="si:process-stack-group-method" name="si:process" method-name="stack-group" type="method"></define>
 
 <description>Returns the stack group currently executing on behalf of this process.
 This can be different from the initial-stack-group if the process contains
@@ -623,12 +623,12 @@ or if the process is in the error-handler, which runs in its own stack group.
 Note that the stack-group of a <arg>simple</arg> process (see <ref definition-in-file="proces" key="simple-process" type="page"></ref>)
 is not a stack group at all, but a function.
 </description></definition><definition>
-<define key="si:process-initial-stack-group-method" name="si:process" type="method"></define>
+<define key="si:process-initial-stack-group-method" name="si:process" method-name="initial-stack-group" type="method"></define>
 
 <description>Returns the stack group the initial-function is called in when the process starts up
 or is reset.
 </description></definition><definition>
-<define key="si:process-initial-form-method" name="si:process" type="method"></define>
+<define key="si:process-initial-form-method" name="si:process" method-name="initial-form" type="method"></define>
 
 <description>Returns the initial ``form'' of the process.
 This isn't really a Lisp form; it is a cons whose car is the initial-function
@@ -640,7 +640,7 @@ element, the process's function.
 
 To change the initial form, use the <obj>:preset</obj> operation (see <ref definition-in-file="proces" key="si:process-preset-method" title="Method si:process :preset" type="method"></ref>).
 </description></definition><definition>
-<define key="si:process-wait-function-method" name="si:process" type="method"></define>
+<define key="si:process-wait-function-method" name="si:process" method-name="wait-function" type="method"></define>
 
 <description>Returns the process's current wait-function, which is the predicate used
 by the scheduler to determine if the process is runnable.  This is
@@ -650,14 +650,14 @@ initial function has returned) or if the program has decided to wait
 indefinitely.  The wait-function of a flushed process is <obj>si:flushed-process</obj>,
 a function equivalent to <obj>#'false</obj> but recognizably distinct.
 </description></definition><definition>
-<define key="si:process-wait-argument-list-method" name="si:process" type="method"></define>
+<define key="si:process-wait-argument-list-method" name="si:process" method-name="wait-argument-list" type="method"></define>
 
 <description>Returns the arguments to the process's current wait-function.  This is
 frequently the <obj>&amp;rest</obj> argument to <obj>process-wait</obj> in the
 process's stack.  The system always uses it in
 a safe manner, i.e. it forgets about it before <obj>process-wait</obj> returns.
 </description></definition><definition>
-<define key="si:process-whostate-method" name="si:process" type="method"></define>
+<define key="si:process-whostate-method" name="si:process" method-name="whostate" type="method"></define>
 
 <description>Returns a string that is the state of the process to go in the who-line at
 the bottom of the screen.  This is <obj>&quot;run&quot;</obj> if the process is running or
@@ -666,18 +666,18 @@ process is stopped, then this whostate string is ignored and the who-line
 displays <obj>arrest</obj> if the process is arrested or <obj>stop</obj> if the process has
 no run reasons.
 </description></definition><definition>
-<define key="si:process-quantum-method" name="si:process" type="method"></define><define key="si:process-set-quantum-method" name="si:process" type="method"><args>60ths</args>
+<define key="si:process-quantum-method" name="si:process" type="method"></define><define key="si:process-set-quantum-method" name="si:process" method-name="quantum-method" name="si:process" method-name="quantum-method" name="si:process" type="method"></define><define key="si:process-set-quantum-method" name="si:process" method-name="quantum" type="method"></define><define key="si:process-set-quantum" type="method"><args>60ths</args>
 </define>
 
 <description>Respectively return and change the number of 60ths of a second this
 process is allowed to run without waiting before the scheduler will run
 someone else.  The quantum defaults to 1 second.
 </description></definition><definition>
-<define key="si:process-quantum-remaining-method" name="si:process" type="method"></define>
+<define key="si:process-quantum-remaining-method" name="si:process" method-name="quantum-remaining" type="method"></define>
 
 <description>Returns the amount of time remaining for this process to run, in 60ths of a second.
 </description></definition><definition>
-<define key="si:process-priority-method" name="si:process" type="method"></define><define key="si:process-set-priority-method" name="si:process" type="method"><args>priority-number</args>
+<define key="si:process-priority-method" name="si:process" type="method"></define><define key="si:process-set-priority-method" name="si:process" method-name="priority-method" name="si:process" method-name="priority-method" name="si:process" type="method"></define><define key="si:process-set-priority-method" name="si:process" method-name="priority" type="method"></define><define key="si:process-set-priority" type="method"><args>priority-number</args>
 </define>
 
 <description>Respectively return and change the priority of this process.  The larger the number, the
@@ -686,7 +686,7 @@ runnable processes in a round-robin fashion.  Regardless of priority a process
 will not run for more than its quantum.  The default priority is 0, and no
 normal process uses other than 0.
 </description></definition><definition>
-<define key="si:process-warm-boot-action-method" name="si:process" type="method"></define><define key="si:process-set-warm-boot-action-method" name="si:process" type="method"><args>action</args>
+<define key="si:process-warm-boot-action-method" name="si:process" type="method"></define><define key="si:process-set-warm-boot-action-method" name="si:process" method-name="warm-boot-action-method" name="si:process" method-name="warm-boot-action-method" name="si:process" type="method"></define><define key="si:process-set-warm-boot-action-method" name="si:process" method-name="warm-boot-action" type="method"></define><define key="si:process-set-warm-boot-action" type="method"><args>action</args>
 </define>
 
 <description>Respectively return and change the process's warm-boot-action, which controls what
@@ -704,79 +704,79 @@ keyboard process and chaos background process, which are needed for
 reinitialization itself.
 
 </description></definition><definition>
-<define key="si:process-simple-p-method" name="si:process" type="method"></define>
+<define key="si:process-simple-p-method" name="si:process" method-name="simple-p" type="method"></define>
 
 <description>Returns <obj>nil</obj> for a normal process, <obj>t</obj> for a simple process.
 See <ref definition-in-file="proces" key="simple-process" type="page"></ref>.
 </description></definition><definition>
-<define key="si:process-idle-time-method" name="si:process" type="method"></define>
+<define key="si:process-idle-time-method" name="si:process" method-name="idle-time" type="method"></define>
 
 <description>Returns the time in seconds since this process last ran, or <obj>nil</obj> if it has never run.
 </description></definition><definition>
-<define key="si:process-total-run-time-method" name="si:process" type="method"></define>
+<define key="si:process-total-run-time-method" name="si:process" method-name="total-run-time" type="method"></define>
 
 <description>Returns the amount of time this process has run, in 60ths of a second.
 This includes cpu time and disk wait time.
 </description></definition><definition>
-<define key="si:process-disk-wait-time-method" name="si:process" type="method"></define>
+<define key="si:process-disk-wait-time-method" name="si:process" method-name="disk-wait-time" type="method"></define>
 
 <description>Returns the amount of time this process has spent
 waiting for disk I/O, in 60ths of a second.
 </description></definition><definition>
-<define key="si:process-cpu-time-method" name="si:process" type="method"></define>
+<define key="si:process-cpu-time-method" name="si:process" method-name="cpu-time" type="method"></define>
 
 <description>Returns the amount of time this process has spent actually
 executing instructions, in 60ths of a second.
 </description></definition><definition>
-<define key="si:process-percent-utilization-method" name="si:process" type="method"></define>
+<define key="si:process-percent-utilization-method" name="si:process" method-name="percent-utilization" type="method"></define>
 
 <description>Returns the fraction of the machine's time this
 process has been using recently, as a percentage
 (a number between 0 and 100.0).  The value is a weighted
 average giving more weight to more recent history.
 </description></definition><definition>
-<define key="si:process-reset-meters-method" name="si:process" type="method"></define>
+<define key="si:process-reset-meters-method" name="si:process" method-name="reset-meters" type="method"></define>
 
 <description>Resets the run-time counters of the process to zero.
 </description></definition></subsection>
 
 <subsection name="NIL" title="Run and Arrest Reasons"><definition>
-<define key="si:process-run-reasons-method" name="si:process" type="method"></define>
+<define key="si:process-run-reasons-method" name="si:process" method-name="run-reasons" type="method"></define>
 
 <description>Returns the list of run reasons, which are the reasons why this process should
 be active (allowed to run).
-</description></definition><definition><define key="si:process-run-reason-method" name="si:process" type="method"><args>object</args>
+</description></definition><definition><define key="si:process-run-reason-method" name="si:process" method-name="run-reason" type="method"><args>object</args>
 </define>
 
 <description>Adds <arg>object</arg> to the process's run reasons.  This can activate the process.
-</description></definition><definition><define key="si:process-revoke-run-reason-method" name="si:process" type="method"><args>object</args>
+</description></definition><definition><define key="si:process-revoke-run-reason-method" name="si:process" method-name="revoke-run-reason" type="method"><args>object</args>
 </define>
 
 <description>Removes <arg>object</arg> from the process's run reasons.  This can stop the process.
 </description></definition><definition>
-<define key="si:process-arrest-reasons-method" name="si:process" type="method"></define>
+<define key="si:process-arrest-reasons-method" name="si:process" method-name="arrest-reasons" type="method"></define>
 
 <description>Returns the list of arrest reasons, which are the reasons why this process
 should be inactive (forbidden to run).
-</description></definition><definition><define key="si:process-arrest-reason-method" name="si:process" type="method"><args>object</args>
+</description></definition><definition><define key="si:process-arrest-reason-method" name="si:process" method-name="arrest-reason" type="method"><args>object</args>
 </define>
 
 <description>Adds <arg>object</arg> to the process's arrest reasons.  This can stop the process.
-</description></definition><definition><define key="si:process-revoke-arrest-reason-method" name="si:process" type="method"><args>object</args>
+</description></definition><definition><define key="si:process-revoke-arrest-reason-method" name="si:process" method-name="revoke-arrest-reason" type="method"><args>object</args>
 </define>
 
 <description>Removes <arg>object</arg> from the process's arrest reasons.  This can activate
 the process.
 </description></definition><definition>
-<define key="si:process-active-p-method" name="si:process" type="method"></define>
-<define key="si:process-runnable-p-method" name="si:process" type="method"></define>
+<define key="si:process-active-p-method" name="si:process" method-name="active-p" type="method"></define>
+<define key="si:process-runnable-p-method" name="si:process" method-name="runnable-p" type="method"></define>
 
 <description>These two operations are the same.  <obj>t</obj> is returned if the process is
 active, i.e. it can run if its wait-function allows.  <obj>nil</obj> is returned
 if the process is stopped.
 </description></definition></subsection>
 
-<subsection name="NIL" title="Bashing the Process"><definition><define key="si:process-preset-method" name="si:process" type="method"><args>function <standard>&amp;rest</standard> args</args>
+<subsection name="NIL" title="Bashing the Process"><definition><define key="si:process-preset-method" name="si:process" method-name="preset" type="method"><args>function <standard>&amp;rest</standard> args</args>
 </define>
 
 <description>Sets the process's initial function to <arg>function</arg> and initial arguments
@@ -785,7 +785,7 @@ is terminated and it begins anew by applying <arg>function</arg> to <arg>args</a
 A <obj>:preset</obj> operation on a stopped process
 returns immediately, but does not activate the process; hence the
 process will not really apply <arg>function</arg> to <arg>args</arg> until it is activated later.
-</description></definition><definition><define key="si:process-reset-method" name="si:process" type="method"><args><standard>&amp;optional</standard> no-unwind kill</args>
+</description></definition><definition><define key="si:process-reset-method" name="si:process" method-name="reset" type="method"><args><standard>&amp;optional</standard> no-unwind kill</args>
 </define>
 
 <description>Forces the process to throw out of its present computation and apply its
@@ -809,7 +809,7 @@ A <obj>:reset</obj> operation on a stopped process returns immediately, but
 does not activate the process; hence the process will not really get
 reset until it is activated later.
 </description></definition><definition>
-<define key="si:process-flush-method" name="si:process" type="method"></define>
+<define key="si:process-flush-method" name="si:process" method-name="flush" type="method"></define>
 
 <description>Forces the process to wait forever.  A process may not <obj>:flush</obj> itself.
 Flushing a process is different from stopping it, in that it is still active
@@ -820,11 +820,11 @@ A flushed process can be recognized because its wait-function is
 If a process belonging to a window is flushed, exposing or selecting the window
 resets the process.
 </description></definition><definition>
-<define key="si:process-kill-method" name="si:process" type="method"></define>
+<define key="si:process-kill-method" name="si:process" method-name="kill" type="method"></define>
 
 <description>Gets rid of the process.  It is reset, stopped,
 and removed from <obj>sys:all-processes</obj>.
-</description></definition><definition><define key="si:process-interrupt-method" name="si:process" type="method"><args>function <standard>&amp;rest</standard> args</args>
+</description></definition><definition><define key="si:process-interrupt-method" name="si:process" method-name="interrupt" type="method"><args>function <standard>&amp;rest</standard> args</args>
 </define>
 
 <description>Forces the process to <obj>apply</obj> <arg>function</arg> to <arg>args</arg>.  When <arg>function</arg> returns,

@@ -761,7 +761,7 @@ to one of the file accessing functions (<obj>open</obj>, <obj>deletef</obj>, etc
 has its special significance at a higher level.
 </p>
 <definition>
-<define key="pathname-truename-method" name="pathname" type="method"></define>
+<define key="pathname-truename-method" name="pathname" method-name="truename" type="method"></define>
 
 <description>Returns a pathname object describing the exact name of the file specified
 by the pathname the object is sent to.
@@ -769,7 +769,7 @@ by the pathname the object is sent to.
 This may be different from the original pathname.  For example, the
 original pathname may have <obj>:newest</obj> as the version, but the truename
 always has a number as the version if the file system supports versions.
-</description></definition><definition><define key="pathname-open-method" name="pathname" type="method"><args>pathname <standard>&amp;rest</standard> options</args>
+</description></definition><definition><define key="pathname-open-method" name="pathname" method-name="open" type="method"><args>pathname <standard>&amp;rest</standard> options</args>
 </define>
 
 <description>Opens a stream for the file named by the pathname.
@@ -782,8 +782,8 @@ its translated pathname.
 passed to <obj>open</obj>.  The old style of <obj>open</obj> keywords are not allowed;
 when they are used with <obj>open</obj>, <obj>open</obj> converts them to the new
 style before sending the <obj>:open</obj> message.
-</description></definition><definition><define key="pathname-delete-method" name="pathname" type="method"><args><standard>&amp;optional</standard> (error-p <obj>t</obj>)</args>
-</define><define key="pathname-undelete-method" name="pathname" type="method"><args><standard>&amp;optional</standard> (error-p <obj>t</obj>)</args>
+</description></definition><definition><define key="pathname-delete-method" name="pathname" method-name="delete" type="method"><args><standard>&amp;optional</standard> (error-p <obj>t</obj>)</args>
+</define><define key="pathname-undelete-method" name="pathname" method-name="undelete" type="method"><args><standard>&amp;optional</standard> (error-p <obj>t</obj>)</args>
 </define>
 
 <description>Respectively delete or undelete the file specified by the pathname.
@@ -794,12 +794,12 @@ If <arg>error-p</arg> is <obj>nil</obj>, problems such as nonexistent files caus
 string describing the problem to be returned.  Otherwise, they signal an
 error.
 </description></definition><definition>
-<define key="pathname-undeletable-p-method" name="pathname" type="method"></define>
+<define key="pathname-undeletable-p-method" name="pathname" method-name="undeletable-p" type="method"></define>
 
 <description>Returns <obj>t</obj> if this pathname is for a file system which allows
 deletion to be undone.  Such pathnames support the <obj>:undelete</obj>
 and <obj>:expunge</obj> operations.
-</description></definition><definition><define key="pathname-rename-method" name="pathname" type="method"><args>new-name <standard>&amp;optional</standard> (error-p <obj>t</obj>)</args>
+</description></definition><definition><define key="pathname-rename-method" name="pathname" method-name="rename" type="method"><args>new-name <standard>&amp;optional</standard> (error-p <obj>t</obj>)</args>
 </define>
 
 <description>Renames the file specified by the pathname.  <arg>new-name</arg>, a string or
@@ -809,7 +809,7 @@ parsed using <obj>self</obj> as the defaults.
 If <arg>error-p</arg> is <obj>nil</obj>, problems such as nonexistent files cause a
 string describing the problem to be returned.  Otherwise, they signal an
 error.
-</description></definition><definition><define key="pathname-complete-string-method" name="pathname" type="method"><args>string options</args>
+</description></definition><definition><define key="pathname-complete-string-method" name="pathname" method-name="complete-string" type="method"><args>string options</args>
 </define>
 
 <description>Attempts to complete the filename <arg>string</arg>, returning the results.
@@ -825,23 +825,23 @@ and a flag, which can be <obj>:old</obj>, <obj>:new</obj> or <obj>nil</obj>.
 <obj>:old</obj> says that the returned string names an existing file,
 <obj>:new</obj> says that the returned string is no file but some completion was done,
 <obj>nil</obj> says that no completion was possible.
-</description></definition><definition><define key="pathname-change-properties-method" name="pathname" type="method"><args>error-p <standard>&amp;rest</standard> properties</args>
+</description></definition><definition><define key="pathname-change-properties-method" name="pathname" method-name="change-properties" type="method"><args>error-p <standard>&amp;rest</standard> properties</args>
 </define>
 
 <description>Changes the properties of the file specified by the
 pathname.  <arg>properties</arg> should be an
 alternating list of property names and values.
-</description></definition><definition><define key="pathname-directory-list-method" name="pathname" type="method"><args>options</args>
+</description></definition><definition><define key="pathname-directory-list-method" name="pathname" method-name="directory-list" type="method"><args>options</args>
 </define>
 
 <description>Performs the work of <obj>(fs:directory-list <arg>this-pathname</arg> <arg>options</arg>...)</obj>.
 </description></definition><definition>
-<define key="pathname-properties-method" name="pathname" type="method"></define>
+<define key="pathname-properties-method" name="pathname" method-name="properties" type="method"></define>
 
 <description>Returns a property list (in the form
 of a directory-list element) and a list of settable properties.
 See <ref chapter="26" definition-in-file="files" key="directory-list" section="6" title="Accessing Directories" type="section"></ref> for more information on file properties.
-</description></definition><definition><define key="pathname-wildcard-map-method" name="pathname" type="method"><args>function plistp dir-list-options <standard>&amp;rest</standard> args</args>
+</description></definition><definition><define key="pathname-wildcard-map-method" name="pathname" method-name="wildcard-map" type="method"><args>function plistp dir-list-options <standard>&amp;rest</standard> args</args>
 </define>
 
 <description>Maps <arg>function</arg> over all the
@@ -864,7 +864,7 @@ to get deleted files mentioned in the list, for example.
 <p>The remaining file-access operations are defined only on certain file
 systems.
 </p>
-<definition><define key="pathname-expunge-method" name="pathname" type="method"><args><standard>&amp;key</standard> (error <obj>t</obj>)</args>
+<definition><define key="pathname-expunge-method" name="pathname" method-name="expunge" type="method"><args><standard>&amp;key</standard> (error <obj>t</obj>)</args>
 </define>
 
 <description>Expunges the directory specified by the host, device and directory
@@ -872,11 +872,11 @@ components of the pathname.
 
 The argument <arg>error</arg> says whether to signal an error if the directory
 does not exist.  <obj>nil</obj> means just return a string instead.
-</description></definition><definition><define key="pathname-create-directory-method" name="pathname" type="method"><args><standard>&amp;key</standard> (error <obj>t</obj>)</args>
+</description></definition><definition><define key="pathname-create-directory-method" name="pathname" method-name="create-directory" type="method"><args><standard>&amp;key</standard> (error <obj>t</obj>)</args>
 </define>
 
 <description>Creates the directory specified in this pathname.
-</description></definition><definition><define key="pathname-remote-connect-method" name="pathname" type="method"><args><standard>&amp;key</standard> (error <obj>t</obj>) access</args>
+</description></definition><definition><define key="pathname-remote-connect-method" name="pathname" method-name="remote-connect" type="method"><args><standard>&amp;key</standard> (error <obj>t</obj>) access</args>
 </define>
 
 <description>Performs the work of <obj>fs:remote-connect</obj> with the same arguments

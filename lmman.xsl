@@ -82,7 +82,7 @@
         <xsl:choose>
           <xsl:when test="@type = 'message'">Message</xsl:when>
           <xsl:when test="@type = 'fun'">Function</xsl:when>
-          <xsl:when test="@type = 'method'">Method</xsl:when>
+          <xsl:when test="@type = 'method'">Operation on <b><xsl:value-of select="@name"/></b></xsl:when>
           <xsl:when test="@type = 'metamethod'">Meta-Method</xsl:when>
           <xsl:when test="@type = 'const'">Constant</xsl:when>
           <xsl:when test="@type = 'condition'">Condition</xsl:when>
@@ -97,7 +97,10 @@
           <xsl:otherwise><xsl:value-of select="@type"/></xsl:otherwise>
         </xsl:choose>
       </span>
-      <b><xsl:value-of select="@name"/></b>
+      <xsl:choose>
+        <xsl:when test="@type = 'method'"><b>:<xsl:value-of select="@method-name"/></b></xsl:when>
+        <xsl:otherwise><b><xsl:value-of select="@name"/></b></xsl:otherwise>
+      </xsl:choose>
       <xsl:value-of select="' '"/>
       <xsl:apply-templates/>
     </div>

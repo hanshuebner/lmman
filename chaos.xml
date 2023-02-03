@@ -451,54 +451,54 @@ stream are translated to standard ASCII before they are sent, and
 characters read are translated from ASCII to the Lisp Machine character
 set.
 </description></definition><definition>
-<define key="chaos:basic-stream-connection-method" name="chaos:basic-stream" type="method"></define>
+<define key="chaos:basic-stream-connection-method" name="chaos:basic-stream" method-name="connection" type="method"></define>
 
 <description>Returns the connection with which this stream is connected.
 </description></definition><definition>
-<define key="chaos:basic-stream-contact-name-method" name="chaos:basic-stream" type="method"></define>
+<define key="chaos:basic-stream-contact-name-method" name="chaos:basic-stream" method-name="contact-name" type="method"></define>
 
 <description>Return the contact name with with this stream was opened.
 </description></definition><definition>
-<define key="chaos:basic-stream-foreign-host-method" name="chaos:basic-stream" type="method"></define>
+<define key="chaos:basic-stream-foreign-host-method" name="chaos:basic-stream" method-name="foreign-host" type="method"></define>
 
 <description>Returns the host object for the host at the other end of this stream's connection.
 </description></definition><definition>
-<define key="chaos:basic-stream-accept-method" name="chaos:basic-stream" type="method"></define>
+<define key="chaos:basic-stream-accept-method" name="chaos:basic-stream" method-name="accept" type="method"></define>
 
 <description>Accepts the request for a connection which this stream received.
 Used only for streams made by <obj>chaos:open-stream</obj> with <obj>nil</obj> as
 the <arg>host</arg> argument.
-</description></definition><definition><define key="chaos:basic-stream-reject-method" name="chaos:basic-stream" type="method"><args>reason-string</args>
+</description></definition><definition><define key="chaos:basic-stream-reject-method" name="chaos:basic-stream" method-name="reject" type="method"><args>reason-string</args>
 </define>
 
 <description>Rejects the request for a connection which this stream received, sending
 <arg>reason-string</arg> in the CLS packet as the reason.  Used only for
 streams made by <obj>chaos:open-stream</obj> with <obj>nil</obj> as the <arg>host</arg>
 argument.
-</description></definition><definition><define key="chaos:basic-stream-close-method" name="chaos:basic-stream" type="method"><args><standard>&amp;optional</standard> abort-p</args>
+</description></definition><definition><define key="chaos:basic-stream-close-method" name="chaos:basic-stream" method-name="close" type="method"><args><standard>&amp;optional</standard> abort-p</args>
 </define>
 
 <description>Sends a CLS packet and removes the connection.  For output connections and bidirectional
 connections, the <obj>:eof</obj> operation is performed first, if
 <arg>abort-p</arg> is <obj>nil</obj>.
 </description></definition><definition>
-<define key="chaos:basic-output-stream-force-output-method" name="chaos:basic-output-stream" type="method"></define>
+<define key="chaos:basic-output-stream-force-output-method" name="chaos:basic-output-stream" method-name="force-output" type="method"></define>
 
 <description>Any buffered output is transmitted.  Normally output is accumulated until a
 full packet's worth of bytes are available, so that maximum-size packets are
 transmitted.
 </description></definition><definition>
-<define key="chaos:basic-output-stream-finish-method" name="chaos:basic-output-stream" type="method"></define>
+<define key="chaos:basic-output-stream-finish-method" name="chaos:basic-output-stream" method-name="finish" type="method"></define>
 
 <description>Waits until either all packets have been sent and acknowledged, or the connection ceases
 to be open.  If successful, returns <obj>t</obj>; if the connection goes into a bad state,
 returns <obj>nil</obj>.
 </description></definition><definition>
-<define key="chaos:basic-output-stream-eof-method" name="chaos:basic-output-stream" type="method"></define>
+<define key="chaos:basic-output-stream-eof-method" name="chaos:basic-output-stream" method-name="eof" type="method"></define>
 
 <description>Forces out any buffered output, sends an EOF packet, and does a <obj>:finish</obj>.
 </description></definition><definition>
-<define key="chaos:basic-input-stream-clear-eof-method" name="chaos:basic-input-stream" type="method"></define>
+<define key="chaos:basic-input-stream-clear-eof-method" name="chaos:basic-input-stream" method-name="clear-eof" type="method"></define>
 
 <description>Allows you to read past an EOF packet on input.  Normally, each <obj>:tyi</obj>
 done at eof returns <obj>nil</obj> or signals the specified eof error.  If you
