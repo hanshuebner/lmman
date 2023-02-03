@@ -375,29 +375,29 @@ version component does not need them either, because it is never a string.
 </subsection>
 
 <subsection name="NIL" title="Pathname Component Operations"><definition>
-<define key="pathname-host-method" name=":host Operation on pathname" type="method"></define>
-<define key="pathname-device-method" name=":device Operation on pathname" type="method"></define>
-<define key="pathname-directory-method" name=":directory Operation on pathname" type="method"></define>
-<define key="pathname-name-method" name=":name Operation on pathname" type="method"></define>
-<define key="pathname-type-method" name=":type Operation on pathname" type="method"></define>
-<define key="pathname-version-method" name=":version Operation on pathname" type="method"></define>
+<define key="pathname-host-method" name="pathname-host-method" type="method"></define>
+<define key="pathname-device-method" name="pathname-device-method" type="method"></define>
+<define key="pathname-directory-method" name="pathname-directory-method" type="method"></define>
+<define key="pathname-name-method" name="pathname-name-method" type="method"></define>
+<define key="pathname-type-method" name="pathname-type-method" type="method"></define>
+<define key="pathname-version-method" name="pathname-version-method" type="method"></define>
 
 <description>These return the components of the pathname, in interchange form.  The
 returned values can be strings, special symbols, or lists of strings in
 the case of structured components.  The type is always a string or
 a symbol.  The version is always a number or a symbol.
 </description></definition><definition>
-<define key="pathname-raw-device-method" name=":raw-device Operation on pathname" type="method"></define>
-<define key="pathname-raw-directory-method" name=":raw-directory Operation on pathname" type="method"></define>
-<define key="pathname-raw-name-method" name=":raw-name Operation on pathname" type="method"></define>
-<define key="pathname-raw-type-method" name=":raw-type Operation on pathname" type="method"></define>
+<define key="pathname-raw-device-method" name="pathname-raw-device-method" type="method"></define>
+<define key="pathname-raw-directory-method" name="pathname-raw-directory-method" type="method"></define>
+<define key="pathname-raw-name-method" name="pathname-raw-name-method" type="method"></define>
+<define key="pathname-raw-type-method" name="pathname-raw-type-method" type="method"></define>
 
 <description>These return the components of the pathname, in raw form.
-</description></definition><definition><define key="pathname-new-device-method" name=":new-device Operation on pathname" type="method"><args>dev</args>
-</define><define key="pathname-new-directory-method" name=":new-directory Operation on pathname" type="method"><args>dir</args>
-</define><define key="pathname-new-name-method" name=":new-name Operation on pathname" type="method"><args>name</args>
-</define><define key="pathname-new-type-method" name=":new-type Operation on pathname" type="method"><args>type</args>
-</define><define key="pathname-new-version-method" name=":new-version Operation on pathname" type="method"><args>version</args>
+</description></definition><definition><define key="pathname-new-device-method" name="pathname-new-device-method" type="method"><args>dev</args>
+</define><define key="pathname-new-directory-method" name="pathname-new-directory-method" type="method"><args>dir</args>
+</define><define key="pathname-new-name-method" name="pathname-new-name-method" type="method"><args>name</args>
+</define><define key="pathname-new-type-method" name="pathname-new-type-method" type="method"><args>type</args>
+</define><define key="pathname-new-version-method" name="pathname-new-version-method" type="method"><args>version</args>
 </define>
 
 <description>These return a new pathname that is the same as the pathname they are
@@ -408,17 +408,17 @@ form, which means its case may be converted.  The <obj>:new-device</obj>,
 special symbol) or a list that is a structured name.  If the host does
 not define structured components, and you specify a list, its first
 element is used.
-</description></definition><definition><define key="pathname-new-raw-device-method" name=":new-raw-device Operation on pathname" type="method"><args>dev</args>
-</define><define key="pathname-new-raw-directory-method" name=":new-raw-directory Operation on pathname" type="method"><args>dir</args>
-</define><define key="pathname-new-raw-name-method" name=":new-raw-name Operation on pathname" type="method"><args>name</args>
-</define><define key="pathname-new-raw-type-method" name=":new-raw-type Operation on pathname" type="method"><args>type</args>
+</description></definition><definition><define key="pathname-new-raw-device-method" name="pathname-new-raw-device-method" type="method"><args>dev</args>
+</define><define key="pathname-new-raw-directory-method" name="pathname-new-raw-directory-method" type="method"><args>dir</args>
+</define><define key="pathname-new-raw-name-method" name="pathname-new-raw-name-method" type="method"><args>name</args>
+</define><define key="pathname-new-raw-type-method" name="pathname-new-raw-type-method" type="method"><args>type</args>
 </define>
 
 <description>These return a new pathname that is the same as the pathname they are
 sent to except that the value of one of the components has been changed.
 The specified component value is interpreted as raw.
-</description></definition><definition><define key="pathname-new-suggested-name-method" name=":new-suggested-name Operation on pathname" type="method"><args>name</args>
-</define><define key="pathname-new-suggested-directory-method" name=":new-suggested-directory Operation on pathname" type="method"><args>dir</args>
+</description></definition><definition><define key="pathname-new-suggested-name-method" name="pathname-new-suggested-name-method" type="method"><args>name</args>
+</define><define key="pathname-new-suggested-directory-method" name="pathname-new-suggested-directory-method" type="method"><args>dir</args>
 </define>
 
 <description>These differ from the <obj>:new-name</obj> and <obj>:new-directory</obj> operations in
